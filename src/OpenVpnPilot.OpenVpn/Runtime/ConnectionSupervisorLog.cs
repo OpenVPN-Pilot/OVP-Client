@@ -21,4 +21,16 @@ internal static partial class ConnectionSupervisorLog
         Level = LogLevel.Warning,
         Message = "No credentials are available for realm {Realm}, abandoning the connection.")]
     public static partial void CredentialsUnavailable(ILogger logger, string realm);
+
+    [LoggerMessage(
+        EventId = 2003,
+        Level = LogLevel.Warning,
+        Message = "OpenVPN process {ProcessId} ignored the shutdown signal and is being terminated.")]
+    public static partial void ProcessDidNotExit(ILogger logger, int processId);
+
+    [LoggerMessage(
+        EventId = 2004,
+        Level = LogLevel.Error,
+        Message = "OpenVPN process {ProcessId} could not be terminated.")]
+    public static partial void ProcessKillFailed(ILogger logger, int processId, Exception exception);
 }

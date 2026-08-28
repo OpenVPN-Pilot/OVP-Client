@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -22,6 +23,11 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
     private readonly TimeProvider timeProvider;
     private readonly ILogger<ConnectionSupervisor> logger;
     private readonly SemaphoreSlim transition = new(1, 1);
+
+    /// <summary>
+    /// How long a signalled process is given to exit before it is terminated.
+    /// </summary>
+    private static readonly TimeSpan ProcessExitGrace = TimeSpan.FromSeconds(5);
 
     private ManagementClient? client;
     private CancellationTokenSource? session;
@@ -368,11 +374,73 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
             await client.DisposeAsync();
         }
 
+        int? processId = ProcessId;
+
         session?.Dispose();
         session = null;
         pump = null;
         client = null;
         ProcessId = null;
+
+        if (processId is { } id)
+        {
+            await EnsureProcessExitedAsync(id);
+        }
+    }
+
+    /// <summary>
+    /// Confirms the OpenVPN process actually ended, and ends it if it did not.
+    /// </summary>
+    /// <remarks>
+    /// A signal is a request, not a guarantee. With auth-retry set to interact, a process whose
+    /// credentials were refused keeps waiting for new ones instead of exiting, which would leave an
+    /// orphaned tunnel behind. Terminating is a last resort: OpenVPN normally removes its own routes
+    /// on a clean shutdown, so the escalation is logged rather than done silently.
+    /// </remarks>
+    private async Task EnsureProcessExitedAsync(int processId)
+    {
+        Process process;
+        try
+        {
+            process = Process.GetProcessById(processId);
+        }
+        catch (ArgumentException)
+        {
+            // Already gone, which is the normal outcome.
+            return;
+        }
+
+        using (process)
+        {
+            try
+            {
+                using CancellationTokenSource grace = new(ProcessExitGrace);
+                await process.WaitForExitAsync(grace.Token);
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                // The signal was ignored, so the process is ended below.
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+
+            try
+            {
+                ConnectionSupervisorLog.ProcessDidNotExit(logger, processId);
+                process.Kill(entireProcessTree: false);
+            }
+            catch (InvalidOperationException)
+            {
+                // It exited between the wait timing out and the kill.
+            }
+            catch (System.ComponentModel.Win32Exception exception)
+            {
+                ConnectionSupervisorLog.ProcessKillFailed(logger, processId, exception);
+            }
+        }
     }
 
     public async ValueTask DisposeAsync()

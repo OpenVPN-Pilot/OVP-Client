@@ -1,22 +1,184 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:OpenVpnPilot.App.ViewModels"
+        xmlns:conv="using:OpenVpnPilot.App.Converters"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="680"
         x:Class="OpenVpnPilot.App.Views.MainWindow"
-        x:DataType="vm:MainViewModel"
-        Icon="/Assets/avalonia-logo.ico"
-        Title="OpenVpnPilot.App">
+        x:DataType="vm:MainWindowViewModel"
+        Width="1080" Height="680"
+        MinWidth="820" MinHeight="480"
+        Icon="/Assets/openvpnpilot.ico"
+        Title="OpenVpnPilot">
 
-    <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
-        <vm:MainViewModel />
-    </Design.DataContext>
+  <Window.Styles>
+    <Style Selector="TextBlock.caption">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Opacity" Value="0.6" />
+    </Style>
+    <Style Selector="TextBlock.detailLabel">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Opacity" Value="0.6" />
+      <Setter Property="Width" Value="88" />
+    </Style>
+  </Window.Styles>
 
-    <TextBox Text="{Binding Greeting}"
-             HorizontalAlignment="Center"
-             VerticalAlignment="Center" />
+  <Grid RowDefinitions="Auto,*,Auto">
 
+    <Border Grid.Row="0" Padding="14,10" BorderThickness="0,0,0,1"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <TextBlock Grid.Column="0" Text="OpenVpnPilot" FontWeight="SemiBold" FontSize="15"
+                   VerticalAlignment="Center" Margin="0,0,20,0" />
+        <TextBox Grid.Column="1" Watermark="Search profiles" MaxWidth="460"
+                 HorizontalAlignment="Stretch" Text="{Binding SearchTerm}" />
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" Margin="20,0,0,0">
+          <Button Content="Refresh" Command="{Binding RefreshCommand}" />
+          <Button Content="Disconnect all" Command="{Binding DisconnectAllCommand}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" ColumnDefinitions="210,*,320">
+
+      <Border Grid.Column="0" BorderThickness="0,0,1,0"
+              BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+        <StackPanel Margin="10,12" Spacing="12">
+          <ListBox ItemsSource="{Binding Filters}" SelectedItem="{Binding SelectedFilter}"
+                   Background="Transparent" BorderThickness="0">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:SidebarFilter">
+                <TextBlock Text="{Binding Label}" Padding="2,4" />
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+          <StackPanel Spacing="4" IsVisible="{Binding Folders.Count}">
+            <TextBlock Text="FOLDERS" Classes="caption" Margin="6,8,0,2" />
+            <ItemsControl ItemsSource="{Binding Folders}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding Name}" Padding="8,4" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Grid Grid.Column="1">
+        <ListBox ItemsSource="{Binding VisibleProfiles}"
+                 SelectedItem="{Binding SelectedProfile}"
+                 Background="Transparent"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ProfileItemViewModel">
+              <Grid ColumnDefinitions="Auto,*,Auto" Margin="2,6">
+                <Border Grid.Column="0" Width="9" Height="9" CornerRadius="5" Margin="0,0,12,0"
+                        VerticalAlignment="Center"
+                        Background="{Binding Status.State, Converter={x:Static conv:AppConverters.StateBrush}}" />
+
+                <StackPanel Grid.Column="1" Spacing="2">
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding Endpoint}" Classes="caption" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
+                            VerticalAlignment="Center">
+                  <TextBlock Text="{Binding StatusText}" Classes="caption" VerticalAlignment="Center" />
+                  <TextBlock Text="!" Foreground="Orange" FontWeight="Bold"
+                             ToolTip.Tip="Uses directives the interactive service refuses for unauthorised callers"
+                             IsVisible="{Binding HasUnsupportedOptions}" VerticalAlignment="Center" />
+                </StackPanel>
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+
+        <TextBlock Text="No profiles match." Opacity="0.5"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   IsVisible="{Binding !VisibleProfiles.Count}" />
+      </Grid>
+
+      <Border Grid.Column="2" BorderThickness="1,0,0,0"
+              BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+        <ScrollViewer>
+          <StackPanel Margin="16" Spacing="16" IsVisible="{Binding HasSelection}">
+
+            <StackPanel Spacing="3">
+              <TextBlock Text="{Binding SelectedProfile.Name}" FontSize="17" FontWeight="SemiBold"
+                         TextWrapping="Wrap" />
+              <TextBlock Text="{Binding SelectedProfile.Endpoint}" Classes="caption" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="Connect" Classes="accent" MinWidth="100"
+                      IsVisible="{Binding SelectedProfile.IsIdle}"
+                      Command="{Binding ConnectCommand}"
+                      CommandParameter="{Binding SelectedProfile}" />
+              <Button Content="Disconnect" MinWidth="100"
+                      IsVisible="{Binding !SelectedProfile.IsIdle}"
+                      Command="{Binding DisconnectCommand}"
+                      CommandParameter="{Binding SelectedProfile}" />
+              <Button Content="Favourite"
+                      Command="{Binding ToggleFavouriteCommand}"
+                      CommandParameter="{Binding SelectedProfile}" />
+            </StackPanel>
+
+            <Separator />
+
+            <StackPanel Spacing="7">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Status" Classes="detailLabel" />
+                <TextBlock Text="{Binding SelectedProfile.StatusText}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Local IP" Classes="detailLabel" />
+                <TextBlock Text="{Binding SelectedProfile.Status.LocalAddress}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Server" Classes="detailLabel" />
+                <TextBlock Text="{Binding SelectedProfile.Status.ServerAddress}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Received" Classes="detailLabel" />
+                <TextBlock Text="{Binding SelectedProfile.Status.BytesReceived, Converter={x:Static conv:AppConverters.ByteSize}}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Sent" Classes="detailLabel" />
+                <TextBlock Text="{Binding SelectedProfile.Status.BytesSent, Converter={x:Static conv:AppConverters.ByteSize}}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" IsVisible="{Binding SelectedProfile.RequiresCredentials}">
+                <TextBlock Text="Sign in" Classes="detailLabel" />
+                <TextBlock Text="User name and password" />
+              </StackPanel>
+            </StackPanel>
+
+            <Border Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
+                    CornerRadius="4" Padding="10,8"
+                    IsVisible="{Binding SelectedProfile.HasUnsupportedOptions}">
+              <TextBlock TextWrapping="Wrap" FontSize="12"
+                         Text="This profile uses script directives. The interactive service refuses those for callers that are not authorised." />
+            </Border>
+
+            <TextBlock Classes="caption" TextWrapping="Wrap"
+                       Text="{Binding SelectedProfile.Status.Message}" />
+
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+    </Grid>
+
+    <Border Grid.Row="2" Padding="14,7" BorderThickness="0,1,0,0"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Classes="caption"
+                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1" Classes="caption" VerticalAlignment="Center"
+                   Text="{Binding ActiveCount, Converter={x:Static conv:AppConverters.ActiveCount}}" />
+      </Grid>
+    </Border>
+
+  </Grid>
 </Window>

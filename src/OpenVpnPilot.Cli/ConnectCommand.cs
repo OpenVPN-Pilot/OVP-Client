@@ -154,15 +154,17 @@ internal static class ConnectCommand
             Console.WriteLine($"Uptime: {uptime:hh\\:mm\\:ss}");
         }
 
+        // Tearing down matters most when the attempt failed, because a refused connection can
+        // leave the OpenVPN process waiting instead of exiting.
+        await supervisor.DisconnectAsync();
+
         if (status.State == VpnConnectionState.Failed)
         {
             Console.Error.WriteLine($"Failed: {status.Message}");
             return 3;
         }
 
-        await supervisor.DisconnectAsync();
         Console.WriteLine("Disconnected.");
-
         return status.State == VpnConnectionState.Connected ? 0 : 5;
     }
 

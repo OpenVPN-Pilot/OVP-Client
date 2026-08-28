@@ -74,7 +74,7 @@ implementation of the existing interfaces rather than restructuring the applicat
 - [x] `ovp doctor` and `ovp connect`
 - [x] Connection supervisor with credential handling
 - [x] SQLite store, schema and profile import with duplicate detection
-- [ ] User interface shell with profile list and connect and disconnect
+- [x] User interface with profile list, search, live status and tray icon
 - [ ] Folders, favourites, search, quick switcher and import
 - [ ] Hotkeys, notifications, dashboard and session history
 - [ ] Localization, autostart, packaging and releases
