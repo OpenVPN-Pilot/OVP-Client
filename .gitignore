@@ -47,6 +47,9 @@ appsettings.Local.json
 *.pfx
 !tests/**/Fixtures/**/*.ovpn
 
+# Local working notes. Travels with a copied folder, never with a push.
+TODO.local.md
+
 # OS noise
 Thumbs.db
 desktop.ini
