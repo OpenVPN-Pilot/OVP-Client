@@ -1,0 +1,16 @@
+<Project>
+
+  <!-- Inherit the repository wide settings, then relax the rules that only make sense for shipped APIs. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Test names follow Method_Scenario_Expectation, which CA1707 forbids for public members. -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+</Project>
