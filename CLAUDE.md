@@ -102,6 +102,14 @@ group name is localized.
 - **Authorised caller**: any config path, any options. Verified: a UAC filtered, non elevated token of an
   administrator is accepted, and options outside the whitelist such as `--up`, `--route` and `--cd` are
   accepted too.
+
+  Determining this in code needs care. With UAC enabled, the process token of an administrator does
+  **not** contain `S-1-5-32-544` at all, not even as a deny only entry, so
+  `WindowsPrincipal.IsInRole` returns false for a user the service authorises. The unfiltered
+  membership lives on the linked token, reached through `GetTokenInformation` with
+  `TokenLinkedToken`. `WindowsAuthorisation.IsEffectivelyInGroup` implements this; use it rather than
+  `IsInRole` for anything that has to predict the service's decision. Group names are localized, so
+  always resolve the Administrators group by its well known SID.
 - **Unauthorised caller**: the config must sit under `config_dir` and only whitelisted options are
   permitted (`auth-retry`, `config`, `log`, `log-append`, `management`, `management-forget-disconnect`,
   `management-hold`, `management-query-passwords`, `management-query-proxy`, `management-signal`,

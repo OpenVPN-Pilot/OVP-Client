@@ -70,7 +70,9 @@ implementation of the existing interfaces rather than restructuring the applicat
 
 - [x] Prove the interactive service and management interface integration end to end
 - [x] Solution structure and coding standards
-- [ ] OpenVPN engine: configuration parsing, management client, connection supervisor
+- [x] Configuration parsing and inlining, management client, interactive service launcher
+- [x] `ovp doctor` and `ovp connect`
+- [ ] Connection supervisor and the connect middleware pipeline
 - [ ] User interface shell with profile list and connect and disconnect
 - [ ] Folders, favourites, search, quick switcher and import
 - [ ] Hotkeys, notifications, dashboard and session history
