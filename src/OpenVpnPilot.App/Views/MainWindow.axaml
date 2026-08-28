@@ -33,7 +33,7 @@
                      Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" />
         </StackPanel>
 
-        <TextBox Grid.Column="1" Watermark="Search by name, host or protocol"
+        <TextBox Grid.Column="1" PlaceholderText="Search by name, host or protocol"
                  MaxWidth="440" HorizontalAlignment="Center"
                  Text="{Binding SearchTerm}" />
 
