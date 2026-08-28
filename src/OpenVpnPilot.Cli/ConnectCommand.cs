@@ -2,9 +2,10 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.Versioning;
-using System.Security.Cryptography;
 using OpenVpnPilot.Core.Abstractions;
+using OpenVpnPilot.Core.Vpn;
 using OpenVpnPilot.OpenVpn.Management;
+using OpenVpnPilot.OpenVpn.Runtime;
 using OpenVpnPilot.Platform.Windows.InteractiveService;
 
 namespace OpenVpnPilot.Cli;
@@ -12,9 +13,6 @@ namespace OpenVpnPilot.Cli;
 /// <summary>
 /// Connects using a configuration file and reports live state until the time is up.
 /// </summary>
-/// <remarks>
-/// This exercises the launcher and the management client together against a real OpenVPN process.
-/// </remarks>
 [SupportedOSPlatform("windows")]
 internal static class ConnectCommand
 {
@@ -46,127 +44,95 @@ internal static class ConnectCommand
 
         int seconds = ReadInt(args, "--seconds", 30);
         bool protectRoutes = args.Contains("--protect-routes", StringComparer.Ordinal);
-        string? username = ReadValue(args, "--username");
-        string? password = ReadValue(args, "--password");
 
-        int managementPort = ReservePort();
-        string managementPassword = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+        ConsoleCredentialProvider credentials = new(
+            ReadValue(args, "--username"),
+            ReadValue(args, "--password"));
 
-        OpenVpnLaunchRequest request = new(
+        await using ConnectionSupervisor supervisor = new(
+            new WindowsOpenVpnLauncher(new InteractiveServicePipeClient()),
+            new TcpManagementChannelFactory(),
+            credentials);
+
+        supervisor.StateChanged += OnStateChanged;
+
+        ConnectionRequest request = new(
+            ProfileId: Guid.Empty,
             ConfigurationPath: configurationPath,
             WorkingDirectory: Path.GetDirectoryName(configurationPath)!,
-            ManagementEndpoint: managementPort,
-            ManagementPassword: managementPassword,
+            ManagementPort: ReservePort(),
             AdditionalOptions: protectRoutes ? RouteProtection : []);
 
-        WindowsOpenVpnLauncher launcher = new(new InteractiveServicePipeClient());
-        OpenVpnLaunchResult launch = await launcher.LaunchAsync(request);
-
-        if (!launch.Succeeded)
+        try
         {
-            Console.Error.WriteLine($"Launch refused (0x{launch.ErrorCode:X8}): {launch.Message}");
+            VpnConnectionStatus initial = await supervisor.ConnectAsync(request);
+
+            if (initial.State == VpnConnectionState.Failed)
+            {
+                Console.Error.WriteLine($"Launch refused: {initial.Message}");
+                return 2;
+            }
+
+            Console.WriteLine($"Started openvpn, process {supervisor.ProcessId}, "
+                + $"management port {request.ManagementPort}.");
+        }
+        catch (ManagementUnavailableException exception)
+        {
+            Console.Error.WriteLine(exception.Message);
             return 2;
         }
 
-        Console.WriteLine($"Started openvpn, process {launch.ProcessId}, management port {managementPort}.");
-
-        using TcpClient socket = await ConnectWithRetryAsync(managementPort, TimeSpan.FromSeconds(10));
-        await using ManagementClient client = new(socket.GetStream());
-
-        await client.StartAsync(managementPassword);
-        await client.OpenSessionAsync();
-
-        return await ObserveAsync(client, username, password, seconds);
+        return await ObserveAsync(supervisor, seconds);
     }
 
-    private static async Task<int> ObserveAsync(
-        ManagementClient client,
-        string? username,
-        string? password,
-        int seconds)
+    private static async Task<int> ObserveAsync(ConnectionSupervisor supervisor, int seconds)
     {
-        using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(seconds));
-        bool connected = false;
-        long bytesIn = 0;
-        long bytesOut = 0;
+        DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(seconds);
 
-        try
+        while (DateTimeOffset.UtcNow < deadline)
         {
-            await foreach (ManagementMessage message in client.Notifications.ReadAllAsync(deadline.Token))
+            if (supervisor.Status.State == VpnConnectionState.Failed)
             {
-                switch (message)
-                {
-                    case HoldMessage:
-                        await client.ReleaseHoldAsync(deadline.Token);
-                        break;
-
-                    case StateMessage state:
-                        Console.WriteLine($"  state    {state.Name}"
-                            + (state.LocalAddress is null ? string.Empty : $"  local {state.LocalAddress}")
-                            + (state.RemoteAddress is null ? string.Empty : $"  server {state.RemoteAddress}:{state.RemotePort}")
-                            + (state.Description is null ? string.Empty : $"  ({state.Description})"));
-
-                        connected |= state.Name == "CONNECTED";
-                        break;
-
-                    case ByteCountMessage counters:
-                        bytesIn = counters.BytesIn;
-                        bytesOut = counters.BytesOut;
-                        break;
-
-                    case PasswordRequestMessage credentials:
-                        if (password is null)
-                        {
-                            Console.Error.WriteLine($"  the server asked for '{credentials.Realm}' credentials, none supplied");
-                            return 3;
-                        }
-
-                        Console.WriteLine($"  answering credential request for '{credentials.Realm}'");
-                        await client.SendCredentialsAsync(
-                            credentials.Realm,
-                            credentials.NeedsUsername ? username : null,
-                            password,
-                            deadline.Token);
-                        break;
-
-                    case PasswordVerificationFailedMessage failure:
-                        Console.Error.WriteLine($"  credentials rejected for '{failure.Realm}': {failure.Reason}");
-                        return 3;
-
-                    case FatalMessage fatal:
-                        Console.Error.WriteLine($"  fatal: {fatal.Text}");
-                        return 4;
-                }
+                break;
             }
+
+            await Task.Delay(250);
         }
-        catch (OperationCanceledException)
-        {
-            // The observation window elapsed, which is the normal end of this command.
-        }
+
+        VpnConnectionStatus status = supervisor.Status;
 
         Console.WriteLine();
-        Console.WriteLine($"Connected: {connected}   received {Format(bytesIn)}   sent {Format(bytesOut)}");
+        Console.WriteLine($"State: {status.State}   received {Format(status.BytesReceived)}"
+            + $"   sent {Format(status.BytesSent)}");
 
-        await TryStopAsync(client);
-        return connected ? 0 : 5;
+        if (status.Uptime(DateTimeOffset.UtcNow) is { } uptime)
+        {
+            Console.WriteLine($"Uptime: {uptime:hh\\:mm\\:ss}");
+        }
+
+        if (status.State == VpnConnectionState.Failed)
+        {
+            Console.Error.WriteLine($"Failed: {status.Message}");
+            return 3;
+        }
+
+        await supervisor.DisconnectAsync();
+        Console.WriteLine("Disconnected.");
+
+        return status.State == VpnConnectionState.Connected ? 0 : 5;
     }
 
-    private static async Task TryStopAsync(ManagementClient client)
+    private static void OnStateChanged(object? sender, VpnConnectionStatus status)
     {
-        try
+        string detail = status.State switch
         {
-            using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(5));
-            await client.SignalAsync("SIGTERM", timeout.Token);
-            Console.WriteLine("Disconnected.");
-        }
-        catch (OperationCanceledException)
-        {
-            Console.Error.WriteLine("The process did not acknowledge SIGTERM in time.");
-        }
-        catch (InvalidOperationException)
-        {
-            Console.WriteLine("Disconnected.");
-        }
+            VpnConnectionState.Connected =>
+                $"  local {status.LocalAddress}  server {status.ServerAddress}:{status.ServerPort}",
+            VpnConnectionState.Reconnecting when status.Message.Length > 0 => $"  ({status.Message})",
+            _ => string.Empty,
+        };
+
+        Console.WriteLine($"  {status.State,-15}{detail}");
     }
 
     private static string Format(long bytes)
@@ -182,34 +148,6 @@ internal static class ConnectCommand
         }
 
         return string.Create(CultureInfo.InvariantCulture, $"{value:0.#} {units[unit]}");
-    }
-
-    private static async Task<TcpClient> ConnectWithRetryAsync(int port, TimeSpan timeout)
-    {
-        DateTime deadline = DateTime.UtcNow + timeout;
-
-        while (true)
-        {
-            TcpClient client = new();
-            try
-            {
-                await client.ConnectAsync(IPAddress.Loopback, port);
-                return client;
-            }
-            catch (SocketException)
-            {
-                client.Dispose();
-
-                if (DateTime.UtcNow > deadline)
-                {
-                    throw new TimeoutException(
-                        $"The management interface on port {port} never started listening. "
-                        + "OpenVPN usually exits during option parsing when this happens.");
-                }
-
-                await Task.Delay(250);
-            }
-        }
     }
 
     private static int ReservePort()
@@ -229,4 +167,38 @@ internal static class ConnectCommand
 
     private static int ReadInt(string[] args, string name, int fallback) =>
         int.TryParse(ReadValue(args, name), CultureInfo.InvariantCulture, out int value) ? value : fallback;
+
+    /// <summary>
+    /// Supplies the credentials given on the command line, and reports when none were supplied.
+    /// </summary>
+    private sealed class ConsoleCredentialProvider : ICredentialProvider
+    {
+        private readonly string? username;
+        private readonly string? password;
+
+        public ConsoleCredentialProvider(string? username, string? password)
+        {
+            this.username = username;
+            this.password = password;
+        }
+
+        public Task<VpnCredentials?> RequestAsync(CredentialRequest request, CancellationToken cancellationToken)
+        {
+            if (password is null)
+            {
+                Console.Error.WriteLine(
+                    $"  the server asked for '{request.Realm}' credentials, none were supplied");
+                return Task.FromResult<VpnCredentials?>(null);
+            }
+
+            if (request.IsRetry)
+            {
+                Console.Error.WriteLine($"  credentials for '{request.Realm}' were rejected");
+                return Task.FromResult<VpnCredentials?>(null);
+            }
+
+            Console.WriteLine($"  answering credential request for '{request.Realm}'");
+            return Task.FromResult<VpnCredentials?>(new VpnCredentials(username, password));
+        }
+    }
 }
