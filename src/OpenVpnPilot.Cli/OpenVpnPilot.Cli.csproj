@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenVpnPilot.Core\OpenVpnPilot.Core.csproj" />
+    <ProjectReference Include="..\OpenVpnPilot.OpenVpn\OpenVpnPilot.OpenVpn.csproj" />
+    <ProjectReference Include="..\OpenVpnPilot.Data\OpenVpnPilot.Data.csproj" />
+    <ProjectReference Include="..\OpenVpnPilot.Platform.Windows\OpenVpnPilot.Platform.Windows.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

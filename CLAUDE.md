@@ -1,0 +1,155 @@
+# OpenVpnPilot
+
+A desktop client for OpenVPN that is built for managing many profiles: search, folders, favourites,
+bulk import, global hotkeys, live telemetry and session history. The application drives the `openvpn`
+process through the interactive service and the management interface. It does not reimplement OpenVPN.
+
+Target platform for the current version is Windows. macOS is prepared for but not implemented.
+
+---
+
+## Architecture rules
+
+- Enterprise layering: dependency injection everywhere, middleware for request flows, managers for
+  domain logic, helpers for utilities.
+- No static mutable state. Everything behind an interface. Constructor injection only.
+- `Nullable` enabled, warnings treated as errors.
+- `async`/`await` throughout, every asynchronous method takes a `CancellationToken`.
+- No `async void` except in event handlers.
+- Every long running operation is cancellable and never blocks the UI thread.
+
+## Language and style
+
+- Everything in this repository is English: identifiers, comments, commit messages, README, and the
+  default UI language.
+- Comments explain why, not what. One style only: `// Validates the VPN configuration before launch.`
+- No emoji anywhere in code or comments. No ASCII art. No banner or divider comments.
+- Every user facing string must be localizable. Never hardcode display text in a view or view model.
+
+## Platform rules
+
+- The target platform is Windows, but `Core`, `OpenVpn`, `Data` and `App` stay platform neutral:
+  no P/Invoke, no `Microsoft.Win32`, no path or separator assumptions outside `Platform.Windows`.
+- Every platform dependent capability gets an interface in `Core`. Adding macOS later must mean adding
+  a project that implements those interfaces, never restructuring existing code.
+
+## Neutrality
+
+This repository is public. Keep it free of context about who uses it or why it was written.
+
+- No usage scenarios, origin stories, organisation names, machine names, user names or internal hosts
+  in code, comments, commit messages, README, tests or sample data.
+- Examples use invented names such as `example-site` and `vpn.example.com`, and addresses from the
+  documentation ranges (`203.0.113.0/24`, `198.51.100.0/24`).
+
+## Git
+
+- Short, imperative, English commit subjects prefixed with a gitmoji code.
+- Examples: `:sparkles: add profile import wizard`, `:bug: fix bytecount parser overflow`,
+  `:recycle: extract connect pipeline`, `:white_check_mark: cover static challenge parsing`.
+- Never commit profiles, keys, certificates or databases. `.gitignore` enforces this; do not override it.
+
+## Documentation
+
+- Exactly one good English README. No `docs/` directory full of markdown files.
+- Document behaviour in the README and in code, not in a growing pile of design notes.
+
+## Working agreement
+
+- **No workarounds.** When something is blocked or behaves unexpectedly, stop and report it with the
+  evidence and the options. Do not route around it.
+- No silent `catch`. No `#pragma warning disable` without a comment stating why.
+- A TODO is not a solution.
+- Secrets never appear in the database, logs, exports or git. Credentials reach OpenVPN only through
+  the management interface, never through an `auth-user-pass` file on disk.
+
+---
+
+## Verified OpenVPN integration facts
+
+Measured against OpenVPN Community 2.7.6 on Windows 11. These are test results, not assumptions.
+Do not re-derive them, and correct this section if a measurement ever contradicts it.
+
+### Launching through the interactive service
+
+The startup message written to `\\.\pipe\openvpn\service` is three UTF-16 strings, each NUL terminated,
+sent in a single write:
+
+```
+workingdir \0 openvpnoptions \0 stdin \0
+```
+
+The reply is UTF-16, LF separated: `0x00000000` (status), `0x` + eight hex digits (process id),
+`Process ID`. A non zero first field is a Windows error code and the remaining fields carry the message.
+
+The management password is passed in the `stdin` field with a trailing LF, paired with
+`--management <host> <port> stdin` on the command line. It never touches disk.
+
+Working option set:
+
+```
+--config <file> --management 127.0.0.1 <port> stdin --management-query-passwords
+--management-hold --management-forget-disconnect --auth-retry interact --verb 3
+```
+
+### Authorisation model
+
+The service authorises a caller that is a member of the local Administrators group or of the group named
+by `HKLM\SOFTWARE\OpenVPN\ovpn_admin_group` (default `OpenVPN Administrators`, which the installer does
+not create). Group resolution must use the well known SID `S-1-5-32-544` for Administrators, because the
+group name is localized.
+
+- **Authorised caller**: any config path, any options. Verified: a UAC filtered, non elevated token of an
+  administrator is accepted, and options outside the whitelist such as `--up`, `--route` and `--cd` are
+  accepted too.
+- **Unauthorised caller**: the config must sit under `config_dir` and only whitelisted options are
+  permitted (`auth-retry`, `config`, `log`, `log-append`, `management`, `management-forget-disconnect`,
+  `management-hold`, `management-query-passwords`, `management-query-proxy`, `management-signal`,
+  `management-up-down`, `mute`, `setenv`, `service`, `verb`, `pull-filter`, `script-security`).
+  This branch is read from the OpenVPN sources and has not been measured, because the available account
+  is privileged. Treat it as the constraint to design against, and verify it before relying on it.
+
+### Management interface protocol
+
+The interface reports itself as version 6. Sequencing that works:
+
+1. Connect, then wait for the `ENTER PASSWORD:` prompt, which arrives **without** a trailing newline.
+2. Send the management password, wait for `SUCCESS: password is correct`.
+3. Send `version 6`, `state on`, `bytecount 1`, `log on`.
+4. Wait for `>HOLD:` before sending `hold release`. Releasing earlier is silently ignored.
+5. Tear down with `signal SIGTERM`, which exits the process cleanly and leaves nothing behind.
+
+**Commands must be issued one at a time.** Pipelining several commands drops all but the first few
+without any error. Keep a request queue and send the next command only after the current one produced a
+terminal response (`SUCCESS:`, `ERROR:` or `END`).
+
+`log on all` replays the log history and therefore produces two terminators, a `SUCCESS:` line and a
+later `END`. Counting both as terminal desynchronises the queue. Use `log on` for realtime only, or track
+the expected terminator per command.
+
+OpenVPN's own log echoes received commands unreliably and may repeat a previous command's text. Trust
+the responses on the socket, not the `MANAGEMENT: CMD` lines in the log file.
+
+Observed notification formats:
+
+```
+>STATE:<time>,<name>,<description>,<localip>,<remoteip>,<port>,<localport>,<ipv6>
+>BYTECOUNT:<in>,<out>
+>LOG:<time>,<flags>,<message>
+>HOLD:Waiting for hold release:<timeout>
+>INFO:<text>
+>PASSWORD:Need '<realm>' username/password
+```
+
+State sequence of a successful connection:
+`WAIT`, `AUTH`, `GET_CONFIG`, `ASSIGN_IP`, `ADD_ROUTES`, `CONNECTED`. The `CONNECTED` line carries the
+assigned local address, the server address and the port, which is what the dashboard displays.
+
+### Client side gotchas
+
+- With data channel offload active, a 2.7 client rejects any pushed compression setting, including
+  `comp-lzo no`, and fails with `Failed to apply push options`. `pull-filter ignore` is whitelisted and
+  is the supported way to defend against a server pushing options the client cannot apply.
+- A configuration without `ca`, `capath` or `peer-fingerprint` fails during option parsing, before the
+  management interface starts listening. Validate this at import time so the failure is explained rather
+  than observed as a process that dies immediately.

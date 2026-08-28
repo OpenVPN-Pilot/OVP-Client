@@ -1,0 +1,53 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+artifacts/
+publish/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE
+.vs/
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# Test and coverage
+[Tt]est[Rr]esult*/
+coverage*
+*.coverage
+*.trx
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+
+# Local application data. Never commit profiles, credentials or databases.
+*.db
+*.db-shm
+*.db-wal
+local.settings.json
+appsettings.Local.json
+
+# OpenVPN material. Configurations and keys must never enter the repository.
+*.ovpn
+*.key
+*.crt
+*.pem
+*.p12
+*.pfx
+!tests/**/Fixtures/**/*.ovpn
+
+# OS noise
+Thumbs.db
+desktop.ini
+.DS_Store
