@@ -117,6 +117,29 @@ group name is localized.
   This branch is read from the OpenVPN sources and has not been measured, because the available account
   is privileged. Treat it as the constraint to design against, and verify it before relying on it.
 
+### Where a materialised configuration may live
+
+The service refuses to start a process whose working directory sits directly under the user's
+`AppData`, failing with `CreateProcessAsUser` and `ERROR_DIRECTORY`. Measured on this machine:
+
+| Working directory | Result |
+| --- | --- |
+| `%LOCALAPPDATA%\<anything>` | refused |
+| `%APPDATA%\<anything>` | refused |
+| `%LOCALAPPDATA%\Temp\<anything>` | works |
+| `C:\Users\<user>\<anything>` | works |
+| `%ProgramData%\<anything>` | works |
+| any other drive | works |
+
+The service source contains no explicit rejection of those paths, and the access control lists on the
+working and passing directories are equivalent, so the cause is the process creation context: the
+service impersonates the caller and creates the process **without** calling `LoadUserProfile`.
+
+Runtime configurations therefore live under `%ProgramData%\OpenVpnPilot\runtime\<user SID>\`. That
+location works, survives temporary file cleanup, and can be given a per user access control list.
+A materialised configuration carries the private key inline, so both the directory and the file
+disable inheritance and grant only the owning user and the local system account.
+
 ### Management interface protocol
 
 The interface reports itself as version 6. Sequencing that works:

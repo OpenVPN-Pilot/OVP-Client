@@ -1,6 +1,6 @@
 using System.Runtime.Versioning;
 using OpenVpnPilot.Core.Abstractions;
-using OpenVpnPilot.Platform.Windows.Environment;
+using OpenVpnPilot.Platform.Windows.Diagnostics;
 using OpenVpnPilot.Platform.Windows.InteractiveService;
 
 namespace OpenVpnPilot.Cli;
@@ -28,6 +28,7 @@ internal static class CommandRunner
         {
             "doctor" => await RunDoctorAsync(),
             "connect" => await ConnectCommand.RunAsync(args[1..]),
+            "import" => await ImportCommand.RunAsync(args[1..]),
             "--help" or "-h" or "help" => WriteUsage(),
             _ => Unknown(args[0]),
         };
@@ -75,6 +76,7 @@ internal static class CommandRunner
         Console.WriteLine();
         Console.WriteLine("  doctor                     Check whether OpenVPN is installed and usable.");
         Console.WriteLine("  connect <config> [options] Connect using a configuration file.");
+        Console.WriteLine("  import <path> [--commit]   Examine .ovpn files and optionally store them.");
         Console.WriteLine();
         Console.WriteLine("Connect options:");
         Console.WriteLine("  --seconds <n>              How long to stay connected. Default 30.");

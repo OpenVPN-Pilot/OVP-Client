@@ -2,11 +2,15 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.Versioning;
+using Microsoft.EntityFrameworkCore;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Vpn;
+using OpenVpnPilot.Data;
+using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.OpenVpn.Management;
 using OpenVpnPilot.OpenVpn.Runtime;
 using OpenVpnPilot.Platform.Windows.InteractiveService;
+using OpenVpnPilot.Platform.Windows.Runtime;
 
 namespace OpenVpnPilot.Cli;
 
@@ -29,19 +33,59 @@ internal static class ConnectCommand
 
     public static async Task<int> RunAsync(string[] args)
     {
-        if (args.Length == 0)
+        string? profileName = ReadValue(args, "--profile");
+
+        if (args.Length == 0 || (profileName is null && args[0].StartsWith("--", StringComparison.Ordinal)))
         {
-            Console.Error.WriteLine("A configuration file is required.");
+            Console.Error.WriteLine("A configuration file or --profile <name> is required.");
             return 1;
         }
 
-        string configurationPath = Path.GetFullPath(args[0]);
-        if (!File.Exists(configurationPath))
+        Guid profileId = Guid.Empty;
+        string configurationPath;
+        MaterialisedProfile? materialised = null;
+
+        if (profileName is not null)
         {
-            Console.Error.WriteLine($"Configuration not found: {configurationPath}");
-            return 1;
+            StoredProfile? stored = await LoadProfileAsync(profileName);
+            if (stored is null)
+            {
+                Console.Error.WriteLine($"No stored profile matches '{profileName}'.");
+                return 1;
+            }
+
+            profileId = stored.Id;
+            materialised = await new WindowsProfileMaterializer()
+                .MaterialiseAsync(stored.Id, stored.Configuration);
+
+            configurationPath = materialised.Path;
+            Console.WriteLine($"Using stored profile '{stored.Name}'.");
+        }
+        else
+        {
+            configurationPath = Path.GetFullPath(args[0]);
+            if (!File.Exists(configurationPath))
+            {
+                Console.Error.WriteLine($"Configuration not found: {configurationPath}");
+                return 1;
+            }
         }
 
+        try
+        {
+            return await RunConnectedAsync(args, profileId, configurationPath);
+        }
+        finally
+        {
+            if (materialised is not null)
+            {
+                await materialised.DisposeAsync();
+            }
+        }
+    }
+
+    private static async Task<int> RunConnectedAsync(string[] args, Guid profileId, string configurationPath)
+    {
         int seconds = ReadInt(args, "--seconds", 30);
         bool protectRoutes = args.Contains("--protect-routes", StringComparer.Ordinal);
 
@@ -57,7 +101,7 @@ internal static class ConnectCommand
         supervisor.StateChanged += OnStateChanged;
 
         ConnectionRequest request = new(
-            ProfileId: Guid.Empty,
+            ProfileId: profileId,
             ConfigurationPath: configurationPath,
             WorkingDirectory: Path.GetDirectoryName(configurationPath)!,
             ManagementPort: ReservePort(),
@@ -121,6 +165,34 @@ internal static class ConnectCommand
 
         return status.State == VpnConnectionState.Connected ? 0 : 5;
     }
+
+    private static async Task<StoredProfile?> LoadProfileAsync(string name)
+    {
+        string databasePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "OpenVpnPilot",
+            "pilot.db");
+
+        if (!File.Exists(databasePath))
+        {
+            return null;
+        }
+
+        DbContextOptions<PilotDbContext> options = new DbContextOptionsBuilder<PilotDbContext>()
+            .UseSqlite($"Data Source={databasePath}")
+            .Options;
+
+        await using PilotDbContext context = new(options);
+
+        Profile? match = await context.Profiles
+            .Where(profile => EF.Functions.Like(profile.Name, $"%{name}%"))
+            .OrderBy(profile => profile.Name)
+            .FirstOrDefaultAsync();
+
+        return match is null ? null : new StoredProfile(match.Id, match.Name, match.Configuration);
+    }
+
+    private sealed record StoredProfile(Guid Id, string Name, string Configuration);
 
     private static void OnStateChanged(object? sender, VpnConnectionStatus status)
     {

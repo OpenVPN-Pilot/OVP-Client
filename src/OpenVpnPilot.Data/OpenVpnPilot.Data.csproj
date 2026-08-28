@@ -2,6 +2,15 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OpenVpnPilot.Core\OpenVpnPilot.Core.csproj" />
+    <ProjectReference Include="..\OpenVpnPilot.OpenVpn\OpenVpnPilot.OpenVpn.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
   </ItemGroup>
 
   <PropertyGroup>

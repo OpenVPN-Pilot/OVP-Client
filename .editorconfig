@@ -49,3 +49,10 @@ dotnet_naming_style.camel_case_style.capitalization = camel_case
 dotnet_diagnostic.CS4014.severity = error
 # ConfigureAwait is not required in application code
 dotnet_diagnostic.CA2007.severity = none
+
+# Entity Framework writes these files. They follow the tooling's conventions, not ours.
+[**/Migrations/*.cs]
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none
+dotnet_diagnostic.IDE0161.severity = none
+dotnet_diagnostic.IDE0055.severity = none

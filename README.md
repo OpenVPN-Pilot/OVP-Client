@@ -72,7 +72,8 @@ implementation of the existing interfaces rather than restructuring the applicat
 - [x] Solution structure and coding standards
 - [x] Configuration parsing and inlining, management client, interactive service launcher
 - [x] `ovp doctor` and `ovp connect`
-- [ ] Connection supervisor and the connect middleware pipeline
+- [x] Connection supervisor with credential handling
+- [x] SQLite store, schema and profile import with duplicate detection
 - [ ] User interface shell with profile list and connect and disconnect
 - [ ] Folders, favourites, search, quick switcher and import
 - [ ] Hotkeys, notifications, dashboard and session history

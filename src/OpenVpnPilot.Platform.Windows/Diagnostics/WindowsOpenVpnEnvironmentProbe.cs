@@ -7,7 +7,7 @@ using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Platform.Windows.InteractiveService;
 using OpenVpnPilot.Platform.Windows.Security;
 
-namespace OpenVpnPilot.Platform.Windows.Environment;
+namespace OpenVpnPilot.Platform.Windows.Diagnostics;
 
 /// <summary>
 /// Determines whether OpenVPN Community is installed and usable by the current user.
@@ -228,7 +228,7 @@ public sealed class WindowsOpenVpnEnvironmentProbe : IOpenVpnEnvironmentProbe
     {
         try
         {
-            NTAccount account = new(System.Environment.MachineName, groupName);
+            NTAccount account = new(Environment.MachineName, groupName);
             return (SecurityIdentifier)account.Translate(typeof(SecurityIdentifier));
         }
         catch (IdentityNotMappedException)
