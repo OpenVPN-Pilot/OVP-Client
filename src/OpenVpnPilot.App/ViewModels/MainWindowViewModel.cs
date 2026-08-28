@@ -56,12 +56,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// </summary>
     public ObservableCollection<ProfileItemViewModel> VisibleProfiles { get; } = [];
 
-    public ObservableCollection<SidebarFilter> Filters { get; } =
+    public ObservableCollection<SidebarFilterViewModel> Filters { get; } =
     [
-        new SidebarFilter(SidebarFilterKind.All, "All profiles"),
-        new SidebarFilter(SidebarFilterKind.Active, "Active"),
-        new SidebarFilter(SidebarFilterKind.Favourites, "Favourites"),
-        new SidebarFilter(SidebarFilterKind.Recent, "Recent"),
+        new SidebarFilterViewModel(SidebarFilterKind.All, "All profiles"),
+        new SidebarFilterViewModel(SidebarFilterKind.Active, "Active"),
+        new SidebarFilterViewModel(SidebarFilterKind.Favourites, "Favourites"),
+        new SidebarFilterViewModel(SidebarFilterKind.Recent, "Recent"),
     ];
 
     [ObservableProperty]
@@ -75,8 +75,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public partial string SearchTerm { get; set; } = string.Empty;
 
     [ObservableProperty]
-    public partial SidebarFilter SelectedFilter { get; set; } =
-        new(SidebarFilterKind.All, "All profiles");
+    public partial SidebarFilterViewModel? SelectedFilter { get; set; }
 
     [ObservableProperty]
     public partial string StatusMessage { get; set; } = string.Empty;
@@ -85,9 +84,27 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public partial bool IsLoading { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveSummary))]
     public partial int ActiveCount { get; set; }
 
     public bool HasSelection => SelectedProfile is not null;
+
+    /// <summary>
+    /// Heading of the placeholder shown when the list is empty. The wording distinguishes an empty
+    /// library from a search that matched nothing, because the two need different actions.
+    /// </summary>
+    public string EmptyStateTitle => allProfiles.Count == 0
+        ? "No profiles yet"
+        : "Nothing matches";
+
+    public string EmptyStateDetail => allProfiles.Count == 0
+        ? "Import .ovpn files with the ovp import command to fill the library."
+        : "Try a different search term, or pick another entry in the sidebar.";
+
+    /// <summary>
+    /// Short summary of the active connections for the status bar.
+    /// </summary>
+    public string ActiveSummary => ActiveCount == 1 ? "1 connection" : $"{ActiveCount} connections";
 
     public bool HasProfiles => allProfiles.Count > 0;
 
@@ -119,6 +136,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 profile => new KeyValuePair<Guid, string>(profile.Id, profile.Name)));
 
             Folders = new ObservableCollection<Folder>(folders);
+            SelectedFilter ??= Filters[0];
+            UpdateFilterCounts();
             ApplyFilter();
 
             StatusMessage = allProfiles.Count == 0
@@ -126,6 +145,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 : $"{allProfiles.Count} profile(s)";
 
             OnPropertyChanged(nameof(HasProfiles));
+            OnPropertyChanged(nameof(EmptyStateTitle));
+            OnPropertyChanged(nameof(EmptyStateDetail));
         }
         finally
         {
@@ -135,7 +156,25 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSearchTermChanged(string value) => ApplyFilter();
 
-    partial void OnSelectedFilterChanged(SidebarFilter value) => ApplyFilter();
+    partial void OnSelectedFilterChanged(SidebarFilterViewModel? value) => ApplyFilter();
+
+    /// <summary>
+    /// Refreshes the badge next to each sidebar entry.
+    /// </summary>
+    private void UpdateFilterCounts()
+    {
+        foreach (SidebarFilterViewModel filter in Filters)
+        {
+            filter.Count = filter.Kind switch
+            {
+                SidebarFilterKind.All => allProfiles.Count,
+                SidebarFilterKind.Active => allProfiles.Count(profile => !profile.IsIdle),
+                SidebarFilterKind.Favourites => allProfiles.Count(profile => profile.IsFavourite),
+                SidebarFilterKind.Recent => allProfiles.Count(profile => profile.LastConnectedAt is not null),
+                _ => 0,
+            };
+        }
+    }
 
     private void ApplyFilter()
     {
@@ -143,7 +182,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         IEnumerable<ProfileItemViewModel> matches = allProfiles.Where(profile => profile.Matches(term));
 
-        matches = SelectedFilter.Kind switch
+        matches = (SelectedFilter?.Kind ?? SidebarFilterKind.All) switch
         {
             SidebarFilterKind.Active => matches.Where(profile => !profile.IsIdle),
             SidebarFilterKind.Favourites => matches.Where(profile => profile.IsFavourite),
@@ -241,6 +280,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         profile.IsFavourite = !profile.IsFavourite;
         await store.SetFavouriteAsync(profile.Id, profile.IsFavourite);
+        UpdateFilterCounts();
         ApplyFilter();
     }
 
@@ -275,23 +315,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
             ActiveCount = connections.ActiveCount;
 
-            if (SelectedFilter.Kind == SidebarFilterKind.Active)
+            UpdateFilterCounts();
+
+            if (SelectedFilter?.Kind == SidebarFilterKind.Active)
             {
                 ApplyFilter();
             }
         });
     }
-}
-
-/// <summary>
-/// One entry in the sidebar.
-/// </summary>
-public sealed record SidebarFilter(SidebarFilterKind Kind, string Label);
-
-public enum SidebarFilterKind
-{
-    All,
-    Active,
-    Favourites,
-    Recent,
 }

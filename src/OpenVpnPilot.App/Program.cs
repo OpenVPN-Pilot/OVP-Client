@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Avalonia;
+using OpenVpnPilot.App.Services;
 
 namespace OpenVpnPilot.App;
 
@@ -12,8 +13,19 @@ internal sealed class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        SingleInstanceGuard guard = new();
+
+        if (!guard.TryClaim())
+        {
+            // Another copy owns the profile store and the running tunnels, so this one hands over.
+            SingleInstanceGuard.RequestActivationAsync().GetAwaiter().GetResult();
+            guard.Dispose();
+            return 0;
+        }
+
         try
         {
+            App.InstanceGuard = guard;
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
             return 0;
         }
@@ -24,6 +36,10 @@ internal sealed class Program
             // logger exists, so it goes to a file next to the other application data.
             WriteStartupFailure(exception);
             return 1;
+        }
+        finally
+        {
+            guard.Dispose();
         }
     }
 

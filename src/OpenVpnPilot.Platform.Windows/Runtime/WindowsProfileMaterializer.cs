@@ -69,6 +69,35 @@ public sealed class WindowsProfileMaterializer : IProfileMaterializer
         return new MaterialisedProfile(path);
     }
 
+    public int RemoveStaleFiles()
+    {
+        if (!Directory.Exists(rootDirectory))
+        {
+            return 0;
+        }
+
+        int removed = 0;
+
+        foreach (string path in Directory.EnumerateFiles(rootDirectory, "*.ovpn", SearchOption.AllDirectories))
+        {
+            try
+            {
+                File.Delete(path);
+                removed++;
+            }
+            catch (IOException)
+            {
+                // A file still held open belongs to something else; it is left alone.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Another account's directory, which this user must not touch.
+            }
+        }
+
+        return removed;
+    }
+
     private static void EnsurePrivateDirectory(string directory, SecurityIdentifier user)
     {
         if (Directory.Exists(directory))

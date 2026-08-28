@@ -36,7 +36,7 @@ internal static class ImportCommand
             return 1;
         }
 
-        await using PilotDbContext context = await OpenStoreAsync();
+        await using PilotDbContext context = await StoreFactory.OpenAsync();
         ProfileImporter importer = new(context, new OvpnConfigInliner(new FileSystemOvpnFileResolver()));
 
         IReadOnlyList<ImportCandidate> candidates = await importer.PrepareAsync(files);
@@ -101,22 +101,5 @@ internal static class ImportCommand
         {
             Console.WriteLine($"         referenced files not found: {string.Join(", ", candidate.MissingFiles)}");
         }
-    }
-
-    private static async Task<PilotDbContext> OpenStoreAsync()
-    {
-        string directory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "OpenVpnPilot");
-
-        Directory.CreateDirectory(directory);
-
-        DbContextOptions<PilotDbContext> options = new DbContextOptionsBuilder<PilotDbContext>()
-            .UseSqlite($"Data Source={Path.Combine(directory, "pilot.db")}")
-            .Options;
-
-        PilotDbContext context = new(options);
-        await context.Database.MigrateAsync();
-        return context;
     }
 }

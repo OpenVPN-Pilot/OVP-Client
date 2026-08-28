@@ -2,9 +2,12 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.App.Services;
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.App.Views;
@@ -15,6 +18,12 @@ namespace OpenVpnPilot.App;
 
 public partial class App : Application
 {
+    /// <summary>
+    /// Set before the framework starts, so the running copy can be brought forward when a second
+    /// one is launched.
+    /// </summary>
+    internal static SingleInstanceGuard? InstanceGuard { get; set; }
+
     private IHost? host;
 
     public override void Initialize()
@@ -32,6 +41,7 @@ public partial class App : Application
 
         host = AppHost.Build();
         ApplyMigrations();
+        RemoveStaleRuntimeFiles();
 
         MainWindowViewModel viewModel = host.Services.GetRequiredService<MainWindowViewModel>();
         MainWindow window = new() { DataContext = viewModel };
@@ -53,10 +63,33 @@ public partial class App : Application
 
         host.Services.GetRequiredService<TrayIconController>().Attach(this, desktop);
 
+        if (InstanceGuard is not null)
+        {
+            InstanceGuard.ActivationRequested += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                window.Show();
+                window.WindowState = WindowState.Normal;
+                window.Activate();
+            });
+        }
+
         // Closing the application must not leave tunnels running unattended.
         desktop.ShutdownRequested += OnShutdownRequested;
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// Clears configurations a previous run could not clean up, for example after a forced exit.
+    /// </summary>
+    private void RemoveStaleRuntimeFiles()
+    {
+        int removed = host!.Services.GetRequiredService<IProfileMaterializer>().RemoveStaleFiles();
+
+        if (removed > 0)
+        {
+            AppLog.StaleRuntimeFilesRemoved(host.Services.GetRequiredService<ILogger<App>>(), removed);
+        }
     }
 
     private void ApplyMigrations()

@@ -30,7 +30,7 @@ internal static partial class ConnectionSupervisorLog
 
     [LoggerMessage(
         EventId = 2004,
-        Level = LogLevel.Error,
-        Message = "OpenVPN process {ProcessId} could not be terminated.")]
-    public static partial void ProcessKillFailed(ILogger logger, int processId, Exception exception);
+        Level = LogLevel.Warning,
+        Message = "OpenVPN process {ProcessId} could not be inspected or terminated. It may outlive this disconnect.")]
+    public static partial void ProcessCheckDenied(ILogger logger, int processId, Exception exception);
 }

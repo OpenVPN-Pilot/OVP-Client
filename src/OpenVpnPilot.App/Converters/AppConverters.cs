@@ -1,4 +1,5 @@
 using System.Globalization;
+using Avalonia;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 using OpenVpnPilot.Core.Vpn;
@@ -10,23 +11,27 @@ namespace OpenVpnPilot.App.Converters;
 /// </summary>
 /// <remarks>
 /// Exposed as static instances so bindings can reference them without a resource dictionary entry.
+/// Colour lookups go through the application resources, so they follow the active theme variant.
 /// </remarks>
 public static class AppConverters
 {
     /// <summary>
-    /// Maps a connection state to the colour of the status dot.
+    /// Colour of the status dot on a profile row.
     /// </summary>
-    public static readonly IValueConverter StateBrush = new FuncValueConverter<VpnConnectionState, IBrush>(
-        static state => state switch
-        {
-            VpnConnectionState.Connected => Brushes.MediumSeaGreen,
-            VpnConnectionState.Connecting or VpnConnectionState.Launching or VpnConnectionState.Authenticating
-                => Brushes.Goldenrod,
-            VpnConnectionState.Reconnecting => Brushes.DarkOrange,
-            VpnConnectionState.Disconnecting => Brushes.Goldenrod,
-            VpnConnectionState.Failed => Brushes.IndianRed,
-            _ => Brushes.Gray,
-        });
+    public static readonly IValueConverter StateBrush =
+        new FuncValueConverter<VpnConnectionState, IBrush?>(state => Resource(BrushKeyFor(state)));
+
+    /// <summary>
+    /// Background of the status pill, a muted version of the state colour.
+    /// </summary>
+    public static readonly IValueConverter StatePillBackground =
+        new FuncValueConverter<VpnConnectionState, IBrush?>(state => Resource(SoftKeyFor(state)));
+
+    /// <summary>
+    /// Text colour of the status pill.
+    /// </summary>
+    public static readonly IValueConverter StatePillForeground =
+        new FuncValueConverter<VpnConnectionState, IBrush?>(state => Resource(BrushKeyFor(state)));
 
     /// <summary>
     /// Formats a byte counter for display.
@@ -34,12 +39,48 @@ public static class AppConverters
     public static readonly IValueConverter ByteSize = new FuncValueConverter<long, string>(FormatBytes);
 
     /// <summary>
-    /// Renders the number of active connections, or nothing when there are none.
+    /// Renders a connection duration, or a dash when the tunnel is not up.
     /// </summary>
-    public static readonly IValueConverter ActiveCount = new FuncValueConverter<int, string>(
-        static count => count == 0
-            ? string.Empty
-            : string.Create(CultureInfo.CurrentCulture, $"{count} active"));
+    public static readonly IValueConverter Uptime = new FuncValueConverter<DateTimeOffset?, string>(
+        static since => since is { } start
+            ? (DateTimeOffset.UtcNow - start).ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture)
+            : "-");
+
+    /// <summary>
+    /// Renders a count only when it is greater than zero, so empty badges stay hidden.
+    /// </summary>
+    public static readonly IValueConverter CountBadge = new FuncValueConverter<int, string>(
+        static count => count == 0 ? string.Empty : count.ToString(CultureInfo.CurrentCulture));
+
+    private static string BrushKeyFor(VpnConnectionState state) => state switch
+    {
+        VpnConnectionState.Connected => "StateConnected",
+        VpnConnectionState.Failed => "StateFailed",
+        VpnConnectionState.Disconnected => "StateIdle",
+        _ => "StatePending",
+    };
+
+    private static string SoftKeyFor(VpnConnectionState state) => state switch
+    {
+        VpnConnectionState.Connected => "StateConnectedSoft",
+        VpnConnectionState.Failed => "StateFailedSoft",
+        VpnConnectionState.Disconnected => "SurfaceCardHover",
+        _ => "StatePendingSoft",
+    };
+
+    // Resolved against the live theme variant so the colours follow a light or dark switch.
+    private static IBrush? Resource(string key)
+    {
+        Application? application = Application.Current;
+        if (application is null)
+        {
+            return null;
+        }
+
+        return application.TryGetResource(key, application.ActualThemeVariant, out object? value)
+            ? value as IBrush
+            : null;
+    }
 
     private static string FormatBytes(long bytes)
     {

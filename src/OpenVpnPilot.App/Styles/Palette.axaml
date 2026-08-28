@@ -1,0 +1,64 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    One palette, defined once per theme variant. Views reference these keys only, so the whole
+    application can be retinted from this file and nothing hardcodes a colour.
+  -->
+  <ResourceDictionary.ThemeDictionaries>
+
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="SurfaceWindow" Color="#16181D" />
+      <SolidColorBrush x:Key="SurfaceSidebar" Color="#121419" />
+      <SolidColorBrush x:Key="SurfaceCard" Color="#1C1F26" />
+      <SolidColorBrush x:Key="SurfaceCardHover" Color="#232733" />
+      <SolidColorBrush x:Key="SurfaceInput" Color="#1C1F26" />
+      <SolidColorBrush x:Key="BorderSubtle" Color="#252932" />
+      <SolidColorBrush x:Key="BorderStrong" Color="#333947" />
+      <SolidColorBrush x:Key="TextPrimary" Color="#E7E9EE" />
+      <SolidColorBrush x:Key="TextSecondary" Color="#98A0AE" />
+      <SolidColorBrush x:Key="TextTertiary" Color="#6B7382" />
+      <SolidColorBrush x:Key="Accent" Color="#4C8DF6" />
+      <SolidColorBrush x:Key="AccentHover" Color="#639CF8" />
+      <SolidColorBrush x:Key="AccentSoft" Color="#1E2C45" />
+      <SolidColorBrush x:Key="StateConnected" Color="#3DD68C" />
+      <SolidColorBrush x:Key="StateConnectedSoft" Color="#16301F" />
+      <SolidColorBrush x:Key="StatePending" Color="#E8B339" />
+      <SolidColorBrush x:Key="StatePendingSoft" Color="#332813" />
+      <SolidColorBrush x:Key="StateFailed" Color="#F2707A" />
+      <SolidColorBrush x:Key="StateFailedSoft" Color="#3A1E22" />
+      <SolidColorBrush x:Key="StateIdle" Color="#4A515F" />
+    </ResourceDictionary>
+
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="SurfaceWindow" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="SurfaceSidebar" Color="#F6F7F9" />
+      <SolidColorBrush x:Key="SurfaceCard" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="SurfaceCardHover" Color="#F1F3F7" />
+      <SolidColorBrush x:Key="SurfaceInput" Color="#F3F5F8" />
+      <SolidColorBrush x:Key="BorderSubtle" Color="#E6E9EF" />
+      <SolidColorBrush x:Key="BorderStrong" Color="#D3D8E0" />
+      <SolidColorBrush x:Key="TextPrimary" Color="#171A20" />
+      <SolidColorBrush x:Key="TextSecondary" Color="#5F6875" />
+      <SolidColorBrush x:Key="TextTertiary" Color="#8A929E" />
+      <SolidColorBrush x:Key="Accent" Color="#2F6FE4" />
+      <SolidColorBrush x:Key="AccentHover" Color="#255FCC" />
+      <SolidColorBrush x:Key="AccentSoft" Color="#E8F0FD" />
+      <SolidColorBrush x:Key="StateConnected" Color="#12A05E" />
+      <SolidColorBrush x:Key="StateConnectedSoft" Color="#E4F7ED" />
+      <SolidColorBrush x:Key="StatePending" Color="#B37700" />
+      <SolidColorBrush x:Key="StatePendingSoft" Color="#FDF3E0" />
+      <SolidColorBrush x:Key="StateFailed" Color="#D3383F" />
+      <SolidColorBrush x:Key="StateFailedSoft" Color="#FCEBEC" />
+      <SolidColorBrush x:Key="StateIdle" Color="#B4BAC4" />
+    </ResourceDictionary>
+
+  </ResourceDictionary.ThemeDictionaries>
+
+  <!-- Shape and rhythm, shared by both variants. -->
+  <CornerRadius x:Key="RadiusSmall">4</CornerRadius>
+  <CornerRadius x:Key="RadiusMedium">7</CornerRadius>
+  <CornerRadius x:Key="RadiusLarge">10</CornerRadius>
+  <CornerRadius x:Key="RadiusPill">20</CornerRadius>
+
+</ResourceDictionary>

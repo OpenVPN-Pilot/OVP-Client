@@ -1,3 +1,4 @@
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using OpenVpnPilot.Core.Vpn;
 using OpenVpnPilot.Data.Entities;
@@ -51,13 +52,20 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     internal string SearchText { get; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FavouriteActionLabel))]
     public partial bool IsFavourite { get; set; }
+
+    public string FavouriteActionLabel => IsFavourite ? "Unfavourite" : "Favourite";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatusText))]
+    [NotifyPropertyChangedFor(nameof(StatusLabel))]
     [NotifyPropertyChangedFor(nameof(IsConnected))]
     [NotifyPropertyChangedFor(nameof(IsBusy))]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
+    [NotifyPropertyChangedFor(nameof(HasFailureMessage))]
+    [NotifyPropertyChangedFor(nameof(LocalAddressDisplay))]
+    [NotifyPropertyChangedFor(nameof(ServerDisplay))]
     public partial VpnConnectionStatus Status { get; set; } = VpnConnectionStatus.Disconnected;
 
     public bool IsConnected => Status.State == VpnConnectionState.Connected;
@@ -86,7 +94,32 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
         _ => string.Empty,
     };
 
-    public void MarkConnected(DateTimeOffset when) => LastConnectedAt = when;
+    /// <summary>
+    /// Status text that is never empty, for places that always show a label.
+    /// </summary>
+    public string StatusLabel => StatusText.Length == 0 ? "Not connected" : StatusText;
+
+    public bool HasFailureMessage =>
+        Status.State == VpnConnectionState.Failed && Status.Message.Length > 0;
+
+    public string LocalAddressDisplay => Status.LocalAddress ?? "-";
+
+    public string ServerDisplay => Status.ServerAddress is { } address
+        ? $"{address}:{Status.ServerPort}"
+        : Endpoint;
+
+    public string AuthenticationDisplay =>
+        RequiresCredentials ? "User name and password" : "Certificate";
+
+    public string LastConnectedDisplay => LastConnectedAt is { } when
+        ? when.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
+        : "Never";
+
+    public void MarkConnected(DateTimeOffset when)
+    {
+        LastConnectedAt = when;
+        OnPropertyChanged(nameof(LastConnectedDisplay));
+    }
 
     /// <summary>
     /// True when the profile matches a search term. An empty term matches everything.

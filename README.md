@@ -75,6 +75,7 @@ implementation of the existing interfaces rather than restructuring the applicat
 - [x] Connection supervisor with credential handling
 - [x] SQLite store, schema and profile import with duplicate detection
 - [x] User interface with profile list, search, live status and tray icon
+- [x] Visual design, single instance handling and the `ovp` command with help
 - [ ] Folders, favourites, search, quick switcher and import
 - [ ] Hotkeys, notifications, dashboard and session history
 - [ ] Localization, autostart, packaging and releases

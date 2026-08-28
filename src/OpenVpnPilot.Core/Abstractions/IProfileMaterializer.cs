@@ -18,6 +18,17 @@ public interface IProfileMaterializer
         Guid profileId,
         string configuration,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes configurations left behind by an earlier run.
+    /// </summary>
+    /// <remarks>
+    /// Called at startup, when by definition nothing is connected yet. A crash or a forced exit
+    /// skips the normal cleanup, and a materialised configuration contains a private key, so it must
+    /// not survive the session that created it.
+    /// </remarks>
+    /// <returns>The number of files removed.</returns>
+    public int RemoveStaleFiles();
 }
 
 /// <summary>

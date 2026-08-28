@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
@@ -394,24 +395,19 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
     /// <remarks>
     /// A signal is a request, not a guarantee. With auth-retry set to interact, a process whose
     /// credentials were refused keeps waiting for new ones instead of exiting, which would leave an
-    /// orphaned tunnel behind. Terminating is a last resort: OpenVPN normally removes its own routes
-    /// on a clean shutdown, so the escalation is logged rather than done silently.
+    /// orphaned tunnel behind.
+    ///
+    /// This is a best effort backstop, not a guarantee of its own. The process was created by the
+    /// interactive service, so querying or terminating it can be refused with access denied. That is
+    /// reported and accepted rather than propagated: a tunnel that outlives a disconnect is a fault
+    /// worth logging, but it must never take the application down with it.
     /// </remarks>
     private async Task EnsureProcessExitedAsync(int processId)
     {
-        Process process;
         try
         {
-            process = Process.GetProcessById(processId);
-        }
-        catch (ArgumentException)
-        {
-            // Already gone, which is the normal outcome.
-            return;
-        }
+            using Process process = Process.GetProcessById(processId);
 
-        using (process)
-        {
             try
             {
                 using CancellationTokenSource grace = new(ProcessExitGrace);
@@ -422,24 +418,22 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
             {
                 // The signal was ignored, so the process is ended below.
             }
-            catch (InvalidOperationException)
-            {
-                return;
-            }
 
-            try
-            {
-                ConnectionSupervisorLog.ProcessDidNotExit(logger, processId);
-                process.Kill(entireProcessTree: false);
-            }
-            catch (InvalidOperationException)
-            {
-                // It exited between the wait timing out and the kill.
-            }
-            catch (System.ComponentModel.Win32Exception exception)
-            {
-                ConnectionSupervisorLog.ProcessKillFailed(logger, processId, exception);
-            }
+            ConnectionSupervisorLog.ProcessDidNotExit(logger, processId);
+            process.Kill(entireProcessTree: false);
+        }
+        catch (ArgumentException)
+        {
+            // Already gone, which is the normal outcome.
+        }
+        catch (InvalidOperationException)
+        {
+            // It exited while being inspected.
+        }
+        catch (Win32Exception exception)
+        {
+            // The service created the process, so this client may not be allowed to query or end it.
+            ConnectionSupervisorLog.ProcessCheckDenied(logger, processId, exception);
         }
     }
 
