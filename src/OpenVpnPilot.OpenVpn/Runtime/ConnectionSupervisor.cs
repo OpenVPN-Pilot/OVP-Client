@@ -173,6 +173,11 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
             session = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             pump = Task.Run(() => PumpAsync(request, session.Token), CancellationToken.None);
 
+            if (request.ConnectTimeout is { } limit && limit > TimeSpan.Zero)
+            {
+                _ = Task.Run(() => AbandonIfNotConnectedAsync(limit, session.Token), CancellationToken.None);
+            }
+
             return status;
         }
         finally
@@ -385,7 +390,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                         ConnectedSince = null,
                         Message = "The server pushed a compression setting this client cannot apply, "
                             + "so it refused every option the server sent.",
-                        Failure = VpnFailureKind.Fatal,
+                        Failure = VpnFailureKind.Unsupported,
                     });
 
                     break;
@@ -439,6 +444,46 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
 
                 break;
         }
+    }
+
+    /// <summary>
+    /// Gives up on a tunnel that has not come up in time.
+    /// </summary>
+    /// <remarks>
+    /// OpenVPN retries by itself for as long as it is left running, and a tunnel that cannot get an
+    /// adapter or reach its server never reports anything terminal. Without this, the profile shows
+    /// that it is connecting for as long as the application lives and its process is never cleaned
+    /// up, because nothing ever decides the attempt is over.
+    /// </remarks>
+    private async Task AbandonIfNotConnectedAsync(TimeSpan limit, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(limit, timeProvider, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // The session ended first, which is every ordinary outcome.
+            return;
+        }
+
+        if (status.State is VpnConnectionState.Connected or VpnConnectionState.Disconnected
+            or VpnConnectionState.Failed)
+        {
+            return;
+        }
+
+        abandoned = true;
+
+        Publish(status with
+        {
+            State = VpnConnectionState.Failed,
+            ConnectedSince = null,
+            Message = $"The tunnel did not come up within {limit.TotalSeconds:0} seconds.",
+            Failure = VpnFailureKind.ConnectionLost,
+        });
+
+        await StopAbandonedAttemptAsync(cancellationToken);
     }
 
     /// <summary>
@@ -623,22 +668,31 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
             }
         }
 
-        if (client is not null)
-        {
-            await client.DisposeAsync();
-        }
-
         int? processId = ProcessId;
 
-        session?.Dispose();
-        session = null;
-        pump = null;
-        client = null;
-        ProcessId = null;
-
-        if (processId is { } id)
+        try
         {
-            await EnsureProcessExitedAsync(id);
+            if (client is not null)
+            {
+                await client.DisposeAsync();
+            }
+        }
+        finally
+        {
+            // The process outlives everything else here, so ending it cannot be left to depend on
+            // the tidying that comes before it. Disposing a client with a command still in flight
+            // can throw, and a throw here used to leave a tunnel running with nothing left to stop
+            // it: sixty of them accumulated in eight minutes of a connection retrying.
+            session?.Dispose();
+            session = null;
+            pump = null;
+            client = null;
+            ProcessId = null;
+
+            if (processId is { } id)
+            {
+                await EnsureProcessExitedAsync(id);
+            }
         }
     }
 
@@ -715,10 +769,16 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
 /// <param name="ManagementPort">A free loopback port reserved by the caller.</param>
 /// <param name="AdditionalOptions">Extra command line options, such as protective pull filters.</param>
 /// <param name="LogPath">Optional OpenVPN log file.</param>
+/// <param name="ConnectTimeout">
+/// How long the tunnel is given to reach connected before the attempt is abandoned. OpenVPN retries
+/// for as long as it is left running, so without a bound a tunnel that cannot come up holds a
+/// process and reports that it is connecting for as long as the application lives.
+/// </param>
 public sealed record ConnectionRequest(
     Guid ProfileId,
     string ConfigurationPath,
     string WorkingDirectory,
     int ManagementPort,
     IReadOnlyList<string> AdditionalOptions,
-    string? LogPath = null);
+    string? LogPath = null,
+    TimeSpan? ConnectTimeout = null);

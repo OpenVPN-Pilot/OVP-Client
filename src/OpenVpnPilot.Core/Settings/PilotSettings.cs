@@ -99,8 +99,14 @@ public sealed class ConnectionSettings
     public bool ProtectRoutes { get; set; } = true;
 
     /// <summary>
-    /// How long a connection may stay in a pre connected state before it is treated as failed.
+    /// How long a tunnel is given to come up before the attempt is abandoned. Zero waits forever.
     /// </summary>
+    /// <remarks>
+    /// OpenVPN retries by itself for as long as it is left running, so without this a tunnel that
+    /// cannot come up reports that it is connecting until the application closes, and holds a
+    /// process the whole time. A minute is long enough for a slow server and short enough to be
+    /// believed.
+    /// </remarks>
     public int ConnectTimeoutSeconds { get; set; } = 60;
 
     /// <summary>
@@ -117,6 +123,7 @@ public sealed class ConnectionSettings
     /// Delay before the first retry. Later attempts back off from this value.
     /// </summary>
     public int ReconnectDelaySeconds { get; set; } = 5;
+
 
     /// <summary>
     /// Reconnect the tunnels that were up when the application last closed.

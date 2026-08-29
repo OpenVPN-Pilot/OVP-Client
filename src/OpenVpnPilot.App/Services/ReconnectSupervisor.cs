@@ -96,6 +96,8 @@ public sealed class ReconnectSupervisor : IDisposable
             return false;
         }
 
+        // Authentication and an unsupported configuration are both refusals the next attempt would
+        // receive again, word for word. Retrying them produces nothing but another process.
         return status.State is VpnConnectionState.Disconnected or VpnConnectionState.Failed
             && status.Failure is VpnFailureKind.ConnectionLost or VpnFailureKind.Fatal;
     }
@@ -155,6 +157,9 @@ public sealed class ReconnectSupervisor : IDisposable
                 profileId,
                 configuration,
                 RouteProtectionFor(profileId),
+                preferences.ConnectTimeoutSeconds > 0
+                    ? TimeSpan.FromSeconds(preferences.ConnectTimeoutSeconds)
+                    : null,
                 lifetime.Token);
         }
         catch (Exception exception) when (exception is InvalidOperationException or IOException)

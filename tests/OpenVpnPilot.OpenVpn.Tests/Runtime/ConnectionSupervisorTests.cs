@@ -385,7 +385,9 @@ public sealed class ConnectionSupervisorTests
             supervisor,
             s => s.State == VpnConnectionState.Failed);
 
-        Assert.Equal(VpnFailureKind.Fatal, status.Failure);
+        // Unsupported rather than fatal, because the difference decides whether it is retried: the
+        // server would ask for the same thing again and the client would refuse it again.
+        Assert.Equal(VpnFailureKind.Unsupported, status.Failure);
         Assert.True(status.ServerRequestedCompression);
         Assert.Contains("compression", status.Message, StringComparison.OrdinalIgnoreCase);
     }

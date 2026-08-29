@@ -184,4 +184,14 @@ public enum VpnFailureKind
     /// OpenVPN reported an unrecoverable error, such as a configuration it cannot parse.
     /// </summary>
     Fatal,
+
+    /// <summary>
+    /// The server asked for something this client cannot do, such as a compression setting.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="Fatal"/> because it decides whether trying again makes sense. The
+    /// server will ask for the same thing on the next attempt and the client will refuse it again,
+    /// so retrying only produces one more process to clean up, several times a minute.
+    /// </remarks>
+    Unsupported,
 }

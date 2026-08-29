@@ -123,6 +123,7 @@ public sealed class ConnectionManager : IAsyncDisposable
         Guid profileId,
         string configuration,
         IReadOnlyList<string>? additionalOptions = null,
+        TimeSpan? connectTimeout = null,
         CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -183,7 +184,8 @@ public sealed class ConnectionManager : IAsyncDisposable
                     materialised.Path,
                     materialised.Directory,
                     portAllocator.Reserve(),
-                    additionalOptions ?? []),
+                    additionalOptions ?? [],
+                    ConnectTimeout: connectTimeout),
                 cancellationToken);
 
             if (status.State == VpnConnectionState.Failed)
@@ -271,8 +273,11 @@ public sealed class ConnectionManager : IAsyncDisposable
             {
                 await connection.DisposeAsync();
             }
-            catch (Exception exception) when (exception is IOException or InvalidOperationException)
+            catch (Exception exception)
             {
+                // Deliberately everything. This runs with nobody waiting for it, and the last thing
+                // it does is end the OpenVPN process; an exception escaping here is a tunnel that
+                // nothing is left to stop, which is worse than any exception it could be.
                 ConnectionManagerLog.DisconnectFailed(logger, profileId, exception);
             }
         });
