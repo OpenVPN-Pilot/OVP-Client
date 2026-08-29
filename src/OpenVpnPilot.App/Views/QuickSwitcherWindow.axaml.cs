@@ -48,7 +48,17 @@ public partial class QuickSwitcherWindow : Window
                 return;
 
             case Key.Enter:
-                ViewModel?.AcceptCommand.Execute(null);
+                // Return connects and leaves you where you were, which is the whole point of a
+                // palette. Control and return says you want to watch it happen.
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+                {
+                    ViewModel?.AcceptAndShowCommand.Execute(null);
+                }
+                else
+                {
+                    ViewModel?.AcceptCommand.Execute(null);
+                }
+
                 e.Handled = true;
                 return;
 

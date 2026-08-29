@@ -57,6 +57,8 @@
           window is small.
         -->
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+          <Button Content="{loc:Translate select.mode}" Classes="quiet"
+                  Command="{Binding ToggleSelectingCommand}" />
           <Button Content="{loc:Translate nav.history}" Classes="quiet"
                   Command="{Binding OpenHistoryCommand}" />
           <Button Content="{loc:Translate header.settings}" Classes="quiet"
@@ -80,7 +82,7 @@
             <StackPanel Spacing="6">
               <TextBlock Text="{loc:Translate nav.library}" Classes="overline" Margin="10,0,0,2" />
               <ListBox Classes="nav" ItemsSource="{Binding Filters}"
-                       SelectedItem="{Binding SelectedFilter}">
+                       SelectedItem="{Binding SelectedBuiltIn}">
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="vm:SidebarFilterViewModel">
                     <Grid ColumnDefinitions="*,Auto">
@@ -93,6 +95,13 @@
                   </DataTemplate>
                 </ListBox.ItemTemplate>
               </ListBox>
+            </StackPanel>
+
+            <StackPanel Spacing="6">
+              <Button Content="{loc:Translate select.connectShown}" Classes="quiet"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                      ToolTip.Tip="{loc:Translate select.connectShownHint}"
+                      Command="{Binding ConnectVisibleCommand}" />
             </StackPanel>
 
             <StackPanel Spacing="6" IsVisible="{Binding IsNewSelected}">
@@ -109,7 +118,7 @@
                 </Border>
               </StackPanel>
               <ListBox Classes="nav" ItemsSource="{Binding TagFilters}"
-                       SelectedItem="{Binding SelectedFilter}">
+                       SelectedItem="{Binding SelectedTag}">
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="vm:SidebarFilterViewModel">
                     <Grid ColumnDefinitions="*,Auto">
@@ -130,20 +139,24 @@
       </Border>
 
       <!-- Profile list -->
-      <Grid Grid.Column="1">
-        <ListBox Classes="profiles" ItemsSource="{Binding VisibleProfiles}"
+      <Grid Grid.Column="1" RowDefinitions="*,Auto">
+        <ListBox Grid.Row="0" Classes="profiles" ItemsSource="{Binding VisibleProfiles}"
                  SelectedItem="{Binding SelectedProfile}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ProfileItemViewModel">
               <Border Padding="14,12" CornerRadius="10" Background="Transparent">
-                <Grid ColumnDefinitions="Auto,*,Auto">
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto">
 
-                  <Border Grid.Column="0" Width="8" Height="8" CornerRadius="4"
+                  <CheckBox Grid.Column="0" Margin="0,0,6,0" VerticalAlignment="Center"
+                            IsVisible="{Binding IsSelecting}"
+                            IsChecked="{Binding IsSelected}" />
+
+                  <Border Grid.Column="1" Width="8" Height="8" CornerRadius="4"
                           Margin="0,0,14,0" VerticalAlignment="Center"
                           Background="{Binding Status.State, Converter={x:Static conv:AppConverters.StateBrush}}" />
 
-                  <StackPanel Grid.Column="1" Spacing="3">
+                  <StackPanel Grid.Column="2" Spacing="3">
                     <StackPanel Orientation="Horizontal" Spacing="7">
                       <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"
                                  Foreground="{DynamicResource TextPrimary}"
@@ -169,7 +182,7 @@
                     </StackPanel>
                   </StackPanel>
 
-                  <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
+                  <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8"
                               VerticalAlignment="Center">
                     <TextBlock Text="!" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"
                                Foreground="{DynamicResource StatePending}"
@@ -188,7 +201,7 @@
           </ListBox.ItemTemplate>
         </ListBox>
 
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
+        <StackPanel Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
                     MaxWidth="340" IsVisible="{Binding !VisibleProfiles.Count}">
           <TextBlock Text="{Binding EmptyStateTitle}" FontSize="14" FontWeight="SemiBold"
                      Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Center" />
@@ -198,6 +211,49 @@
                   HorizontalAlignment="Center" Margin="0,6,0,0"
                   Command="{Binding OpenImportCommand}" />
         </StackPanel>
+
+        <!--
+          What is ticked, and what can be done with it. Deleting asks twice, because it is the one
+          action here that cannot be undone and the one most likely to be aimed at twenty rows.
+        -->
+        <Border Grid.Row="1" Background="{DynamicResource SurfaceSidebar}"
+                BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
+                Padding="14,10" IsVisible="{Binding IsSelecting}">
+          <StackPanel Spacing="10">
+            <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+              <TextBlock Text="{Binding SelectionSummary}" Classes="muted"
+                         VerticalAlignment="Center" Margin="0,0,6,0" />
+              <Button Content="{loc:Translate select.all}" Classes="quiet"
+                      Command="{Binding TickAllShownCommand}" />
+              <Button Content="{loc:Translate select.none}" Classes="quiet"
+                      Command="{Binding TickNoneCommand}" />
+              <Button Content="{loc:Translate select.connect}" Classes="primary"
+                      IsEnabled="{Binding HasTicked}"
+                      Command="{Binding ConnectTickedCommand}" />
+              <Button Content="{loc:Translate select.disconnect}"
+                      IsEnabled="{Binding HasTicked}"
+                      Command="{Binding DisconnectTickedCommand}" />
+              <Button Content="{loc:Translate select.delete}" Classes="quiet"
+                      IsEnabled="{Binding HasTicked}"
+                      Command="{Binding AskToDeleteTickedCommand}" />
+            </WrapPanel>
+
+            <Border CornerRadius="7" Padding="12,10"
+                    Background="{DynamicResource StateFailedSoft}"
+                    IsVisible="{Binding IsConfirmingDelete}">
+              <StackPanel Spacing="9">
+                <TextBlock Text="{Binding DeleteConfirmation}" TextWrapping="Wrap" FontSize="12"
+                           Foreground="{DynamicResource StateFailed}" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Content="{loc:Translate select.deleteConfirm}"
+                          Command="{Binding DeleteTickedCommand}" />
+                  <Button Content="{loc:Translate common.cancel}" Classes="quiet"
+                          Command="{Binding CancelDeleteCommand}" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </Border>
       </Grid>
 
       <!-- Detail -->

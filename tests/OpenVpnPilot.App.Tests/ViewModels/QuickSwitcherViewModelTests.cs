@@ -54,6 +54,42 @@ public sealed class QuickSwitcherViewModelTests
         Assert.Single(switcher.Results);
     }
 
+    /// <summary>
+    /// A search for something that is not there has to come back empty.
+    /// </summary>
+    /// <remarks>
+    /// Every letter of "lab-11" can be found somewhere in "lab-10-cert 127.0.0.1:1210 udp", so
+    /// looking for a subsequence across the endpoint and the tags matched the entire set. A palette
+    /// that answers a miss with everything is worse than one that answers nothing.
+    /// </remarks>
+    [Theory]
+    [InlineData("lab-11")]
+    [InlineData("lab 11")]
+    [InlineData("11")]
+    public void Query_ForAProfileThatDoesNotExist_MatchesNothing(string query)
+    {
+        QuickSwitcherViewModel switcher = Build(
+            Profile("lab-10-cert", host: "127.0.0.1", port: 1210),
+            Profile("lab-01-cert", host: "127.0.0.1", port: 1201));
+
+        switcher.Query = query;
+
+        Assert.Empty(switcher.Results);
+    }
+
+    [Fact]
+    public void Query_ForOneThatDoesExist_StillFindsIt()
+    {
+        QuickSwitcherViewModel switcher = Build(
+            Profile("lab-10-cert", host: "127.0.0.1", port: 1210),
+            Profile("lab-01-cert", host: "127.0.0.1", port: 1201));
+
+        switcher.Query = "lab-10";
+
+        QuickSwitcherEntry match = Assert.Single(switcher.Results);
+        Assert.Equal("lab-10-cert", match.Name);
+    }
+
     [Fact]
     public void Query_ThatMatchesNothing_LeavesNoSelection()
     {
@@ -89,17 +125,35 @@ public sealed class QuickSwitcherViewModelTests
     }
 
     [Fact]
-    public void Accept_RaisesTheSelectedEntry()
+    public void Accept_RaisesTheSelectedEntryAndLeavesTheWindowAlone()
     {
         QuickSwitcherViewModel switcher = Build(Profile("alpha"));
 
-        QuickSwitcherEntry? accepted = null;
-        switcher.Accepted += (_, entry) => accepted = entry;
+        QuickSwitcherChoice? accepted = null;
+        switcher.Accepted += (_, choice) => accepted = choice;
 
         switcher.AcceptCommand.Execute(null);
 
         Assert.NotNull(accepted);
-        Assert.Equal("alpha", accepted.Name);
+        Assert.Equal("alpha", accepted.Entry.Name);
+        Assert.False(accepted.ShowWindow);
+    }
+
+    /// <summary>
+    /// Connecting without leaving what you were doing is the point; watching it is the exception.
+    /// </summary>
+    [Fact]
+    public void AcceptAndShow_AsksForTheWindowAsWell()
+    {
+        QuickSwitcherViewModel switcher = Build(Profile("alpha"));
+
+        QuickSwitcherChoice? accepted = null;
+        switcher.Accepted += (_, choice) => accepted = choice;
+
+        switcher.AcceptAndShowCommand.Execute(null);
+
+        Assert.NotNull(accepted);
+        Assert.True(accepted.ShowWindow);
     }
 
     [Fact]
@@ -126,6 +180,7 @@ public sealed class QuickSwitcherViewModelTests
     private static Profile Profile(
         string name,
         string? host = null,
+        int? port = null,
         int? slot = null,
         DateTimeOffset? lastConnected = null) => new()
         {
@@ -133,7 +188,7 @@ public sealed class QuickSwitcherViewModelTests
             Configuration = "client",
             ContentHash = new string('a', 64),
             RemoteHost = host,
-            RemotePort = host is null ? null : 1194,
+            RemotePort = host is null ? null : port ?? 1194,
             Protocol = host is null ? null : "udp",
             FavouriteSlot = slot,
             IsFavourite = slot is not null,

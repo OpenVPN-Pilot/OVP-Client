@@ -98,9 +98,66 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     public partial string SearchTerm { get; set; } = string.Empty;
 
+    /// <summary>
+    /// True while every row offers a checkbox and the actions apply to what is ticked.
+    /// </summary>
+    /// <remarks>
+    /// Off by default. Connecting twenty profiles at once is worth having and worth asking for; a
+    /// list that is always in a mode where a click might mean something else is not.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectionSummary))]
+    public partial bool IsSelecting { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectionSummary))]
+    [NotifyPropertyChangedFor(nameof(HasTicked))]
+    public partial int TickedCount { get; set; }
+
+    /// <summary>
+    /// Shown after asking to delete, so that removing twenty profiles takes two decisions.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsConfirmingDelete { get; set; }
+
+    /// <summary>
+    /// True when at least one row is ticked, which is what the selection actions need.
+    /// </summary>
+    public bool HasTicked => TickedCount > 0;
+
+    public string SelectionSummary => localizer.Translate("select.summary", TickedCount);
+
+    public string DeleteConfirmation => localizer.Translate("select.confirmDelete", TickedCount);
+
+    /// <summary>
+    /// The filter the list is showing.
+    /// </summary>
+    /// <remarks>
+    /// The sidebar is two lists, the built in entries and the tags, and only one selection exists
+    /// between them. Binding both lists to this directly looked right and was not: choosing a tag
+    /// left the built in list holding a selected item it did not contain, and it answered by writing
+    /// its own selection back. Both entries then looked chosen and the filter was neither.
+    /// </remarks>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsNewSelected))]
     public partial SidebarFilterViewModel? SelectedFilter { get; set; }
+
+    /// <summary>
+    /// The selection of the built in list. Null while a tag is chosen.
+    /// </summary>
+    [ObservableProperty]
+    public partial SidebarFilterViewModel? SelectedBuiltIn { get; set; }
+
+    /// <summary>
+    /// The selection of the tag list. Null while a built in entry is chosen.
+    /// </summary>
+    [ObservableProperty]
+    public partial SidebarFilterViewModel? SelectedTag { get; set; }
+
+    /// <summary>
+    /// Set while one list is being cleared because the other was chosen from.
+    /// </summary>
+    private bool movingSelection;
 
     /// <summary>
     /// True while the new entry is selected, which is when marking everything seen makes sense.
@@ -172,6 +229,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             IReadOnlyDictionary<Guid, IReadOnlyList<string>> profileTags =
                 await store.GetProfileTagsAsync(cancellationToken);
 
+            foreach (ProfileItemViewModel existing in allProfiles)
+            {
+                existing.PropertyChanged -= OnProfilePropertyChanged;
+            }
+
             allProfiles.Clear();
             byId.Clear();
 
@@ -182,7 +244,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
                 ProfileItemViewModel item = new(profile, localizer, assigned)
                 {
                     Status = connections.GetStatus(profile.Id),
+                    IsSelecting = IsSelecting,
                 };
+
+                item.PropertyChanged += OnProfilePropertyChanged;
 
                 allProfiles.Add(item);
                 byId[profile.Id] = item;
@@ -194,7 +259,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             RebuildSidebar(tags);
 
-            SelectedFilter ??= Filters[0];
+            if (SelectedFilter is null)
+            {
+                SelectedBuiltIn = Filters[0];
+            }
             UpdateFilterCounts();
             ApplyFilter();
 
@@ -205,6 +273,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(EmptyStateDetail));
 
             ActiveCount = connections.ActiveCount;
+            RecountTicked();
             uptimeTimer.IsEnabled = true;
         }
         finally
@@ -272,7 +341,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (byId.TryGetValue(profileId, out ProfileItemViewModel? profile))
         {
-            SelectedFilter = Filters[0];
+            SelectedBuiltIn = Filters[0];
             SearchTerm = string.Empty;
             SelectedProfile = VisibleProfiles.FirstOrDefault(item => item.Id == profileId) ?? profile;
         }
@@ -280,7 +349,162 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     partial void OnSearchTermChanged(string value) => ApplyFilter();
 
+    partial void OnIsSelectingChanged(bool value)
+    {
+        IsConfirmingDelete = false;
+
+        foreach (ProfileItemViewModel profile in allProfiles)
+        {
+            profile.IsSelecting = value;
+
+            if (!value)
+            {
+                profile.IsSelected = false;
+            }
+        }
+
+        RecountTicked();
+    }
+
+    private void RecountTicked()
+    {
+        TickedCount = allProfiles.Count(profile => profile.IsSelected);
+
+        if (TickedCount == 0)
+        {
+            IsConfirmingDelete = false;
+        }
+    }
+
+    /// <summary>
+    /// The ticked profiles, or the one selected when nothing is ticked.
+    /// </summary>
+    private List<ProfileItemViewModel> Chosen =>
+        IsSelecting && TickedCount > 0
+            ? allProfiles.Where(profile => profile.IsSelected).ToList()
+            : SelectedProfile is { } single ? [single] : [];
+
+    [RelayCommand]
+    private void ToggleSelecting() => IsSelecting = !IsSelecting;
+
+    [RelayCommand]
+    private void TickAllShown()
+    {
+        foreach (ProfileItemViewModel profile in VisibleProfiles)
+        {
+            profile.IsSelected = true;
+        }
+
+        RecountTicked();
+    }
+
+    [RelayCommand]
+    private void TickNone()
+    {
+        foreach (ProfileItemViewModel profile in allProfiles)
+        {
+            profile.IsSelected = false;
+        }
+
+        RecountTicked();
+    }
+
+    /// <summary>
+    /// Connects everything that is ticked, one after another.
+    /// </summary>
+    /// <remarks>
+    /// In order rather than all at once. Each tunnel is a process, an adapter and a port, and
+    /// twenty starting in the same instant is how a machine runs out of all three.
+    /// </remarks>
+    [RelayCommand]
+    private async Task ConnectTickedAsync()
+    {
+        foreach (ProfileItemViewModel profile in Chosen.Where(profile => profile.IsIdle))
+        {
+            await ConnectAsync(profile);
+        }
+    }
+
+    [RelayCommand]
+    private async Task DisconnectTickedAsync()
+    {
+        foreach (ProfileItemViewModel profile in Chosen.Where(profile => !profile.IsIdle))
+        {
+            await DisconnectAsync(profile);
+        }
+    }
+
+    [RelayCommand]
+    private void AskToDeleteTicked() => IsConfirmingDelete = TickedCount > 0;
+
+    [RelayCommand]
+    private void CancelDelete() => IsConfirmingDelete = false;
+
+    /// <summary>
+    /// Removes the ticked profiles from the store, stopping any that are running first.
+    /// </summary>
+    [RelayCommand]
+    private async Task DeleteTickedAsync()
+    {
+        List<ProfileItemViewModel> chosen = Chosen;
+        IsConfirmingDelete = false;
+
+        foreach (ProfileItemViewModel profile in chosen)
+        {
+            if (!profile.IsIdle)
+            {
+                await DisconnectAsync(profile);
+            }
+
+            await store.DeleteProfileAsync(profile.Id);
+        }
+
+        await LoadAsync();
+
+        StatusMessage = localizer.Translate("select.deleted", chosen.Count);
+    }
+
     partial void OnSelectedFilterChanged(SidebarFilterViewModel? value) => ApplyFilter();
+
+    partial void OnSelectedBuiltInChanged(SidebarFilterViewModel? value) => Choose(value, clearTag: true);
+
+    partial void OnSelectedTagChanged(SidebarFilterViewModel? value) => Choose(value, clearTag: false);
+
+    /// <summary>
+    /// Takes the choice from whichever list it was made in and clears the other.
+    /// </summary>
+    /// <remarks>
+    /// A list handed a selected item it does not contain clears its own selection and reports that,
+    /// which arrives here as null. That is the other list letting go, not the user choosing nothing,
+    /// so it must not become the filter.
+    /// </remarks>
+    private void Choose(SidebarFilterViewModel? value, bool clearTag)
+    {
+        if (movingSelection || value is null)
+        {
+            return;
+        }
+
+        movingSelection = true;
+
+        try
+        {
+            if (clearTag)
+            {
+                SelectedTag = null;
+            }
+            else
+            {
+                SelectedBuiltIn = null;
+            }
+        }
+        finally
+        {
+            movingSelection = false;
+        }
+
+        SelectedFilter = value;
+    }
 
     private void RebuildSidebar(IReadOnlyList<TagSummary> tags)
     {
@@ -295,8 +519,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         // A rebuild replaces the instances, so a selection has to be re-established by identity.
         if (selectedTag is not null)
         {
-            SelectedFilter = TagFilters.FirstOrDefault(filter => filter.TagName == selectedTag)
-                ?? Filters[0];
+            SidebarFilterViewModel? again =
+                TagFilters.FirstOrDefault(filter => filter.TagName == selectedTag);
+
+            if (again is not null)
+            {
+                SelectedTag = again;
+            }
+            else
+            {
+                SelectedBuiltIn = Filters[0];
+            }
         }
 
         OnPropertyChanged(nameof(HasTags));
@@ -385,7 +618,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             VpnConnectionStatus status = await connections.ConnectAsync(
                 profile.Id,
                 configuration,
-                RouteProtectionFor(profile));
+                RouteProtectionFor(profile),
+                ConnectTimeout);
 
             if (status.State == VpnConnectionState.Failed)
             {
@@ -415,6 +649,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// traffic needs the pushed default route while one that reaches a single network must not take
     /// the host's routing with it.
     /// </remarks>
+    /// <summary>
+    /// How long a tunnel is given to come up, or null when it may take as long as it likes.
+    /// </summary>
+    private TimeSpan? ConnectTimeout => settings.Current.Connections.ConnectTimeoutSeconds > 0
+        ? TimeSpan.FromSeconds(settings.Current.Connections.ConnectTimeoutSeconds)
+        : null;
+
     private string[] RouteProtectionFor(ProfileItemViewModel profile) =>
         profile.ProtectRoutes ?? settings.Current.Connections.ProtectRoutes
             ? RouteProtection
@@ -522,7 +763,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        SelectedFilter = Filters[0];
+        SelectedBuiltIn = Filters[0];
         await LoadAsync();
 
         StatusMessage = localizer.Translate("status.discoveriesCleared", cleared);
@@ -670,6 +911,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         foreach (ProfileItemViewModel profile in allProfiles)
         {
             profile.RefreshUptime();
+        }
+    }
+
+    private void OnProfilePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ProfileItemViewModel.IsSelected))
+        {
+            RecountTicked();
         }
     }
 

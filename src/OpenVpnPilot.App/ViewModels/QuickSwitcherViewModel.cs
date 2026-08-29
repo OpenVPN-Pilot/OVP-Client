@@ -12,6 +12,11 @@ namespace OpenVpnPilot.App.ViewModels;
 /// Matching is a subsequence match rather than a substring one, so "jpt" finds "japan-tcp" the way a
 /// command palette does. Results are ranked so that the closest match is already selected when the
 /// user stops typing, because the whole point is that return connects without another decision.
+///
+/// A subsequence is only ever looked for in the name. Spread across the endpoint and the tags as
+/// well it matches almost anything: every letter of "lab-11" is found somewhere in
+/// "lab-10-cert 127.0.0.1:1210 udp", so a search for a profile that does not exist returned the
+/// whole set. A palette that answers a miss with everything is worse than one that answers nothing.
 /// </remarks>
 public sealed partial class QuickSwitcherViewModel : ViewModelBase
 {
@@ -25,9 +30,9 @@ public sealed partial class QuickSwitcherViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Raised when the user picked an entry, carrying the profile to act on.
+    /// Raised when the user picked an entry, carrying the profile and what to do about the window.
     /// </summary>
-    public event EventHandler<QuickSwitcherEntry>? Accepted;
+    public event EventHandler<QuickSwitcherChoice>? Accepted;
 
     /// <summary>
     /// Raised when the palette should close without doing anything.
@@ -91,12 +96,25 @@ public sealed partial class QuickSwitcherViewModel : ViewModelBase
         SelectedResult = Results[index];
     }
 
+    /// <summary>
+    /// Connects the selected profile and leaves the window where it was.
+    /// </summary>
+    /// <remarks>
+    /// The palette exists to connect without stopping what you were doing, so the ordinary case
+    /// brings nothing to the front. Someone who wants to watch the connection asks for that, and
+    /// gets the window as well.
+    /// </remarks>
     [RelayCommand]
-    private void Accept()
+    private void Accept() => Choose(showWindow: false);
+
+    [RelayCommand]
+    private void AcceptAndShow() => Choose(showWindow: true);
+
+    private void Choose(bool showWindow)
     {
         if (SelectedResult is { } entry)
         {
-            Accepted?.Invoke(this, entry);
+            Accepted?.Invoke(this, new QuickSwitcherChoice(entry, showWindow));
         }
     }
 
@@ -165,13 +183,7 @@ public sealed partial class QuickSwitcherViewModel : ViewModelBase
         }
 
         int subsequence = SubsequenceScore(name, term);
-        if (subsequence > int.MinValue)
-        {
-            return 200 + subsequence + bonus;
-        }
-
-        subsequence = SubsequenceScore(haystack, term);
-        return subsequence > int.MinValue ? subsequence + bonus : int.MinValue;
+        return subsequence > int.MinValue ? 200 + subsequence + bonus : int.MinValue;
     }
 
     /// <summary>
@@ -220,6 +232,16 @@ public sealed partial class QuickSwitcherViewModel : ViewModelBase
         OnPropertyChanged(nameof(EmptyText));
     }
 }
+
+/// <summary>
+/// What the user asked the palette to do.
+/// </summary>
+/// <param name="Entry">The profile that was picked.</param>
+/// <param name="ShowWindow">
+/// True when the main window should come forward as well, which is what someone asks for when they
+/// want to watch a connection rather than only start one.
+/// </param>
+public sealed record QuickSwitcherChoice(QuickSwitcherEntry Entry, bool ShowWindow);
 
 /// <summary>
 /// One row of the palette.

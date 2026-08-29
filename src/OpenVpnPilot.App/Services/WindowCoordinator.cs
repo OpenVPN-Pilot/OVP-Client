@@ -177,19 +177,22 @@ public sealed class WindowCoordinator
 
         QuickSwitcherWindow window = new() { DataContext = model };
 
-        void OnAccepted(object? sender, QuickSwitcherEntry entry)
+        void OnAccepted(object? sender, QuickSwitcherChoice choice)
         {
             window.Close();
 
-            if (entry.IsConnected)
+            // The palette is a switcher, so choosing what is already up takes you to it whether or
+            // not you asked for the window.
+            if (choice.Entry.IsConnected || choice.ShowWindow)
             {
-                // The palette is a switcher, so choosing what is already up takes you to it.
                 Reveal(mainWindow);
-                viewModel.SelectProfile(entry.ProfileId);
-                return;
+                viewModel.SelectProfile(choice.Entry.ProfileId);
             }
 
-            _ = viewModel.ConnectByIdAsync(entry.ProfileId);
+            if (!choice.Entry.IsConnected)
+            {
+                _ = viewModel.ConnectByIdAsync(choice.Entry.ProfileId);
+            }
         }
 
         void OnDismissed(object? sender, EventArgs e) => window.Close();

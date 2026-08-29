@@ -132,7 +132,7 @@
     "switcher": {
       "placeholder": "Tippen, um Profile zu suchen",
       "noMatch": "Kein Profil passt",
-      "hint": "Eingabe verbindet   Pfeiltasten bewegen   Escape schließt"
+      "hint": "Eingabe verbindet   Strg+Eingabe verbindet und zeigt das Fenster   Pfeiltasten bewegen   Escape schließt"
     },
     "notify": {
       "connectingTitle": "Verbindung wird aufgebaut",
@@ -147,6 +147,20 @@
       "reconnectingMessage": "{0} verbindet neu. {1}",
       "failedTitle": "Verbindung fehlgeschlagen",
       "failedMessage": "{0}: {1}"
+    },
+    "select": {
+      "mode": "Auswählen",
+      "summary": "{0} ausgewählt",
+      "all": "Alle sichtbaren wählen",
+      "none": "Auswahl aufheben",
+      "connect": "Ausgewählte verbinden",
+      "disconnect": "Ausgewählte trennen",
+      "delete": "Ausgewählte löschen",
+      "deleteConfirm": "Löschen",
+      "confirmDelete": "{0} Profil(e) endgültig löschen? Der Verlauf geht mit. Was verbunden ist, wird vorher getrennt.",
+      "deleted": "{0} Profil(e) gelöscht.",
+      "connectShown": "Alles Angezeigte verbinden",
+      "connectShownHint": "Verbindet nacheinander jedes Profil, das der aktuelle Filter und die Suche zeigen. Erst ein Tag wählen ist der Weg, einen ganzen Satz auf einmal aufzubauen."
     },
     "settings": {
       "tabGeneral": "Allgemein",

@@ -132,7 +132,7 @@
     "switcher": {
       "placeholder": "Type to search profiles",
       "noMatch": "No profile matches",
-      "hint": "Enter connects   Arrow keys move   Escape closes"
+      "hint": "Enter connects   Ctrl+Enter connects and shows the window   Arrow keys move   Escape closes"
     },
     "notify": {
       "connectingTitle": "Connecting",
@@ -147,6 +147,20 @@
       "reconnectingMessage": "{0} is reconnecting. {1}",
       "failedTitle": "Connection failed",
       "failedMessage": "{0}: {1}"
+    },
+    "select": {
+      "mode": "Select",
+      "summary": "{0} selected",
+      "all": "Select all shown",
+      "none": "Clear",
+      "connect": "Connect selected",
+      "disconnect": "Disconnect selected",
+      "delete": "Delete selected",
+      "deleteConfirm": "Delete them",
+      "confirmDelete": "Delete {0} profile(s) permanently? Their history goes with them. Anything connected is stopped first.",
+      "deleted": "{0} profile(s) deleted.",
+      "connectShown": "Connect everything shown",
+      "connectShownHint": "Connects every profile the current filter and search show, one after another. Choosing a tag first is how a whole set is brought up at once."
     },
     "settings": {
       "tabGeneral": "General",

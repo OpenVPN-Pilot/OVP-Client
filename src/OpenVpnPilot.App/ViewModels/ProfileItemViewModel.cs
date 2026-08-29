@@ -84,6 +84,22 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
 
     internal string SearchText { get; }
 
+    /// <summary>
+    /// True while the list is offering a checkbox on every row.
+    /// </summary>
+    /// <remarks>
+    /// Carried by the row rather than read from the list it sits in. A template that reaches up to
+    /// its ancestor's data context for one boolean is a binding nobody can follow later.
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool IsSelecting { get; set; }
+
+    /// <summary>
+    /// True when this row is ticked. Meaningless while <see cref="IsSelecting"/> is false.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsSelected { get; set; }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FavouriteActionLabel))]
     public partial bool IsFavourite { get; set; }
