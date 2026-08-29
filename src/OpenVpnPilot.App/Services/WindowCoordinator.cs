@@ -149,7 +149,7 @@ public sealed class WindowCoordinator
         open[screen] = window;
         window.Closed += (_, _) => open.Remove(screen);
 
-        if (screen == AppScreen.QuickSwitcher || !mainWindow.IsVisible)
+        if (screen is AppScreen.QuickSwitcher or AppScreen.QuickDisconnect || !mainWindow.IsVisible)
         {
             window.Show();
         }
@@ -161,7 +161,8 @@ public sealed class WindowCoordinator
 
     private Window? Create(AppScreen screen) => screen switch
     {
-        AppScreen.QuickSwitcher => CreateQuickSwitcher(),
+        AppScreen.QuickSwitcher => CreateQuickSwitcher(QuickSwitcherMode.Connect),
+        AppScreen.QuickDisconnect => CreateQuickSwitcher(QuickSwitcherMode.Disconnect),
         AppScreen.Settings => CreateSettings(),
         AppScreen.History => CreateHistory(),
         AppScreen.Import => CreateImport(),
@@ -170,10 +171,10 @@ public sealed class WindowCoordinator
         _ => null,
     };
 
-    private QuickSwitcherWindow CreateQuickSwitcher()
+    private QuickSwitcherWindow CreateQuickSwitcher(QuickSwitcherMode mode)
     {
         QuickSwitcherViewModel model = services.GetRequiredService<QuickSwitcherViewModel>();
-        model.Reset(viewModel.AllProfiles);
+        model.Reset(viewModel.AllProfiles, mode);
 
         QuickSwitcherWindow window = new() { DataContext = model };
 
@@ -181,18 +182,28 @@ public sealed class WindowCoordinator
         {
             window.Close();
 
-            // The palette is a switcher, so choosing what is already up takes you to it whether or
-            // not you asked for the window.
-            if (choice.Entry.IsConnected || choice.ShowWindow)
+            if (choice.Mode == QuickSwitcherMode.Disconnect)
             {
-                Reveal(mainWindow);
-                viewModel.SelectProfile(choice.Entry.ProfileId);
+                if (choice.ShowWindow)
+                {
+                    Reveal(mainWindow);
+                    viewModel.SelectProfile(choice.Entries[0].ProfileId);
+                }
+
+                _ = viewModel.DisconnectByIdAsync(choice.Entries.Select(entry => entry.ProfileId).ToList());
+                return;
             }
 
-            if (!choice.Entry.IsConnected)
+            // The palette is a switcher, so choosing what is already up takes you to it whether or
+            // not you asked for the window.
+            if (choice.Entries.Any(entry => entry.IsConnected) || choice.ShowWindow)
             {
-                _ = viewModel.ConnectByIdAsync(choice.Entry.ProfileId);
+                Reveal(mainWindow);
+                viewModel.SelectProfile(choice.Entries[0].ProfileId);
             }
+
+            _ = viewModel.ConnectByIdAsync(
+                choice.Entries.Where(entry => !entry.IsConnected).Select(entry => entry.ProfileId).ToList());
         }
 
         void OnDismissed(object? sender, EventArgs e) => window.Close();

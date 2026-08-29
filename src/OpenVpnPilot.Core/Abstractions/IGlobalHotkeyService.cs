@@ -174,6 +174,7 @@ public enum HotkeyModifiers
 public static class HotkeyActions
 {
     public const string ToggleQuickSwitcher = "ToggleQuickSwitcher";
+    public const string ToggleQuickDisconnect = "ToggleQuickDisconnect";
     public const string ShowMainWindow = "ShowMainWindow";
     public const string ConnectLastUsed = "ConnectLastUsed";
     public const string ReconnectActive = "ReconnectActive";
@@ -218,6 +219,7 @@ public static class HotkeyActions
     public static IReadOnlyList<string> All { get; } =
     [
         ToggleQuickSwitcher,
+        ToggleQuickDisconnect,
         ShowMainWindow,
         ConnectLastUsed,
         ReconnectActive,
@@ -241,6 +243,7 @@ public static class HotkeyActions
     public static IReadOnlyDictionary<string, string> Defaults { get; } = new Dictionary<string, string>
     {
         [ToggleQuickSwitcher] = "Control+Alt+V",
+        [ToggleQuickDisconnect] = "Control+Alt+X",
         [DisconnectAll] = "Control+Alt+D",
     };
 }

@@ -132,6 +132,9 @@
     "switcher": {
       "placeholder": "Type to search profiles",
       "noMatch": "No profile matches",
+      "disconnectPlaceholder": "Type to search what is connected",
+      "nothingConnected": "Nothing is connected",
+      "disconnectHint": "Space ticks   Enter disconnects   Ctrl+Enter also shows the window   Escape closes",
       "hint": "Enter connects   Ctrl+Enter connects and shows the window   Arrow keys move   Escape closes"
     },
     "notify": {
@@ -231,6 +234,7 @@
       "unbound": "Not set",
       "conflict": "Another shortcut already uses this combination.",
       "needsModifier": "A system wide shortcut needs Control, Alt, Shift or Windows.",
+      "ToggleQuickDisconnect": "Open the disconnect palette",
       "ToggleQuickSwitcher": "Open the quick switcher",
       "ShowMainWindow": "Show the main window",
       "ConnectLastUsed": "Connect the last used profile",

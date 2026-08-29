@@ -59,15 +59,6 @@ public sealed class GeneralSettings
     /// </summary>
     public bool CloseToTray { get; set; } = true;
 
-    /// <summary>
-    /// Set once the shipped shortcut defaults have been written.
-    /// </summary>
-    /// <remarks>
-    /// Without this the defaults would return on every start, and a shortcut the user cleared on
-    /// purpose would come back with it.
-    /// </remarks>
-    public bool HotkeyDefaultsApplied { get; set; }
-
     public GeneralSettings Clone() => (GeneralSettings)MemberwiseClone();
 }
 

@@ -35,13 +35,17 @@
                ScrollViewer.HorizontalScrollBarVisibility="Disabled">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:QuickSwitcherEntry">
-            <Grid ColumnDefinitions="Auto,*,Auto">
-              <Border Grid.Column="0" Classes="slot" Margin="0,0,10,0"
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+              <CheckBox Grid.Column="0" Margin="0,0,6,0" VerticalAlignment="Center"
+                        IsChecked="{Binding IsTicked}"
+                        IsVisible="{Binding $parent[ListBox].((vm:QuickSwitcherViewModel)DataContext).IsDisconnecting}" />
+
+              <Border Grid.Column="1" Classes="slot" Margin="0,0,10,0"
                       IsVisible="{Binding HasSlot}">
                 <TextBlock Text="{Binding SlotDisplay}" />
               </Border>
 
-              <StackPanel Grid.Column="1" Spacing="2">
+              <StackPanel Grid.Column="2" Spacing="2">
                 <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"
                            Foreground="{DynamicResource TextPrimary}"
                            TextTrimming="CharacterEllipsis" />
@@ -53,7 +57,7 @@
                 </StackPanel>
               </StackPanel>
 
-              <Border Grid.Column="2" Classes="pill"
+              <Border Grid.Column="3" Classes="pill"
                       Background="{DynamicResource StateConnectedSoft}"
                       IsVisible="{Binding IsConnected}">
                 <TextBlock Text="{loc:Translate state.connected}"
@@ -70,7 +74,7 @@
 
       <Border Grid.Row="2" Padding="14,8"
               BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0">
-        <TextBlock Text="{loc:Translate switcher.hint}" Classes="muted" FontSize="11" />
+        <TextBlock Text="{Binding Hint}" Classes="muted" FontSize="11" />
       </Border>
 
     </Grid>

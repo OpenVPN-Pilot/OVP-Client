@@ -17,7 +17,7 @@
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
   <Package Name="OpenVpnPilot"
-           Manufacturer="OpenVpnPilot"
+           Manufacturer="Schecher_1"
            Version="$(var.ProductVersion)"
            UpgradeCode="8f1c4a52-6d2e-4a1b-9a3f-2c5d7e8b4016"
            Scope="perMachine"

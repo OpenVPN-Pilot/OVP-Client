@@ -62,6 +62,13 @@ public partial class QuickSwitcherWindow : Window
                 e.Handled = true;
                 return;
 
+            case Key.Space when ViewModel?.IsDisconnecting == true:
+                // Only where choosing several is the point. In the connect palette a space belongs
+                // to whatever is being typed.
+                ViewModel.ToggleTick();
+                e.Handled = true;
+                return;
+
             case Key.Down:
                 ViewModel?.MoveSelection(1);
                 e.Handled = true;

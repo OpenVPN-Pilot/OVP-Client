@@ -301,6 +301,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
                 ScreenRequested?.Invoke(this, AppScreen.QuickSwitcher);
                 break;
 
+            case HotkeyActions.ToggleQuickDisconnect:
+                ScreenRequested?.Invoke(this, AppScreen.QuickDisconnect);
+                break;
+
             case HotkeyActions.ShowMainWindow:
                 ScreenRequested?.Invoke(this, AppScreen.MainWindow);
                 break;
@@ -334,6 +338,35 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (byId.TryGetValue(profileId, out ProfileItemViewModel? profile))
         {
             await ConnectAsync(profile);
+        }
+    }
+
+    /// <summary>
+    /// Connects several profiles by identifier, one after another.
+    /// </summary>
+    public async Task ConnectByIdAsync(IEnumerable<Guid> profileIds)
+    {
+        ArgumentNullException.ThrowIfNull(profileIds);
+
+        foreach (Guid profileId in profileIds)
+        {
+            await ConnectByIdAsync(profileId);
+        }
+    }
+
+    /// <summary>
+    /// Stops several profiles by identifier, which is what the disconnect palette asks for.
+    /// </summary>
+    public async Task DisconnectByIdAsync(IEnumerable<Guid> profileIds)
+    {
+        ArgumentNullException.ThrowIfNull(profileIds);
+
+        foreach (Guid profileId in profileIds)
+        {
+            if (byId.TryGetValue(profileId, out ProfileItemViewModel? profile))
+            {
+                await DisconnectAsync(profile);
+            }
         }
     }
 
@@ -1005,6 +1038,12 @@ public enum AppScreen
 {
     MainWindow,
     QuickSwitcher,
+
+    /// <summary>
+    /// The same palette, listing only what is running, for stopping it.
+    /// </summary>
+    QuickDisconnect,
+
     Settings,
     History,
     Import,

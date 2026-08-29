@@ -132,6 +132,9 @@
     "switcher": {
       "placeholder": "Tippen, um Profile zu suchen",
       "noMatch": "Kein Profil passt",
+      "disconnectPlaceholder": "Verbundene durchsuchen",
+      "nothingConnected": "Nichts ist verbunden",
+      "disconnectHint": "Leertaste wählt   Eingabe trennt   Strg+Eingabe zeigt zusätzlich das Fenster   Escape schließt",
       "hint": "Eingabe verbindet   Strg+Eingabe verbindet und zeigt das Fenster   Pfeiltasten bewegen   Escape schließt"
     },
     "notify": {
@@ -231,6 +234,7 @@
       "unbound": "Nicht gesetzt",
       "conflict": "Ein anderes Tastenkürzel verwendet diese Kombination bereits.",
       "needsModifier": "Ein systemweites Tastenkürzel braucht Strg, Alt, Umschalt oder Windows.",
+      "ToggleQuickDisconnect": "Trennauswahl öffnen",
       "ToggleQuickSwitcher": "Schnellauswahl öffnen",
       "ShowMainWindow": "Hauptfenster anzeigen",
       "ConnectLastUsed": "Zuletzt verwendetes Profil verbinden",

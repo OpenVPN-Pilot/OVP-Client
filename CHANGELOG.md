@@ -10,6 +10,24 @@ version heading when one is tagged.
 
 ## [Unreleased]
 
+### Added
+
+- The quick switcher stops tunnels as well. One shortcut lists only what is running, space ticks
+  several and return disconnects them, which is the same act as starting one done to a shorter list.
+- The README says what reaches OpenVPN: the fixed options every connection carries, the ones added
+  only when they were asked for, and how to watch a server take over the routing on purpose.
+
+### Changed
+
+- The author and copyright are recorded in the built executable, the package and the installer.
+
+### Fixed
+
+- A shortcut added in a later version never reached an installation that already existed. The
+  default bindings were applied once and a flag remembered it, so the machines using the application
+  longest were the ones a new shortcut was never bound on. They are applied every start now, which
+  adds only what has no binding at all and leaves everything else alone.
+
 ## [1.0.0] - 2026-08-29
 
 The first version worth installing. An installer, a command line other software can drive, and ten

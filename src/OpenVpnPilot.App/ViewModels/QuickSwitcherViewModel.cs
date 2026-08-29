@@ -47,22 +47,54 @@ public sealed partial class QuickSwitcherViewModel : ViewModelBase
     [ObservableProperty]
     public partial QuickSwitcherEntry? SelectedResult { get; set; }
 
-    public string Placeholder => localizer["switcher.placeholder"];
+    /// <summary>
+    /// Whether the palette is picking something to connect or something to stop.
+    /// </summary>
+    /// <remarks>
+    /// One surface, two jobs. Stopping a tunnel is the same act as starting one, done to a shorter
+    /// list, and a second window with its own search box and its own key handling would be the same
+    /// code twice with two places to get it wrong.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Placeholder))]
+    [NotifyPropertyChangedFor(nameof(EmptyText))]
+    [NotifyPropertyChangedFor(nameof(Hint))]
+    [NotifyPropertyChangedFor(nameof(IsDisconnecting))]
+    public partial QuickSwitcherMode Mode { get; set; } = QuickSwitcherMode.Connect;
 
-    public string EmptyText => localizer["switcher.noMatch"];
+    public bool IsDisconnecting => Mode == QuickSwitcherMode.Disconnect;
+
+    public string Placeholder => localizer[
+        IsDisconnecting ? "switcher.disconnectPlaceholder" : "switcher.placeholder"];
+
+    public string EmptyText => localizer[
+        IsDisconnecting ? "switcher.nothingConnected" : "switcher.noMatch"];
+
+    public string Hint => localizer[IsDisconnecting ? "switcher.disconnectHint" : "switcher.hint"];
+
+    /// <summary>
+    /// True when at least one row has been ticked, which is what makes return act on several.
+    /// </summary>
+    public bool HasTicked => Results.Any(entry => entry.IsTicked);
 
     public bool HasResults => Results.Count > 0;
 
     /// <summary>
     /// Fills the palette from the profiles currently loaded and resets the query.
     /// </summary>
-    public void Reset(IEnumerable<ProfileItemViewModel> profiles)
+    public void Reset(
+        IEnumerable<ProfileItemViewModel> profiles,
+        QuickSwitcherMode mode = QuickSwitcherMode.Connect)
     {
         ArgumentNullException.ThrowIfNull(profiles);
 
+        Mode = mode;
         candidates.Clear();
 
-        foreach (ProfileItemViewModel profile in profiles)
+        // Stopping only ever applies to what is running, so the list is the answer to the question
+        // before anything is typed.
+        foreach (ProfileItemViewModel profile in profiles.Where(
+            profile => mode == QuickSwitcherMode.Connect || !profile.IsIdle))
         {
             candidates.Add(new QuickSwitcherEntry(
                 profile.Id,
@@ -110,11 +142,44 @@ public sealed partial class QuickSwitcherViewModel : ViewModelBase
     [RelayCommand]
     private void AcceptAndShow() => Choose(showWindow: true);
 
-    private void Choose(bool showWindow)
+    /// <summary>
+    /// Ticks or unticks the highlighted row, which is how several are chosen at once.
+    /// </summary>
+    public void ToggleTick()
     {
         if (SelectedResult is { } entry)
         {
-            Accepted?.Invoke(this, new QuickSwitcherChoice(entry, showWindow));
+            entry.IsTicked = !entry.IsTicked;
+            OnPropertyChanged(nameof(HasTicked));
+        }
+    }
+
+    /// <summary>
+    /// Everything ticked, or the highlighted row when nothing is.
+    /// </summary>
+    /// <remarks>
+    /// Ticking nothing and pressing return is the common case and has to keep working, so an empty
+    /// selection means the row under the cursor rather than nothing at all.
+    /// </remarks>
+    private IReadOnlyList<QuickSwitcherEntry> Chosen
+    {
+        get
+        {
+            List<QuickSwitcherEntry> ticked = Results.Where(entry => entry.IsTicked).ToList();
+
+            return ticked.Count > 0
+                ? ticked
+                : SelectedResult is { } entry ? [entry] : [];
+        }
+    }
+
+    private void Choose(bool showWindow)
+    {
+        IReadOnlyList<QuickSwitcherEntry> chosen = Chosen;
+
+        if (chosen.Count > 0)
+        {
+            Accepted?.Invoke(this, new QuickSwitcherChoice(chosen, showWindow, Mode));
         }
     }
 
@@ -230,31 +295,75 @@ public sealed partial class QuickSwitcherViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(Placeholder));
         OnPropertyChanged(nameof(EmptyText));
+        OnPropertyChanged(nameof(Hint));
     }
 }
 
 /// <summary>
 /// What the user asked the palette to do.
 /// </summary>
-/// <param name="Entry">The profile that was picked.</param>
+/// <param name="Entries">The profiles that were picked, never empty.</param>
 /// <param name="ShowWindow">
 /// True when the main window should come forward as well, which is what someone asks for when they
 /// want to watch a connection rather than only start one.
 /// </param>
-public sealed record QuickSwitcherChoice(QuickSwitcherEntry Entry, bool ShowWindow);
+public sealed record QuickSwitcherChoice(
+    IReadOnlyList<QuickSwitcherEntry> Entries,
+    bool ShowWindow,
+    QuickSwitcherMode Mode);
+
+/// <summary>
+/// What the palette was opened for.
+/// </summary>
+public enum QuickSwitcherMode
+{
+    Connect,
+    Disconnect,
+}
 
 /// <summary>
 /// One row of the palette.
 /// </summary>
-public sealed record QuickSwitcherEntry(
-    Guid ProfileId,
-    string Name,
-    string Endpoint,
-    string Tags,
-    bool IsConnected,
-    int? FavouriteSlot,
-    DateTimeOffset? LastConnectedAt)
+public sealed partial class QuickSwitcherEntry : ViewModelBase
 {
+    public QuickSwitcherEntry(
+        Guid profileId,
+        string name,
+        string endpoint,
+        string tags,
+        bool isConnected,
+        int? favouriteSlot,
+        DateTimeOffset? lastConnectedAt)
+    {
+        ProfileId = profileId;
+        Name = name;
+        Endpoint = endpoint;
+        Tags = tags;
+        IsConnected = isConnected;
+        FavouriteSlot = favouriteSlot;
+        LastConnectedAt = lastConnectedAt;
+    }
+
+    public Guid ProfileId { get; }
+
+    public string Name { get; }
+
+    public string Endpoint { get; }
+
+    public string Tags { get; }
+
+    public bool IsConnected { get; }
+
+    public int? FavouriteSlot { get; }
+
+    public DateTimeOffset? LastConnectedAt { get; }
+
+    /// <summary>
+    /// True when the row has been ticked, so that return acts on it along with the others.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsTicked { get; set; }
+
     public bool HasTags => Tags is { Length: > 0 };
 
     public string SlotDisplay => FavouriteSlot?.ToString(System.Globalization.CultureInfo.InvariantCulture)

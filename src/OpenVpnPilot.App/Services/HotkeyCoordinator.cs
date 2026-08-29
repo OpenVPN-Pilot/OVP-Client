@@ -67,13 +67,12 @@ public sealed class HotkeyCoordinator : IDisposable
     {
         hotkeys.Pressed += OnPressed;
 
-        if (!settings.Current.General.HotkeyDefaultsApplied)
-        {
-            await store.EnsureDefaultsAsync(cancellationToken);
-            await settings.UpdateAsync(
-                current => current.General.HotkeyDefaultsApplied = true,
-                cancellationToken);
-        }
+        // Every start, not only the first. The store adds a default for an action that has no
+        // binding yet and leaves every other one alone, so an action added in a later version
+        // reaches an installation that already exists. A flag that ran this once meant a shortcut
+        // added afterwards was never bound to anything, on exactly the machines that had been
+        // using the application longest.
+        await store.EnsureDefaultsAsync(cancellationToken);
 
         await ReloadAsync(cancellationToken);
     }

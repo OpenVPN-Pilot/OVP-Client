@@ -1,5 +1,6 @@
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.Core.Localization;
+using OpenVpnPilot.Core.Vpn;
 using OpenVpnPilot.Data.Entities;
 
 namespace OpenVpnPilot.App.Tests.ViewModels;
@@ -135,8 +136,9 @@ public sealed class QuickSwitcherViewModelTests
         switcher.AcceptCommand.Execute(null);
 
         Assert.NotNull(accepted);
-        Assert.Equal("alpha", accepted.Entry.Name);
+        Assert.Equal("alpha", Assert.Single(accepted.Entries).Name);
         Assert.False(accepted.ShowWindow);
+        Assert.Equal(QuickSwitcherMode.Connect, accepted.Mode);
     }
 
     /// <summary>
@@ -166,6 +168,90 @@ public sealed class QuickSwitcherViewModelTests
 
         Assert.Equal(string.Empty, switcher.Query);
         Assert.Single(switcher.Results);
+    }
+
+    /// <summary>
+    /// The disconnect palette answers a different question, so it starts from a different list.
+    /// </summary>
+    [Fact]
+    public void Disconnect_ListsOnlyWhatIsRunning()
+    {
+        QuickSwitcherViewModel switcher = new(new StubLocalizer());
+
+        switcher.Reset(
+            [Item(Profile("idle")), Connected(Item(Profile("running")))],
+            QuickSwitcherMode.Disconnect);
+
+        QuickSwitcherEntry only = Assert.Single(switcher.Results);
+        Assert.Equal("running", only.Name);
+        Assert.True(switcher.IsDisconnecting);
+    }
+
+    [Fact]
+    public void Disconnect_WithNothingRunning_HasNothingToShow()
+    {
+        QuickSwitcherViewModel switcher = new(new StubLocalizer());
+
+        switcher.Reset([Item(Profile("idle"))], QuickSwitcherMode.Disconnect);
+
+        Assert.Empty(switcher.Results);
+        Assert.False(switcher.HasResults);
+    }
+
+    /// <summary>
+    /// Ticking nothing and pressing return still has to act on the row under the cursor.
+    /// </summary>
+    [Fact]
+    public void Accept_WithNothingTicked_TakesTheHighlightedRow()
+    {
+        QuickSwitcherViewModel switcher = Build(Profile("alpha"), Profile("beta"));
+
+        QuickSwitcherChoice? accepted = null;
+        switcher.Accepted += (_, choice) => accepted = choice;
+
+        switcher.AcceptCommand.Execute(null);
+
+        Assert.NotNull(accepted);
+        Assert.Same(switcher.Results[0], Assert.Single(accepted.Entries));
+    }
+
+    [Fact]
+    public void Accept_WithSeveralTicked_TakesAllOfThem()
+    {
+        QuickSwitcherViewModel switcher = Build(Profile("alpha"), Profile("beta"));
+
+        foreach (QuickSwitcherEntry entry in switcher.Results)
+        {
+            entry.IsTicked = true;
+        }
+
+        QuickSwitcherChoice? accepted = null;
+        switcher.Accepted += (_, choice) => accepted = choice;
+
+        switcher.AcceptCommand.Execute(null);
+
+        Assert.NotNull(accepted);
+        Assert.Equal(2, accepted.Entries.Count);
+    }
+
+    [Fact]
+    public void ToggleTick_MarksAndUnmarksTheHighlightedRow()
+    {
+        QuickSwitcherViewModel switcher = Build(Profile("alpha"));
+
+        switcher.ToggleTick();
+        Assert.True(switcher.Results[0].IsTicked);
+        Assert.True(switcher.HasTicked);
+
+        switcher.ToggleTick();
+        Assert.False(switcher.Results[0].IsTicked);
+        Assert.False(switcher.HasTicked);
+    }
+
+    private static ProfileItemViewModel Connected(ProfileItemViewModel item)
+    {
+        item.Status = new VpnConnectionStatus { State = VpnConnectionState.Connected };
+        return item;
     }
 
     private static QuickSwitcherViewModel Build(params Profile[] profiles)
