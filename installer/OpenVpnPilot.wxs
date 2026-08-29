@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+  The installer.
+
+  Three things had to be true for this to be something a person can install rather than a folder they
+  are handed: the application has to appear in the Start menu, it has to be removable from the usual
+  place, and ovp has to work in any terminal without anyone editing an environment variable by hand.
+  An MSI gives the first two for nothing and the third with one component.
+
+  It installs for the machine rather than for one user, because the directory sits under Program
+  Files and the PATH entry is a machine wide one. Everything the application writes still belongs to
+  the user who runs it: the profile store, the settings and the protected credentials stay under
+  their own application data.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package Name="OpenVpnPilot"
+           Manufacturer="OpenVpnPilot"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="8f1c4a52-6d2e-4a1b-9a3f-2c5d7e8b4016"
+           Scope="perMachine"
+           Compressed="yes"
+           InstallerVersion="500">
+
+    <SummaryInformation Description="OpenVpnPilot, a desktop client for OpenVPN" />
+
+    <!-- Installing a newer version replaces the old one rather than sitting beside it. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <Launch Condition="VersionNT64"
+            Message="[ProductName] runs on 64 bit Windows only." />
+
+    <!-- The icon is taken from the executable, so there is no second copy of it to keep in step. -->
+    <Icon Id="OpenVpnPilot.exe" SourceFile="$(var.PublishDir)\OpenVpnPilot.exe" />
+    <Property Id="ARPPRODUCTICON" Value="OpenVpnPilot.exe" />
+
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseFile)" />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="OpenVpnPilot" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <Feature Id="Main" Title="OpenVpnPilot" Level="1">
+      <ComponentGroupRef Id="ApplicationFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="CommandOnPath" />
+    </Feature>
+
+    <!--
+      Everything the publish step produced, which is the application, the ovp command and the
+      language files they share. Listing them by hand would go stale the first time a dependency
+      changed.
+    -->
+    <ComponentGroup Id="ApplicationFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(var.PublishDir)\**" />
+    </ComponentGroup>
+
+    <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder" Guid="1a7b9c30-5e84-42d7-b1f6-9c0a3d5e7f21">
+      <Shortcut Id="ApplicationShortcut"
+                Name="OpenVpnPilot"
+                Description="Manage and connect OpenVPN profiles"
+                Target="[INSTALLFOLDER]OpenVpnPilot.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="OpenVpnPilot.exe" />
+      <RegistryValue Root="HKLM" Key="Software\OpenVpnPilot" Name="StartMenu"
+                     Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <!--
+      Puts the installation directory on the machine PATH so that ovp works in any terminal. The
+      entry is removed again when the product is, which is why it is a component of its own rather
+      than something a custom action writes.
+    -->
+    <Component Id="CommandOnPath" Directory="INSTALLFOLDER" Guid="6c2f8d14-3b95-4e60-8d27-4a1e9f0b5c38">
+      <Environment Id="OvpOnPath" Name="PATH" Value="[INSTALLFOLDER]"
+                   Part="last" Action="set" System="yes" Permanent="no" />
+      <RegistryValue Root="HKLM" Key="Software\OpenVpnPilot" Name="Path"
+                     Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+  </Package>
+</Wix>

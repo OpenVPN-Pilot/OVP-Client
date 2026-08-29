@@ -2,10 +2,10 @@ name: build
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     tags: ['v*']
   pull_request:
-    branches: [main]
+    branches: [master]
 
 permissions:
   contents: read
@@ -103,10 +103,20 @@ jobs:
           Compress-Archive -Path artifacts/app/* -DestinationPath artifacts/release/OpenVpnPilot-${{ github.ref_name }}-win-x64.zip
           Compress-Archive -Path artifacts/cli/* -DestinationPath artifacts/release/ovp-${{ github.ref_name }}-win-x64.zip
 
+      # The toolset is a global tool rather than a package reference, so that an ordinary build never
+      # has to restore it.
+      - name: Install the WiX toolset
+        run: dotnet tool install --global wix --version 6.0.2
+
+      - name: Build the installer
+        shell: pwsh
+        run: ./installer/build.ps1 -Version ("${{ github.ref_name }}".TrimStart('v'))
+
       - name: Create the release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           files: |
+            artifacts/release/*.msi
             artifacts/release/*.zip
             artifacts/packages/*.nupkg
