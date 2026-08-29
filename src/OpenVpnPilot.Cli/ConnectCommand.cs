@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Runtime.Versioning;
 using Microsoft.EntityFrameworkCore;
 using OpenVpnPilot.Core.Abstractions;
+using OpenVpnPilot.Core.Ipc;
 using OpenVpnPilot.Core.Vpn;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
@@ -33,19 +34,33 @@ internal static class ConnectCommand
 
     public static async Task<int> RunAsync(string[] args)
     {
-        string? profileName = ReadValue(args, "--profile");
+        // A bare name is the common case, so it does not have to be introduced by a flag.
+        string? profileName = ReadValue(args, "--profile") ?? BareName(args);
 
         if (args.Length == 0 || (profileName is null && args[0].StartsWith("--", StringComparison.Ordinal)))
         {
-            Console.Error.WriteLine("A configuration file or --profile <name> is required.");
+            Console.Error.WriteLine("A profile name, a configuration file or --profile <name> is required.");
             return 1;
+        }
+
+        // The running application owns the tunnels and the window that shows them, so a request is
+        // handed to it rather than starting a second, invisible one beside it.
+        if (profileName is not null && !args.Contains("--detached", StringComparer.Ordinal))
+        {
+            string? reply = await PilotCommandClient.SendAsync(PilotCommands.Connect + profileName);
+
+            if (reply is not null)
+            {
+                Console.WriteLine(reply);
+                return reply.StartsWith("No stored profile", StringComparison.Ordinal) ? 1 : 0;
+            }
         }
 
         Guid profileId = Guid.Empty;
         string configurationPath;
         MaterialisedProfile? materialised = null;
 
-        if (profileName is not null)
+        if (profileName is not null && !File.Exists(Path.GetFullPath(profileName)))
         {
             StoredProfile? stored = await LoadProfileAsync(profileName);
             if (stored is null)
@@ -63,7 +78,7 @@ internal static class ConnectCommand
         }
         else
         {
-            configurationPath = Path.GetFullPath(args[0]);
+            configurationPath = Path.GetFullPath(profileName ?? args[0]);
             if (!File.Exists(configurationPath))
             {
                 Console.Error.WriteLine($"Configuration not found: {configurationPath}");
@@ -231,6 +246,29 @@ internal static class ConnectCommand
         int port = ((IPEndPoint)listener.LocalEndpoint).Port;
         listener.Stop();
         return port;
+    }
+
+    /// <summary>
+    /// The first argument that is neither a flag nor a flag's value, and is not an existing file.
+    /// </summary>
+    private static string? BareName(string[] args)
+    {
+        for (int index = 0; index < args.Length; index++)
+        {
+            if (args[index].StartsWith("--", StringComparison.Ordinal))
+            {
+                if (args[index] is "--profile" or "--seconds" or "--username" or "--password")
+                {
+                    index++;
+                }
+
+                continue;
+            }
+
+            return args[index];
+        }
+
+        return null;
     }
 
     private static string? ReadValue(string[] args, string name)

@@ -99,7 +99,19 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     public partial string SearchTerm { get; set; } = string.Empty;
 
     [ObservableProperty]
+    public partial string NewFolderName { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial bool IsCreatingFolder { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFolderSelected))]
     public partial SidebarFilterViewModel? SelectedFilter { get; set; }
+
+    /// <summary>
+    /// True when the sidebar selection is a folder, which is what the folder actions apply to.
+    /// </summary>
+    public bool IsFolderSelected => SelectedFilter?.Kind == SidebarFilterKind.Folder;
 
     [ObservableProperty]
     public partial string StatusMessage { get; set; } = string.Empty;
@@ -491,6 +503,84 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             await ConnectAsync(profile);
         }
+    }
+
+    /// <summary>
+    /// Creates a folder and files the selected profile under it in one step.
+    /// </summary>
+    /// <remarks>
+    /// Creating an empty folder and then moving something into it is two operations for what is
+    /// almost always one intent, so the selected profile follows the new folder when there is one.
+    /// </remarks>
+    [RelayCommand]
+    private async Task CreateFolderAsync()
+    {
+        string name = NewFolderName.Trim();
+
+        if (name.Length == 0)
+        {
+            return;
+        }
+
+        Guid folderId = await store.CreateFolderAsync(name, parentId: null);
+
+        if (SelectedProfile is { } profile)
+        {
+            await store.MoveProfileAsync(profile.Id, folderId);
+        }
+
+        NewFolderName = string.Empty;
+        IsCreatingFolder = false;
+
+        await LoadAsync();
+
+        SelectedFilter = FolderFilters.FirstOrDefault(filter => filter.FolderId == folderId)
+            ?? SelectedFilter;
+    }
+
+    [RelayCommand]
+    private void BeginCreateFolder()
+    {
+        NewFolderName = string.Empty;
+        IsCreatingFolder = true;
+    }
+
+    [RelayCommand]
+    private void CancelCreateFolder()
+    {
+        NewFolderName = string.Empty;
+        IsCreatingFolder = false;
+    }
+
+    /// <summary>
+    /// Moves the selected profile into the folder that is currently selected in the sidebar, or out
+    /// of any folder when a library filter is selected instead.
+    /// </summary>
+    [RelayCommand]
+    private async Task FileSelectedProfileAsync()
+    {
+        if (SelectedProfile is not { } profile)
+        {
+            return;
+        }
+
+        await store.MoveProfileAsync(profile.Id, SelectedFilter?.FolderId);
+        await LoadAsync();
+    }
+
+    [RelayCommand]
+    private async Task DeleteFolderAsync()
+    {
+        if (SelectedFilter is not { Kind: SidebarFilterKind.Folder, FolderId: { } folderId })
+        {
+            return;
+        }
+
+        // The profiles are only filed here, so removing the folder must not remove them.
+        await store.DeleteFolderAsync(folderId);
+
+        SelectedFilter = Filters[0];
+        await LoadAsync();
     }
 
     [RelayCommand]

@@ -8,6 +8,10 @@ namespace OpenVpnPilot.Cli;
 /// <summary>
 /// Entry point for the headless companion command.
 /// </summary>
+/// <remarks>
+/// Short aliases exist only where they read well for something typed all day. A name that has to be
+/// looked up is worse than a longer one that can be guessed.
+/// </remarks>
 internal static class CommandRunner
 {
     public static async Task<int> RunAsync(string[] args)
@@ -17,14 +21,14 @@ internal static class CommandRunner
             return WriteUsage();
         }
 
-        string command = args[0];
+        string command = Canonical(args[0]);
 
-        if (command is "--help" or "-h" or "help")
+        if (command is "help")
         {
-            return args.Length > 1 ? WriteCommandHelp(args[1]) : WriteUsage();
+            return args.Length > 1 ? WriteCommandHelp(Canonical(args[1])) : WriteUsage();
         }
 
-        if (command is "--version" or "-v" or "version")
+        if (command is "version")
         {
             Console.WriteLine($"ovp {VersionInfo.Current}");
             return 0;
@@ -42,11 +46,37 @@ internal static class CommandRunner
         {
             "doctor" => await RunDoctorAsync(),
             "connect" => await ConnectCommand.RunAsync(args[1..]),
+            "disconnect" => await DisconnectCommand.RunAsync(args[1..]),
+            "status" => await StatusCommand.RunAsync(),
             "import" => await ImportCommand.RunAsync(args[1..]),
             "list" => await ListCommand.RunAsync(args[1..]),
-            _ => Unknown(command),
+            "export" => await ExportCommand.RunAsync(args[1..]),
+            "favourite" => await FavouriteCommand.RunAsync(args[1..]),
+            "remove" => await RemoveCommand.RunAsync(args[1..]),
+            "completion" => CompletionCommand.Run(args[1..]),
+            _ => Unknown(args[0]),
         };
     }
+
+    /// <summary>
+    /// Resolves an alias to the command it stands for.
+    /// </summary>
+    private static string Canonical(string command) => command switch
+    {
+        "--help" or "-h" or "help" or "-?" => "help",
+        "--version" or "-v" or "version" => "version",
+        "dr" or "doctor" => "doctor",
+        "ls" or "list" => "list",
+        "con" or "conn" or "connect" => "connect",
+        "dis" or "disconnect" => "disconnect",
+        "st" or "status" => "status",
+        "add" or "import" => "import",
+        "fav" or "favourite" or "favorite" => "favourite",
+        "rm" or "remove" or "delete" => "remove",
+        "export" => "export",
+        "completion" => "completion",
+        _ => command,
+    };
 
     [SupportedOSPlatform("windows")]
     private static async Task<int> RunDoctorAsync()
@@ -95,18 +125,28 @@ internal static class CommandRunner
         Console.WriteLine("  ovp <command> [options]");
         Console.WriteLine();
         Console.WriteLine("Commands:");
-        Console.WriteLine("  doctor                     Check whether OpenVPN is installed and usable.");
-        Console.WriteLine("  list                       List the profiles in the local store.");
-        Console.WriteLine("  import <path> [--commit]   Examine .ovpn files and optionally store them.");
-        Console.WriteLine("  connect <config|--profile> Connect and report live status.");
+        Console.WriteLine("  doctor, dr                 Check whether OpenVPN is installed and usable.");
+        Console.WriteLine("  list, ls                   List the profiles in the local store.");
+        Console.WriteLine("  status, st                 Show what is currently connected.");
+        Console.WriteLine("  connect, con <name>        Connect a profile.");
+        Console.WriteLine("  disconnect, dis <name>     Disconnect a profile, or --all.");
+        Console.WriteLine("  import, add <path>         Examine .ovpn files and optionally store them.");
+        Console.WriteLine("  export <path>              Write profiles back out as .ovpn files.");
+        Console.WriteLine("  favourite, fav <name>      Set or clear a favourite and its slot.");
+        Console.WriteLine("  remove, rm <name>          Delete a profile from the store.");
+        Console.WriteLine("  completion <shell>         Print a shell completion script.");
         Console.WriteLine();
         Console.WriteLine("Global options:");
         Console.WriteLine("  -h, --help [command]       Show this text, or the help for one command.");
         Console.WriteLine("  -v, --version              Print the version.");
         Console.WriteLine();
+        Console.WriteLine("When the application is running, connect, disconnect and status are handed to");
+        Console.WriteLine("it so they act on the tunnels its window shows.");
+        Console.WriteLine();
         Console.WriteLine("Examples:");
-        Console.WriteLine(@"  ovp import C:\profiles --commit");
-        Console.WriteLine("  ovp connect --profile site-alpha --protect-routes");
+        Console.WriteLine(@"  ovp add C:\profiles --commit");
+        Console.WriteLine("  ovp con site-alpha");
+        Console.WriteLine("  ovp dis --all");
         return 0;
     }
 
@@ -116,6 +156,7 @@ internal static class CommandRunner
         {
             case "doctor":
                 Console.WriteLine("ovp doctor");
+                Console.WriteLine("Alias: dr");
                 Console.WriteLine();
                 Console.WriteLine("Reports each requirement separately: the OpenVPN installation, the");
                 Console.WriteLine("executable and its version, the interactive service, its control pipe,");
@@ -126,39 +167,110 @@ internal static class CommandRunner
                 return 0;
 
             case "list":
-                Console.WriteLine("ovp list [--json]");
+                Console.WriteLine("ovp list [--json] [--folder <name>] [--tag <name>]");
+                Console.WriteLine("Alias: ls");
                 Console.WriteLine();
                 Console.WriteLine("Lists the stored profiles with their endpoint and last use.");
                 Console.WriteLine();
                 Console.WriteLine("  --json                 Emit machine readable output.");
+                Console.WriteLine("  --folder <name>        Only profiles filed under that folder.");
+                Console.WriteLine("  --tag <name>           Only profiles carrying that tag.");
+                Console.WriteLine("  --names                Print names only, one per line.");
+                return 0;
+
+            case "status":
+                Console.WriteLine("ovp status");
+                Console.WriteLine("Alias: st");
+                Console.WriteLine();
+                Console.WriteLine("Shows what the running application currently has connected. Reports that");
+                Console.WriteLine("nothing is running when the application is not started, because a tunnel");
+                Console.WriteLine("belongs to the process that created it.");
+                Console.WriteLine();
+                Console.WriteLine("Exit codes: 0 something is connected, 1 nothing is, 4 no application.");
                 return 0;
 
             case "import":
-                Console.WriteLine("ovp import <file or directory> [--commit]");
+                Console.WriteLine("ovp import <file, directory or archive> [--commit] [--folder <name>] [--tag <name>]");
+                Console.WriteLine("Alias: add");
                 Console.WriteLine();
                 Console.WriteLine("Examines .ovpn files, pulls referenced certificates and keys inline, and");
                 Console.WriteLine("reports duplicates and unsupported directives. Directories are searched");
-                Console.WriteLine("recursively. Nothing is written without --commit.");
+                Console.WriteLine("recursively and ZIP archives are unpacked. Nothing is written without");
+                Console.WriteLine("--commit.");
                 Console.WriteLine();
                 Console.WriteLine("  --commit               Store the importable profiles.");
+                Console.WriteLine("  --folder <name>        File them under that folder, creating it if needed.");
+                Console.WriteLine("  --tag <name>           Tag them. May be given more than once.");
+                return 0;
+
+            case "export":
+                Console.WriteLine("ovp export <directory> [--profile <name>] [--folder <name>]");
+                Console.WriteLine();
+                Console.WriteLine("Writes stored profiles back out as self contained .ovpn files, one per");
+                Console.WriteLine("profile. The files carry their private keys inline, so the directory is");
+                Console.WriteLine("created with permissions for the current user only.");
+                Console.WriteLine();
+                Console.WriteLine("  --profile <name>       Export one profile matched by name.");
+                Console.WriteLine("  --folder <name>        Export everything filed under that folder.");
                 return 0;
 
             case "connect":
+                Console.WriteLine("ovp connect <name> [options]");
                 Console.WriteLine("ovp connect <config file> [options]");
-                Console.WriteLine("ovp connect --profile <name> [options]");
+                Console.WriteLine("Alias: con, conn");
                 Console.WriteLine();
-                Console.WriteLine("Connects and prints each state change until the time is up, then");
-                Console.WriteLine("disconnects. A stored profile is written to a private runtime file for");
-                Console.WriteLine("the duration of the connection and removed afterwards.");
+                Console.WriteLine("With the application running, the request is handed to it and the tunnel");
+                Console.WriteLine("appears in its window. Otherwise the connection is made by this command,");
+                Console.WriteLine("which prints each state change until the time is up and then disconnects.");
                 Console.WriteLine();
-                Console.WriteLine("  --profile <name>       Connect a stored profile matched by name.");
+                Console.WriteLine("  --profile <name>       Same as passing the name directly.");
                 Console.WriteLine("  --seconds <n>          How long to stay connected. Default 30.");
                 Console.WriteLine("  --protect-routes       Ignore pushed routing and DNS changes, so the");
                 Console.WriteLine("                         host keeps its own default route.");
                 Console.WriteLine("  --username <name>      User name for profiles that need credentials.");
                 Console.WriteLine("  --password <value>     Password for profiles that need credentials.");
+                Console.WriteLine("  --detached             Do not hand the request to the running application.");
                 Console.WriteLine();
                 Console.WriteLine("Exit codes: 0 connected, 2 launch refused, 3 failed, 5 never connected.");
+                return 0;
+
+            case "disconnect":
+                Console.WriteLine("ovp disconnect <name>");
+                Console.WriteLine("ovp disconnect --all");
+                Console.WriteLine("Alias: dis");
+                Console.WriteLine();
+                Console.WriteLine("Stops a tunnel the running application owns. A tunnel started by this");
+                Console.WriteLine("command in the same terminal ends when that command does, so there is");
+                Console.WriteLine("nothing here to stop.");
+                Console.WriteLine();
+                Console.WriteLine("Exit codes: 0 stopped, 1 no match, 4 no application is running.");
+                return 0;
+
+            case "favourite":
+                Console.WriteLine("ovp favourite <name> [--slot <1-9>] [--clear]");
+                Console.WriteLine("Alias: fav");
+                Console.WriteLine();
+                Console.WriteLine("Marks a profile as a favourite, optionally in a numbered slot bound to the");
+                Console.WriteLine("matching connect shortcut. A slot is unique, so assigning one that is taken");
+                Console.WriteLine("moves it.");
+                Console.WriteLine();
+                Console.WriteLine("  --slot <1-9>           Put the profile in that slot.");
+                Console.WriteLine("  --clear                Remove the favourite mark and any slot.");
+                return 0;
+
+            case "remove":
+                Console.WriteLine("ovp remove <name> [--yes]");
+                Console.WriteLine("Alias: rm");
+                Console.WriteLine();
+                Console.WriteLine("Deletes a profile and its history from the store. Asks for confirmation");
+                Console.WriteLine("unless --yes is given.");
+                return 0;
+
+            case "completion":
+                Console.WriteLine("ovp completion <powershell|bash>");
+                Console.WriteLine();
+                Console.WriteLine("Prints a completion script that offers the commands and the stored profile");
+                Console.WriteLine("names. Add it to the shell profile to make it permanent.");
                 return 0;
 
             default:

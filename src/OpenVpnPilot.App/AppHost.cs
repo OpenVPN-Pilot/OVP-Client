@@ -73,6 +73,8 @@ internal static class AppHost
 
         builder.Services.AddSingleton<SessionRecorder>();
         builder.Services.AddSingleton<NotificationService>();
+        builder.Services.AddSingleton<ReconnectSupervisor>();
+        builder.Services.AddSingleton<RemoteCommandHandler>();
         builder.Services.AddSingleton<AppearanceController>();
         builder.Services.AddSingleton<HotkeyCoordinator>();
         builder.Services.AddSingleton<MainWindowViewModel>();

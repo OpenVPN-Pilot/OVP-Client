@@ -82,9 +82,28 @@
               </ListBox>
             </StackPanel>
 
-            <StackPanel Spacing="6" IsVisible="{Binding HasFolders}">
-              <TextBlock Text="{loc:Translate nav.folders}" Classes="overline" Margin="10,0,0,2" />
+            <StackPanel Spacing="6">
+              <Grid ColumnDefinitions="*,Auto" Margin="10,0,0,2">
+                <TextBlock Grid.Column="0" Text="{loc:Translate nav.folders}" Classes="overline"
+                           VerticalAlignment="Center" />
+                <Button Grid.Column="1" Classes="quiet" Padding="6,1" FontSize="14"
+                        Content="+" ToolTip.Tip="{loc:Translate folders.create}"
+                        Command="{Binding BeginCreateFolderCommand}" />
+              </Grid>
+
+              <StackPanel Spacing="6" IsVisible="{Binding IsCreatingFolder}" Margin="0,0,0,4">
+                <TextBox Text="{Binding NewFolderName}"
+                         PlaceholderText="{loc:Translate folders.namePlaceholder}" />
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Button Content="{loc:Translate common.add}" Classes="primary" Padding="10,4"
+                          Command="{Binding CreateFolderCommand}" />
+                  <Button Content="{loc:Translate common.cancel}" Classes="quiet" Padding="10,4"
+                          Command="{Binding CancelCreateFolderCommand}" />
+                </StackPanel>
+              </StackPanel>
+
               <ListBox Classes="nav" ItemsSource="{Binding FolderFilters}"
+                       IsVisible="{Binding HasFolders}"
                        SelectedItem="{Binding SelectedFilter}">
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="vm:SidebarFilterViewModel">
@@ -99,6 +118,20 @@
                   </DataTemplate>
                 </ListBox.ItemTemplate>
               </ListBox>
+            </StackPanel>
+
+            <StackPanel Spacing="6" IsVisible="{Binding IsFolderSelected}" Margin="0,2,0,0">
+              <Button Content="{loc:Translate folders.connectAll}" Classes="quiet"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                      Command="{Binding ConnectFolderCommand}" />
+              <Button Content="{loc:Translate folders.fileSelected}" Classes="quiet"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                      IsEnabled="{Binding HasSelection}"
+                      Command="{Binding FileSelectedProfileCommand}" />
+              <Button Content="{loc:Translate folders.delete}" Classes="quiet"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                      Foreground="{DynamicResource StateFailed}"
+                      Command="{Binding DeleteFolderCommand}" />
             </StackPanel>
 
             <StackPanel Spacing="6" IsVisible="{Binding HasTags}">

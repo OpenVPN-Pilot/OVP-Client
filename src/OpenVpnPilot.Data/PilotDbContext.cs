@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OpenVpnPilot.Data.Entities;
 
 namespace OpenVpnPilot.Data;
@@ -35,9 +37,30 @@ public sealed class PilotDbContext : DbContext
 
     public DbSet<HotkeyBinding> HotkeyBindings => Set<HotkeyBinding>();
 
+    /// <summary>
+    /// Stores every instant as ticks since the epoch of <see cref="DateTimeOffset"/>.
+    /// </summary>
+    /// <remarks>
+    /// SQLite refuses to order or compare a value whose type is <see cref="DateTimeOffset"/>, so a
+    /// history filtered by period or sorted by time cannot be expressed at all while the default
+    /// text storage is used. Ticks sort as integers, index well, and are exact.
+    ///
+    /// Every timestamp this application writes is an instant in universal time, so the offset
+    /// carries no information and is not worth preserving.
+    /// </remarks>
+    private static readonly ValueConverter<DateTimeOffset, long> InstantConverter = new(
+        value => value.UtcTicks,
+        value => new DateTimeOffset(value, TimeSpan.Zero));
+
+    private static readonly ValueConverter<DateTimeOffset?, long?> NullableInstantConverter = new(
+        value => value == null ? null : value.Value.UtcTicks,
+        value => value == null ? null : new DateTimeOffset(value.Value, TimeSpan.Zero));
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
+
+        ApplyInstantStorage(modelBuilder);
 
         modelBuilder.Entity<Profile>(entity =>
         {
@@ -138,4 +161,29 @@ public sealed class PilotDbContext : DbContext
             entity.HasIndex(binding => binding.ActionId).IsUnique();
         });
     }
+    /// <summary>
+    /// Applies the instant conversion to every timestamp in the model.
+    /// </summary>
+    /// <remarks>
+    /// Done by walking the model rather than property by property, so a timestamp added later is
+    /// stored the same way without anyone having to remember this rule.
+    /// </remarks>
+    private static void ApplyInstantStorage(ModelBuilder modelBuilder)
+    {
+        foreach (IMutableEntityType entity in modelBuilder.Model.GetEntityTypes())
+        {
+            foreach (IMutableProperty property in entity.GetProperties())
+            {
+                if (property.ClrType == typeof(DateTimeOffset))
+                {
+                    property.SetValueConverter(InstantConverter);
+                }
+                else if (property.ClrType == typeof(DateTimeOffset?))
+                {
+                    property.SetValueConverter(NullableInstantConverter);
+                }
+            }
+        }
+    }
+
 }

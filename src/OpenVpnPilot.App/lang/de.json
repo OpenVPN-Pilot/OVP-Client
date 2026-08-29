@@ -91,7 +91,9 @@
       "profileReconnecting": "{0} verbindet neu. {1}",
       "profileFailed": "{0}: {1}",
       "profileDisconnected": "{0} ist getrennt.",
-      "profileBusy": "{0}: {1}"
+      "profileBusy": "{0}: {1}",
+      "reconnectScheduled": "{0} wurde getrennt. Neuer Versuch in {1} s, Versuch {2}.",
+      "reconnectGaveUp": "{0} konnte nach {1} Versuch(en) nicht wieder verbunden werden."
     },
     "credentials": {
       "signInTitle": "Bei {0} anmelden",
@@ -267,6 +269,13 @@
       "delete": "Löschen",
       "deleteConfirm": "Damit werden das Profil und sein Verlauf entfernt. Das lässt sich nicht rückgängig machen.",
       "nameRequired": "Ein Profil braucht einen Namen."
+    },
+    "folders": {
+      "create": "Neuer Ordner",
+      "namePlaceholder": "Ordnername",
+      "connectAll": "Alles hier verbinden",
+      "fileSelected": "Ausgewähltes Profil hierher verschieben",
+      "delete": "Diesen Ordner löschen"
     }
   }
 }

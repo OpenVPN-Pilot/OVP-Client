@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using Microsoft.EntityFrameworkCore;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
@@ -7,7 +8,7 @@ using OpenVpnPilot.OpenVpn.Configuration;
 namespace OpenVpnPilot.Cli;
 
 /// <summary>
-/// Imports configuration files from a directory into the local store.
+/// Imports configuration files from a file, a directory or an archive into the local store.
 /// </summary>
 /// <remarks>
 /// The default is a dry run. Nothing is written until the caller passes the commit flag, which
@@ -17,25 +18,70 @@ internal static class ImportCommand
 {
     public static async Task<int> RunAsync(string[] args)
     {
-        if (args.Length == 0)
+        string? source = ArgumentReader.FirstPositional(args);
+
+        if (source is null)
         {
-            Console.Error.WriteLine("A directory or file is required.");
+            Console.Error.WriteLine("A file, directory or archive is required.");
             return 1;
         }
 
-        string source = Path.GetFullPath(args[0]);
+        source = Path.GetFullPath(source);
         bool commit = args.Contains("--commit", StringComparer.Ordinal);
 
-        string[] files = Directory.Exists(source)
-            ? Directory.GetFiles(source, "*.ovpn", SearchOption.AllDirectories).Order().ToArray()
-            : [source];
+        string? unpacked = null;
 
-        if (files.Length == 0)
+        try
         {
-            Console.Error.WriteLine($"No .ovpn files found under {source}");
-            return 1;
+            string[] files = Expand(source, ref unpacked);
+
+            if (files.Length == 0)
+            {
+                Console.Error.WriteLine($"No .ovpn files found under {source}");
+                return 1;
+            }
+
+            return await ExamineAsync(args, source, files, commit);
+        }
+        finally
+        {
+            // An unpacked archive contains private keys, so it does not outlive the command.
+            if (unpacked is not null && Directory.Exists(unpacked))
+            {
+                try
+                {
+                    Directory.Delete(unpacked, recursive: true);
+                }
+                catch (IOException)
+                {
+                    Console.Error.WriteLine($"The temporary directory {unpacked} could not be removed.");
+                }
+            }
+        }
+    }
+
+    private static string[] Expand(string source, ref string? unpacked)
+    {
+        if (Directory.Exists(source))
+        {
+            return Directory.GetFiles(source, "*.ovpn", SearchOption.AllDirectories).Order().ToArray();
         }
 
+        if (Path.GetExtension(source).Equals(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            // The whole archive is unpacked, not only the configurations, because a configuration
+            // that refers to a certificate beside it can only be resolved if that file is there too.
+            unpacked = Directory.CreateTempSubdirectory("ovp-import-").FullName;
+            ZipFile.ExtractToDirectory(source, unpacked);
+
+            return Directory.GetFiles(unpacked, "*.ovpn", SearchOption.AllDirectories).Order().ToArray();
+        }
+
+        return File.Exists(source) ? [source] : [];
+    }
+
+    private static async Task<int> ExamineAsync(string[] args, string source, string[] files, bool commit)
+    {
         await using PilotDbContext context = await StoreFactory.OpenAsync();
         ProfileImporter importer = new(context, new OvpnConfigInliner(new FileSystemOvpnFileResolver()));
 
@@ -63,12 +109,75 @@ internal static class ImportCommand
             return 0;
         }
 
-        IReadOnlyList<Profile> created = await importer.CommitAsync(candidates);
+        Guid? folderId = await ResolveFolderAsync(context, ArgumentReader.Value(args, "--folder"));
+
+        IReadOnlyList<Profile> created = await importer.CommitAsync(candidates, folderId);
+
+        IReadOnlyList<string> tags = ArgumentReader.Values(args, "--tag");
+
+        if (created.Count > 0 && tags.Count > 0)
+        {
+            await ApplyTagsAsync(context, created, tags);
+        }
+
         Console.WriteLine();
         Console.WriteLine($"Stored {created.Count} profile(s). The store now holds "
             + $"{await context.Profiles.CountAsync()}.");
 
         return 0;
+    }
+
+    /// <summary>
+    /// Finds the named folder, creating it when it does not exist yet.
+    /// </summary>
+    private static async Task<Guid?> ResolveFolderAsync(PilotDbContext context, string? name)
+    {
+        if (name is null or { Length: 0 })
+        {
+            return null;
+        }
+
+        Folder? folder = await context.Folders.FirstOrDefaultAsync(candidate => candidate.Name == name);
+
+        if (folder is null)
+        {
+            folder = new Folder { Name = name };
+            context.Folders.Add(folder);
+            await context.SaveChangesAsync();
+
+            Console.WriteLine($"Created the folder '{name}'.");
+        }
+
+        return folder.Id;
+    }
+
+    private static async Task ApplyTagsAsync(
+        PilotDbContext context,
+        IReadOnlyList<Profile> created,
+        IReadOnlyList<string> tagNames)
+    {
+        foreach (string name in tagNames.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            Tag? tag = await context.Tags.FirstOrDefaultAsync(candidate => candidate.Name == name);
+
+            if (tag is null)
+            {
+                tag = new Tag { Name = name };
+                context.Tags.Add(tag);
+            }
+
+            foreach (Profile profile in created)
+            {
+                context.ProfileTags.Add(new ProfileTag
+                {
+                    ProfileId = profile.Id,
+                    TagId = tag.Id,
+                    Tag = tag,
+                });
+            }
+        }
+
+        await context.SaveChangesAsync();
     }
 
     private static void Report(ImportCandidate candidate)

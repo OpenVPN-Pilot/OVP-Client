@@ -37,7 +37,7 @@
 
     <StackPanel Spacing="5">
       <TextBlock Text="{loc:Translate editor.tags}" Classes="muted" />
-      <TextBox Text="{Binding TagsInput}" Watermark="{loc:Translate import.tagsHint}" />
+      <TextBox Text="{Binding TagsInput}" PlaceholderText="{loc:Translate import.tagsHint}" />
     </StackPanel>
 
     <Border Classes="divider" />

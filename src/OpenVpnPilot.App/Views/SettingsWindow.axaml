@@ -207,7 +207,7 @@
 
             <TextBlock Text="{loc:Translate settings.openVpnPath}" Classes="muted" />
             <TextBox Text="{Binding OpenVpnPath}"
-                     Watermark="{loc:Translate settings.openVpnPathHint}" />
+                     PlaceholderText="{loc:Translate settings.openVpnPathHint}" />
 
             <Grid ColumnDefinitions="220,140">
               <TextBlock Grid.Column="0" Classes="muted" VerticalAlignment="Center"

@@ -91,7 +91,9 @@
       "profileReconnecting": "{0} is reconnecting. {1}",
       "profileFailed": "{0}: {1}",
       "profileDisconnected": "{0} is disconnected.",
-      "profileBusy": "{0}: {1}"
+      "profileBusy": "{0}: {1}",
+      "reconnectScheduled": "{0} dropped. Reconnecting in {1} s, attempt {2}.",
+      "reconnectGaveUp": "{0} could not be reconnected after {1} attempt(s)."
     },
     "credentials": {
       "signInTitle": "Sign in to {0}",
@@ -267,6 +269,13 @@
       "delete": "Delete",
       "deleteConfirm": "This removes the profile and its history. It cannot be undone.",
       "nameRequired": "A profile needs a name."
+    },
+    "folders": {
+      "create": "New folder",
+      "namePlaceholder": "Folder name",
+      "connectAll": "Connect everything here",
+      "fileSelected": "Move the selected profile here",
+      "delete": "Delete this folder"
     }
   }
 }

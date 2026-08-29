@@ -54,7 +54,7 @@ public partial class App : Application
 
         // Settings and the language have to be in place before anything reads a label.
         ISettingsService settings = host.Services.GetRequiredService<ISettingsService>();
-        settings.LoadAsync().GetAwaiter().GetResult();
+        RunOffUiThread(() => settings.LoadAsync());
 
         host.Services.GetRequiredService<LanguageCoordinator>().Attach();
         host.Services.GetRequiredService<LocalizationResourceBridge>().Attach(this);
@@ -75,6 +75,10 @@ public partial class App : Application
         {
             InstanceGuard.ActivationRequested += (_, _) =>
                 Dispatcher.UIThread.Post(() => WindowCoordinator.Reveal(window));
+
+            // The companion command drives the tunnels this copy owns rather than starting its own.
+            RemoteCommandHandler remote = host.Services.GetRequiredService<RemoteCommandHandler>();
+            InstanceGuard.CommandHandler = remote.HandleAsync;
         }
 
         // Closing the application must not leave tunnels running unattended.
@@ -93,6 +97,11 @@ public partial class App : Application
 
         services.GetRequiredService<SessionRecorder>().Attach();
         services.GetRequiredService<NotificationService>().Attach();
+
+        ReconnectSupervisor reconnects = services.GetRequiredService<ReconnectSupervisor>();
+        reconnects.Attach();
+        reconnects.Reported += (_, message) =>
+            Dispatcher.UIThread.Post(() => viewModel.StatusMessage = message);
 
         TrayIconController tray = services.GetRequiredService<TrayIconController>();
         tray.Attach();
@@ -179,17 +188,28 @@ public partial class App : Application
         IServiceProvider services = host.Services;
 
         // Shutdown cannot await, so the tunnels are stopped before the process exits.
-        services.GetRequiredService<SessionRecorder>()
-            .CloseOpenSessionsAsync(SessionEndReason.ApplicationClosed)
-            .GetAwaiter()
-            .GetResult();
+        RunOffUiThread(() => services.GetRequiredService<SessionRecorder>()
+            .CloseOpenSessionsAsync(SessionEndReason.ApplicationClosed));
 
-        services.GetRequiredService<ConnectionManager>().DisconnectAllAsync().GetAwaiter().GetResult();
+        RunOffUiThread(() => services.GetRequiredService<ConnectionManager>().DisconnectAllAsync());
 
         services.GetRequiredService<HotkeyCoordinator>().Dispose();
+        services.GetRequiredService<ReconnectSupervisor>().Dispose();
         services.GetRequiredService<TrayIconController>().Dispose();
 
         host.Dispose();
         host = null;
     }
+
+    /// <summary>
+    /// Runs asynchronous work to completion from a place that cannot await.
+    /// </summary>
+    /// <remarks>
+    /// Startup and shutdown are synchronous callbacks on the user interface thread, and that thread
+    /// carries a synchronisation context. Awaiting inside the work would post its continuation back
+    /// to a thread that is blocked waiting for that same work, which deadlocks. Running it on the
+    /// thread pool gives the continuations somewhere to go.
+    /// </remarks>
+    private static void RunOffUiThread(Func<Task> work) =>
+        Task.Run(work).GetAwaiter().GetResult();
 }

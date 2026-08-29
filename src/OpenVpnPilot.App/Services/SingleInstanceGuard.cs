@@ -3,11 +3,12 @@ using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
+using OpenVpnPilot.Core.Ipc;
 
 namespace OpenVpnPilot.App.Services;
 
 /// <summary>
-/// Ensures only one copy of the application runs per user.
+/// Ensures only one copy of the application runs per user, and carries commands to it.
 /// </summary>
 /// <remarks>
 /// A second copy would drive its own tunnels while writing to the same profile database, so the
@@ -15,11 +16,12 @@ namespace OpenVpnPilot.App.Services;
 /// only a mutex, so the first copy can bring its window forward even when it is hidden in the tray.
 /// The names are scoped to the current user, which keeps separate sessions on a shared machine
 /// independent of each other.
+///
+/// The same pipe carries the commands the companion command sends, so a connection asked for from a
+/// terminal drives the tunnels the window already shows rather than starting a second set.
 /// </remarks>
 public sealed partial class SingleInstanceGuard : IDisposable
 {
-    private const string ActivateMessage = "activate";
-
     private readonly string mutexName;
     private readonly string pipeName;
     private Mutex? mutex;
@@ -31,13 +33,18 @@ public sealed partial class SingleInstanceGuard : IDisposable
         string scope = identity ?? Environment.UserName;
 
         mutexName = $"Local\\OpenVpnPilot.Instance.{scope}";
-        pipeName = $"OpenVpnPilot.Activate.{scope}";
+        pipeName = PilotCommandClient.PipeNameFor(scope);
     }
 
     /// <summary>
     /// Raised when another copy asked this one to come forward.
     /// </summary>
     public event EventHandler? ActivationRequested;
+
+    /// <summary>
+    /// Answers a command another process sent. The reply is returned to the sender.
+    /// </summary>
+    public Func<string, Task<string>>? CommandHandler { get; set; }
 
     /// <summary>
     /// Claims ownership for this process.
@@ -65,31 +72,12 @@ public sealed partial class SingleInstanceGuard : IDisposable
     /// </summary>
     public static async Task RequestActivationAsync(string? identity = null)
     {
-        string scope = identity ?? Environment.UserName;
-
         // Windows refuses to let a background process raise its own window. The copy that is
         // starting is allowed to, so it hands that right to the one that already runs before
         // asking it to come forward.
         GrantForegroundRightToRunningCopy();
 
-        try
-        {
-            await using NamedPipeClientStream pipe = new(
-                ".",
-                $"OpenVpnPilot.Activate.{scope}",
-                PipeDirection.Out);
-
-            await pipe.ConnectAsync(timeout: 2000);
-            await pipe.WriteAsync(Encoding.UTF8.GetBytes(ActivateMessage));
-        }
-        catch (TimeoutException)
-        {
-            // The other copy is not listening yet or is closing.
-        }
-        catch (IOException)
-        {
-            // Same reasoning as above.
-        }
+        await PilotCommandClient.SendAsync(PilotCommands.Activate, identity);
     }
 
     private static void GrantForegroundRightToRunningCopy()
@@ -120,7 +108,7 @@ public sealed partial class SingleInstanceGuard : IDisposable
 
     private async Task ListenAsync(CancellationToken cancellationToken)
     {
-        byte[] buffer = new byte[64];
+        byte[] buffer = new byte[4096];
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -128,7 +116,7 @@ public sealed partial class SingleInstanceGuard : IDisposable
             {
                 await using NamedPipeServerStream pipe = new(
                     pipeName,
-                    PipeDirection.In,
+                    PipeDirection.InOut,
                     maxNumberOfServerInstances: 1,
                     PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous);
@@ -138,9 +126,12 @@ public sealed partial class SingleInstanceGuard : IDisposable
                 int read = await pipe.ReadAsync(buffer, cancellationToken);
                 string message = Encoding.UTF8.GetString(buffer, 0, read);
 
-                if (message == ActivateMessage)
+                string reply = await HandleAsync(message);
+
+                if (reply.Length > 0)
                 {
-                    ActivationRequested?.Invoke(this, EventArgs.Empty);
+                    await pipe.WriteAsync(Encoding.UTF8.GetBytes(reply), cancellationToken);
+                    await pipe.FlushAsync(cancellationToken);
                 }
             }
             catch (OperationCanceledException)
@@ -149,9 +140,22 @@ public sealed partial class SingleInstanceGuard : IDisposable
             }
             catch (IOException)
             {
-                // A broken connection only affects one handover attempt, so listening continues.
+                // A broken connection only affects one exchange, so listening continues.
             }
         }
+    }
+
+    private async Task<string> HandleAsync(string message)
+    {
+        if (message == PilotCommands.Activate)
+        {
+            ActivationRequested?.Invoke(this, EventArgs.Empty);
+            return "ok";
+        }
+
+        Func<string, Task<string>>? handler = CommandHandler;
+
+        return handler is null ? string.Empty : await handler(message);
     }
 
     public void Dispose()

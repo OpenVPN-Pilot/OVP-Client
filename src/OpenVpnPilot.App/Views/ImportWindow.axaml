@@ -73,7 +73,7 @@
         <TextBlock Grid.Column="2" Classes="muted" VerticalAlignment="Center"
                    Text="{loc:Translate import.tags}" Margin="16,0,10,0" />
         <TextBox Grid.Column="3" Text="{Binding TagsInput}"
-                 Watermark="{loc:Translate import.tagsHint}" />
+                 PlaceholderText="{loc:Translate import.tagsHint}" />
       </Grid>
     </Border>
 

@@ -17,10 +17,26 @@ internal static class ListCommand
     {
         bool asJson = args.Contains("--json", StringComparer.Ordinal);
 
+        // Completion scripts consume this, so it stays one bare name per line with nothing else.
+        bool namesOnly = args.Contains("--names", StringComparer.Ordinal);
+
         await using PilotDbContext context = await StoreFactory.OpenAsync();
 
-        List<ProfileSummary> profiles = await context.Profiles
-            .AsNoTracking()
+        IQueryable<Profile> query = context.Profiles.AsNoTracking();
+
+        if (ArgumentReader.Value(args, "--folder") is { } folder)
+        {
+            query = query.Where(profile => profile.Folder != null
+                && EF.Functions.Like(profile.Folder.Name, $"%{folder}%"));
+        }
+
+        if (ArgumentReader.Value(args, "--tag") is { } tag)
+        {
+            query = query.Where(profile => profile.Tags.Any(link =>
+                link.Tag != null && EF.Functions.Like(link.Tag.Name, $"%{tag}%")));
+        }
+
+        List<ProfileSummary> profiles = await query
             .OrderBy(profile => profile.Name)
             .Select(profile => new ProfileSummary(
                 profile.Name,
@@ -30,20 +46,32 @@ internal static class ListCommand
                 profile.RequiresCredentials,
                 profile.HasUnsupportedOptions,
                 profile.IsFavourite,
+                profile.FavouriteSlot,
+                profile.Folder == null ? null : profile.Folder.Name,
+                profile.Tags.Select(link => link.Tag!.Name).ToList(),
                 profile.LastConnectedAt,
                 profile.ConnectCount))
             .ToListAsync();
 
+        if (namesOnly)
+        {
+            foreach (ProfileSummary profile in profiles)
+            {
+                Console.WriteLine(profile.Name);
+            }
+
+            return 0;
+        }
+
         if (asJson)
         {
             Console.WriteLine(JsonSerializer.Serialize(profiles, JsonOutput));
-
             return 0;
         }
 
         if (profiles.Count == 0)
         {
-            Console.WriteLine("The store is empty. Use 'ovp import <path> --commit' to add profiles.");
+            Console.WriteLine("The store is empty. Use 'ovp add <path> --commit' to add profiles.");
             return 0;
         }
 
@@ -58,7 +86,7 @@ internal static class ListCommand
 
             // Markers keep the listing scannable without a second column of prose.
             string markers = string.Concat(
-                profile.IsFavourite ? "*" : " ",
+                profile.FavouriteSlot?.ToString(CultureInfo.InvariantCulture) ?? (profile.IsFavourite ? "*" : " "),
                 profile.RequiresCredentials ? "P" : " ",
                 profile.HasUnsupportedOptions ? "!" : " ");
 
@@ -67,10 +95,17 @@ internal static class ListCommand
                 : "never";
 
             Console.WriteLine($"  {markers} {profile.Name,-44} {endpoint,-28} {lastUsed}");
+
+            if (profile.Folder is { Length: > 0 } || profile.Tags.Count > 0)
+            {
+                string folderPart = profile.Folder is { Length: > 0 } ? profile.Folder : "-";
+                string tagPart = profile.Tags.Count > 0 ? string.Join(", ", profile.Tags) : "-";
+                Console.WriteLine($"      folder {folderPart}   tags {tagPart}");
+            }
         }
 
         Console.WriteLine();
-        Console.WriteLine("  * favourite    P needs a password    ! uses script directives");
+        Console.WriteLine("  * favourite   1-9 favourite slot   P needs a password   ! uses script directives");
         return 0;
     }
 
@@ -82,6 +117,9 @@ internal static class ListCommand
         bool RequiresCredentials,
         bool HasUnsupportedOptions,
         bool IsFavourite,
+        int? FavouriteSlot,
+        string? Folder,
+        IReadOnlyList<string> Tags,
         DateTimeOffset? LastConnectedAt,
         int ConnectCount);
 }
