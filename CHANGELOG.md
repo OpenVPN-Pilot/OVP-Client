@@ -12,6 +12,11 @@ version heading when one is tagged.
 
 ### Added
 
+- A profile dragged onto a tag in the sidebar is given that tag. Dragging a row that is ticked takes
+  everything ticked with it, so a set can be tagged in one gesture. The tag is added rather than
+  replacing the ones the profile already has.
+- `LICENSE` at the root, MIT, naming the author.
+
 - The quick switcher stops tunnels as well. One shortcut lists only what is running, space ticks
   several and return disconnects them, which is the same act as starting one done to a shorter list.
 - The README says what reaches OpenVPN: the fixed options every connection carries, the ones added
@@ -20,6 +25,11 @@ version heading when one is tagged.
 ### Changed
 
 - The author and copyright are recorded in the built executable, the package and the installer.
+- The GitHub Actions workflow is gone. Every release is built by hand, which takes one command, and a
+  workflow that has never run is a claim rather than a check.
+- Code signing and a kill switch are off the roadmap rather than pending. A certificate costs money
+  every year to say what the source already says, and a kill switch belongs to a client used as an
+  exit node, which this is not.
 
 ### Fixed
 

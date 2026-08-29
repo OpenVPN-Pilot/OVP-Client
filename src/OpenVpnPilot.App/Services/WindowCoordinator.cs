@@ -45,6 +45,8 @@ public sealed class WindowCoordinator
     {
         viewModel.ScreenRequested += (_, screen) => Open(screen);
         mainWindow.FilesDropped += (_, paths) => OpenImport(paths);
+        mainWindow.ProfilesDroppedOnTag += async (_, drop) =>
+            await viewModel.AssignTagAsync(drop.ProfileIds, drop.TagName);
 
         // A copy that started with no window has none to own a dialog. The first time the window is
         // shown, from the notification area or a shortcut, it becomes the one dialogs belong to.

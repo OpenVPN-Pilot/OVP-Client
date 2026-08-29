@@ -335,6 +335,8 @@
       "intervalHint": "Zero re-reads only at startup and when the directory reports a change, which is enough for a local folder. Set an interval for a network share, where those reports cannot be relied on. Profiles that arrive this way appear under New in the library until you mark them as seen."
     },
     "tags": {
+      "applied": "{0} added to {1} profile(s).",
+      "alreadyThere": "Everything dropped already carries {0}.",
       "help": "Tags are how a profile set is organised. A profile can carry as many as it needs, the sidebar lists them, and the search box matches them along with the name and the host. Separate several with commas."
     },
     "export": {

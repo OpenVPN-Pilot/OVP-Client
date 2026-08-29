@@ -355,6 +355,63 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
+    /// Adds a tag to the given profiles, which is what dropping one on a tag means.
+    /// </summary>
+    /// <remarks>
+    /// Adds rather than replaces. A profile carries as many tags as it needs, and a gesture that
+    /// silently dropped the others would be a poor way to find that out. A profile that already has
+    /// the tag is left alone, so dropping the same one twice is not an error.
+    /// </remarks>
+    public async Task AssignTagAsync(IReadOnlyList<Guid> profileIds, string tagName)
+    {
+        ArgumentNullException.ThrowIfNull(profileIds);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tagName);
+
+        int changed = 0;
+
+        foreach (Guid profileId in profileIds)
+        {
+            if (!byId.TryGetValue(profileId, out ProfileItemViewModel? profile)
+                || profile.Tags.Contains(tagName, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            await store.SetProfileTagsAsync(profileId, [.. profile.Tags, tagName]);
+            changed++;
+        }
+
+        if (changed == 0)
+        {
+            StatusMessage = localizer.Translate("tags.alreadyThere", tagName);
+            return;
+        }
+
+        await LoadAsync();
+
+        StatusMessage = localizer.Translate("tags.applied", tagName, changed);
+    }
+
+    /// <summary>
+    /// The profiles a drag starting on one row should carry.
+    /// </summary>
+    /// <remarks>
+    /// Dragging a row that is ticked takes everything ticked with it, which is what someone who has
+    /// just ticked twenty of them expects. Dragging anything else takes only that row.
+    /// </remarks>
+    public IReadOnlyList<Guid> ProfilesToDrag(Guid startedOn)
+    {
+        if (IsSelecting
+            && byId.TryGetValue(startedOn, out ProfileItemViewModel? profile)
+            && profile.IsSelected)
+        {
+            return allProfiles.Where(item => item.IsSelected).Select(item => item.Id).ToList();
+        }
+
+        return [startedOn];
+    }
+
+    /// <summary>
     /// Stops several profiles by identifier, which is what the disconnect palette asks for.
     /// </summary>
     public async Task DisconnectByIdAsync(IEnumerable<Guid> profileIds)

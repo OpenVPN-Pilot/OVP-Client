@@ -335,6 +335,8 @@
       "intervalHint": "Null prüft nur beim Start und wenn der Ordner eine Änderung meldet, was für einen lokalen Ordner genügt. Setzen Sie ein Intervall für eine Netzwerkfreigabe, wo auf diese Meldungen kein Verlass ist. So gefundene Profile erscheinen in der Bibliothek unter Neu, bis Sie sie als gesehen markieren."
     },
     "tags": {
+      "applied": "{0} zu {1} Profil(en) hinzugefügt.",
+      "alreadyThere": "Alles Gezogene trägt {0} bereits.",
       "help": "Tags sind die Art, wie eine Profilsammlung geordnet wird. Ein Profil kann beliebig viele tragen, die Seitenleiste listet sie auf, und das Suchfeld findet sie zusammen mit Name und Host. Mehrere mit Kommas trennen."
     },
     "export": {
