@@ -117,7 +117,10 @@ servers to prove it against.
   nothing stopped the process. The attempt is now ended once, with the reason kept rather than
   replaced by the channel closing that follows it.
 - The explanation for a refused compression setting was only shown while a tunnel was up, which is
-  never the case for the tunnel it explains.
+  never the case for the tunnel it explains, and it advised a pull filter that does not work.
+  Measured against a server that pushes one: the filter does let the tunnel come up, and nothing
+  passes through it, because the server keeps compressing what the client has been told to stop
+  expecting. Only the server can resolve it.
 - Stopping a tunnel that could not be stopped ended the application. Anything escaping a command is
   rethrown on the user interface thread and takes the process with it; a failure to stop one tunnel
   is now reported and the others are left alone.

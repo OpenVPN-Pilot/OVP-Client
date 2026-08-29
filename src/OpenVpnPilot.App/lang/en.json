@@ -67,7 +67,7 @@
       "noReply": "No reply",
       "routes": "PUSHED ROUTES",
       "dns": "PUSHED DNS",
-      "compressionRefused": "This server pushed a compression setting. A current OpenVPN client refuses any of them, including one that turns compression off, and then abandons the whole set of pushed options, which is why the tunnel keeps reconnecting. Add pull-filter ignore \"comp-lzo\" and pull-filter ignore \"compress\" to the profile to connect anyway.",
+      "compressionRefused": "This server pushed a compression setting, and a current OpenVPN client cannot apply any of them, including one that turns compression off. It refuses the whole set of pushed options instead, which is why the tunnel never comes up. Ignoring the setting with a pull filter is not a way around it: the tunnel then connects and carries nothing, because the server compresses what the client no longer expects. Only the server can fix this, by not pushing compression.",
       "defaultRouteRefused": "The server asked to carry all traffic. This profile ignores that, so the host keeps its own default route. Change it in the profile if the tunnel is meant to carry everything.",
       "signInAgain": "Sign in again",
       "signInAgainHint": "Forgets the credentials stored for this profile so the next connection asks for them. Use it when the password changed on the server."

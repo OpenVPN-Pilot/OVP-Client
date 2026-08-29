@@ -219,15 +219,20 @@ the model.
 ### Client side gotchas
 
 - With data channel offload active, a 2.7 client rejects any pushed compression setting, including
-  `comp-lzo no`, and fails with `Failed to apply push options`. `pull-filter ignore` is whitelisted and
-  is the supported way to defend against a server pushing options the client cannot apply.
+  `comp-lzo no`, and fails with `Failed to apply push options`.
 
   Measured against lab server ten: the client reports `RECONNECTING` with the reason
-  `process-push-msg-failed` and loops there. Neither the state nor the reason names compression, so
-  `PushReplyParser` recognises `comp-lzo` and `compress` in the push reply and the interface says
-  which option it was. The filters are **not** applied automatically: without offload a client can
-  apply compression, and ignoring a setting the server is actually using would produce a tunnel that
-  comes up and then carries nothing.
+  `process-push-msg-failed` and loops there, restarting as fast as it can. Neither the state nor the
+  reason names compression, so `PushReplyParser` recognises `comp-lzo` and `compress` in the push
+  reply, the supervisor ends the attempt rather than letting it restart forever, and the interface
+  says which option it was.
+
+  **`pull-filter ignore` is not a way around this one.** It is whitelisted and it does suppress the
+  option, and the result is worse than the refusal it replaces: measured against the same server, the
+  tunnel comes up, the route is installed, and nothing passes. The server logs
+  `Bad LZO decompression header byte` for every packet, because it is still compressing what the
+  client has been told to stop expecting. Only the server can resolve it, by not pushing compression.
+  The filters are therefore not offered and not applied automatically.
 - A configuration without `ca`, `capath` or `peer-fingerprint` fails during option parsing, before the
   management interface starts listening. Validate this at import time so the failure is explained rather
   than observed as a process that dies immediately.

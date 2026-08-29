@@ -67,7 +67,7 @@
       "noReply": "Keine Antwort",
       "routes": "ÜBERMITTELTE ROUTEN",
       "dns": "ÜBERMITTELTES DNS",
-      "compressionRefused": "Dieser Server schickt eine Komprimierungseinstellung. Ein aktueller OpenVPN-Client lehnt jede davon ab, auch eine, die Komprimierung ausschaltet, und verwirft dann alle übermittelten Optionen. Genau deshalb verbindet sich der Tunnel immer wieder neu. Mit pull-filter ignore \"comp-lzo\" und pull-filter ignore \"compress\" im Profil klappt die Verbindung trotzdem.",
+      "compressionRefused": "Dieser Server schickt eine Komprimierungseinstellung, und ein aktueller OpenVPN-Client kann keine davon anwenden, auch keine, die Komprimierung ausschaltet. Er verwirft stattdessen alle übermittelten Optionen, deshalb kommt der Tunnel nicht zustande. Die Einstellung per pull-filter zu ignorieren ist kein Ausweg: der Tunnel verbindet sich dann und überträgt nichts, weil der Server komprimiert, womit der Client nicht mehr rechnet. Das kann nur der Server beheben, indem er keine Komprimierung schickt.",
       "defaultRouteRefused": "Der Server wollte den gesamten Verkehr übernehmen. Dieses Profil ignoriert das, daher behält der Host seine eigene Standardroute. Ändern Sie es im Profil, wenn der Tunnel alles tragen soll.",
       "signInAgain": "Neu anmelden",
       "signInAgainHint": "Vergisst die für dieses Profil gespeicherten Anmeldedaten, sodass die nächste Verbindung danach fragt. Nützlich, wenn sich das Passwort auf dem Server geändert hat."
