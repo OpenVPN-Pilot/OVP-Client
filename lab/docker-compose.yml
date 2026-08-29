@@ -1,0 +1,291 @@
+# Ten OpenVPN servers, each with a site behind it that is reachable no other way.
+#
+# The point is to have somewhere to run the client against that covers more than one server ever
+# will: certificates, passphrases, user names and passwords, both kinds of one time code, UDP and
+# TCP, and the two ways a server can take over a client's routing. Ten of them run at once, which is
+# also the only way to find out what happens when ten tunnels are up together.
+#
+# Everything here is invented and local. The addresses come from the documentation ranges, the
+# credentials are fixed and written down on purpose, and the certificate authority exists for the
+# lifetime of one volume.
+#
+#   docker compose up -d --build      start it
+#   docker compose down -v            stop it and forget the certificates
+#
+# The client configurations appear in ./clients once the material has been generated.
+
+name: ovplab
+
+x-vpn: &vpn
+  build:
+    context: ./vpn
+  image: ovplab-vpn:latest
+  restart: unless-stopped
+  # A tunnel needs the device and the right to configure an interface and to translate addresses.
+  cap_add:
+    - NET_ADMIN
+  devices:
+    - /dev/net/tun:/dev/net/tun
+  sysctls:
+    - net.ipv4.ip_forward=1
+  volumes:
+    - pki:/pki
+    - ./servers.sh:/lab/servers.sh:ro
+  depends_on:
+    material:
+      condition: service_completed_successfully
+  networks:
+    - sites
+
+x-web: &web
+  build:
+    context: ./web
+  image: ovplab-web:latest
+  restart: unless-stopped
+
+services:
+
+  # Builds the authority, the ten server and client pairs and the ten client configurations, then
+  # exits. Everything else waits for it.
+  material:
+    build:
+      context: ./vpn
+    image: ovplab-vpn:latest
+    command: ["generate"]
+    environment:
+      # The address the client configurations are told to connect to. The published ports are on the
+      # loopback interface of whatever machine runs Docker, so that is the default.
+      LAB_HOST: ${LAB_HOST:-127.0.0.1}
+    volumes:
+      - pki:/pki
+      - ./servers.sh:/lab/servers.sh:ro
+      - ./clients:/clients
+
+  vpn-01:
+    <<: *vpn
+    container_name: ovplab-vpn-01
+    environment:
+      LAB_INDEX: 1
+    ports:
+      - "1201:1194/udp"
+
+  vpn-02:
+    <<: *vpn
+    container_name: ovplab-vpn-02
+    environment:
+      LAB_INDEX: 2
+    ports:
+      - "1202:1194/udp"
+
+  vpn-03:
+    <<: *vpn
+    container_name: ovplab-vpn-03
+    environment:
+      LAB_INDEX: 3
+    ports:
+      - "1203:1194/udp"
+
+  vpn-04:
+    <<: *vpn
+    container_name: ovplab-vpn-04
+    environment:
+      LAB_INDEX: 4
+    ports:
+      - "1204:1194/udp"
+
+  # The only one on TCP, which is why the published port is not a UDP one.
+  vpn-05:
+    <<: *vpn
+    container_name: ovplab-vpn-05
+    environment:
+      LAB_INDEX: 5
+    ports:
+      - "1205:1194/tcp"
+
+  vpn-06:
+    <<: *vpn
+    container_name: ovplab-vpn-06
+    environment:
+      LAB_INDEX: 6
+    ports:
+      - "1206:1194/udp"
+
+  vpn-07:
+    <<: *vpn
+    container_name: ovplab-vpn-07
+    environment:
+      LAB_INDEX: 7
+    ports:
+      - "1207:1194/udp"
+
+  vpn-08:
+    <<: *vpn
+    container_name: ovplab-vpn-08
+    environment:
+      LAB_INDEX: 8
+    ports:
+      - "1208:1194/udp"
+
+  vpn-09:
+    <<: *vpn
+    container_name: ovplab-vpn-09
+    environment:
+      LAB_INDEX: 9
+    ports:
+      - "1209:1194/udp"
+
+  vpn-10:
+    <<: *vpn
+    container_name: ovplab-vpn-10
+    environment:
+      LAB_INDEX: 10
+    ports:
+      - "1210:1194/udp"
+
+  # The sites. Each one answers on a fixed address, which is the address the server in front of it
+  # tells its clients to route. The rates differ so that ten tunnels at once do not all look alike.
+  site-01:
+    <<: *web
+    container_name: ovplab-site-01
+    environment:
+      LAB_INDEX: 1
+      LAB_SITE_NAME: example-site-01
+      LAB_SITE_ADDRESS: 10.9.0.11
+      LAB_DOWNLOAD_SIZE: 200M
+      LAB_STREAM_RATE: 2m
+    networks:
+      sites:
+        ipv4_address: 10.9.0.11
+
+  site-02:
+    <<: *web
+    container_name: ovplab-site-02
+    environment:
+      LAB_INDEX: 2
+      LAB_SITE_NAME: example-site-02
+      LAB_SITE_ADDRESS: 10.9.0.12
+      LAB_DOWNLOAD_SIZE: 200M
+      LAB_STREAM_RATE: 3m
+    networks:
+      sites:
+        ipv4_address: 10.9.0.12
+
+  site-03:
+    <<: *web
+    container_name: ovplab-site-03
+    environment:
+      LAB_INDEX: 3
+      LAB_SITE_NAME: example-site-03
+      LAB_SITE_ADDRESS: 10.9.0.13
+      LAB_DOWNLOAD_SIZE: 100M
+      LAB_STREAM_RATE: 1m
+    networks:
+      sites:
+        ipv4_address: 10.9.0.13
+
+  site-04:
+    <<: *web
+    container_name: ovplab-site-04
+    environment:
+      LAB_INDEX: 4
+      LAB_SITE_NAME: example-site-04
+      LAB_SITE_ADDRESS: 10.9.0.14
+      LAB_DOWNLOAD_SIZE: 100M
+      LAB_STREAM_RATE: 5m
+    networks:
+      sites:
+        ipv4_address: 10.9.0.14
+
+  site-05:
+    <<: *web
+    container_name: ovplab-site-05
+    environment:
+      LAB_INDEX: 5
+      LAB_SITE_NAME: example-site-05
+      LAB_SITE_ADDRESS: 10.9.0.15
+      LAB_DOWNLOAD_SIZE: 100M
+      LAB_STREAM_RATE: 512k
+    networks:
+      sites:
+        ipv4_address: 10.9.0.15
+
+  site-06:
+    <<: *web
+    container_name: ovplab-site-06
+    environment:
+      LAB_INDEX: 6
+      LAB_SITE_NAME: example-site-06
+      LAB_SITE_ADDRESS: 10.9.0.16
+      LAB_DOWNLOAD_SIZE: 100M
+      LAB_STREAM_RATE: 4m
+    networks:
+      sites:
+        ipv4_address: 10.9.0.16
+
+  site-07:
+    <<: *web
+    container_name: ovplab-site-07
+    environment:
+      LAB_INDEX: 7
+      LAB_SITE_NAME: example-site-07
+      LAB_SITE_ADDRESS: 10.9.0.17
+      LAB_DOWNLOAD_SIZE: 100M
+      LAB_STREAM_RATE: 2m
+    networks:
+      sites:
+        ipv4_address: 10.9.0.17
+
+  site-08:
+    <<: *web
+    container_name: ovplab-site-08
+    environment:
+      LAB_INDEX: 8
+      LAB_SITE_NAME: example-site-08
+      LAB_SITE_ADDRESS: 10.9.0.18
+      LAB_DOWNLOAD_SIZE: 300M
+      LAB_STREAM_RATE: 8m
+    networks:
+      sites:
+        ipv4_address: 10.9.0.18
+
+  site-09:
+    <<: *web
+    container_name: ovplab-site-09
+    environment:
+      LAB_INDEX: 9
+      LAB_SITE_NAME: example-site-09
+      LAB_SITE_ADDRESS: 10.9.0.19
+      LAB_DOWNLOAD_SIZE: 100M
+      LAB_STREAM_RATE: 2m
+    networks:
+      sites:
+        ipv4_address: 10.9.0.19
+
+  site-10:
+    <<: *web
+    container_name: ovplab-site-10
+    environment:
+      LAB_INDEX: 10
+      LAB_SITE_NAME: example-site-10
+      LAB_SITE_ADDRESS: 10.9.0.20
+      LAB_DOWNLOAD_SIZE: 100M
+      LAB_STREAM_RATE: 1m
+    networks:
+      sites:
+        ipv4_address: 10.9.0.20
+
+volumes:
+  # Holds the authority and every key. Removing it and starting again produces a new set, which is
+  # the only way to be rid of the old one.
+  pki:
+
+networks:
+  sites:
+    driver: bridge
+    ipam:
+      config:
+        # The sites have fixed addresses low in the range. Everything else is given one from the
+        # upper half, so a server container can never be handed a site's address.
+        - subnet: 10.9.0.0/24
+          ip_range: 10.9.0.128/25
+          gateway: 10.9.0.1

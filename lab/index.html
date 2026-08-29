@@ -1,0 +1,296 @@
+<!doctype html>
+<!--
+  A page for trying the lab by hand.
+
+  Open it straight from disk. Each site answers only while the tunnel in front of it is up, so the
+  reachability check is the quickest way to see whether a connection is really carrying anything
+  rather than only reporting that it is.
+
+  The table mirrors lab/servers.sh, which is what the servers and the generated client
+  configurations are both built from. Change one and change the other.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenVpnPilot lab</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --ink: #16181d;
+    --ink-soft: #5d6472;
+    --ink-faint: #878d9a;
+    --line: #e3e6ec;
+    --panel: #ffffff;
+    --page: #f6f7f9;
+    --accent: #2f6fd0;
+    --ok: #1a8f57;
+    --bad: #c8404a;
+    --idle: #9aa1ae;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e7e9ee;
+      --ink-soft: #98a0ae;
+      --ink-faint: #6b7382;
+      --line: #262a33;
+      --panel: #1a1d24;
+      --page: #121419;
+      --accent: #5b95f0;
+      --ok: #3dd68c;
+      --bad: #f2707a;
+      --idle: #4a515f;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 36px 20px 64px;
+    background: var(--page);
+    color: var(--ink);
+    font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+
+  main { max-width: 1120px; margin: 0 auto; }
+
+  h1 { font-size: 22px; margin: 0 0 6px; }
+
+  p.lead { margin: 0 0 24px; color: var(--ink-soft); max-width: 70ch; }
+
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    padding: 14px 18px;
+    margin-bottom: 22px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+
+  .facts div { font-size: 13px; }
+  .facts span { display: block; color: var(--ink-faint); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; }
+
+  code, .mono { font-family: ui-monospace, Consolas, "Cascadia Mono", monospace; font-size: 12.5px; }
+
+  .bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+
+  button {
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 13px;
+    color: inherit;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    cursor: pointer;
+  }
+
+  button:hover { border-color: var(--accent); color: var(--accent); }
+
+  .summary { color: var(--ink-soft); font-size: 13px; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+
+  th, td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-faint); font-weight: 600; }
+
+  tbody tr:last-child td { border-bottom: none; }
+
+  td.n { font-variant-numeric: tabular-nums; color: var(--ink-faint); width: 34px; }
+
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--idle); margin-right: 7px; vertical-align: baseline; }
+  .dot.ok { background: var(--ok); }
+  .dot.bad { background: var(--bad); }
+  .dot.busy { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+
+  @keyframes pulse { 50% { opacity: .3; } }
+
+  .state { font-size: 12.5px; color: var(--ink-soft); white-space: nowrap; }
+
+  a { color: var(--accent); }
+  a.plain { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--ink-faint); }
+  a.plain:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .note { font-size: 12px; color: var(--ink-faint); margin-top: 4px; }
+
+  .links { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; }
+
+  footer { margin-top: 26px; color: var(--ink-faint); font-size: 12.5px; max-width: 80ch; }
+</style>
+</head>
+<body>
+<main>
+
+  <h1>OpenVpnPilot lab</h1>
+  <p class="lead">
+    Ten OpenVPN servers, each with a site behind it that is reachable no other way. Connect a profile,
+    then check its row: a site that answers proves the tunnel is carrying traffic, which is more than
+    a client reporting that it is connected.
+  </p>
+
+  <div class="facts">
+    <div><span>User name</span><code>pilot</code></div>
+    <div><span>Password</span><code>pilot-secret</code></div>
+    <div><span>Key passphrase</span><code>key-secret</code></div>
+    <div><span>One time code</span><code>123456</code></div>
+    <div><span>Client configurations</span><code>lab/clients</code></div>
+  </div>
+
+  <div class="bar">
+    <button id="check-all" type="button">Check every site</button>
+    <button id="clear" type="button">Clear</button>
+    <span class="summary" id="summary">Nothing checked yet.</span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Reachable</th>
+        <th>Server</th>
+        <th>Authentication</th>
+        <th>Site</th>
+        <th>Payloads</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <footer>
+    A row stays grey until it is checked. No answer is the expected result for every tunnel that is
+    not up. The check loads one pixel from the site, so it says whether something answered and
+    nothing more; the links open the site itself.
+    <div class="note">
+      Servers nine and ten fail on purpose. Nine asks to carry all traffic, which route protection
+      refuses, and ten pushes a compression setting a current client cannot apply, which makes it
+      reconnect without ever coming up.
+    </div>
+  </footer>
+
+</main>
+
+<script>
+  // Mirrors lab/servers.sh. The site addresses are what each server tells its clients to route.
+  const SERVERS = [
+    { n: 1,  port: 1201, proto: 'UDP', auth: 'Certificate', note: 'The baseline: nothing to type.',                site: '10.9.0.11', file: 'lab-01-cert.ovpn' },
+    { n: 2,  port: 1202, proto: 'UDP', auth: 'Certificate + key passphrase', note: 'Asks for the key passphrase.', site: '10.9.0.12', file: 'lab-02-cert.ovpn' },
+    { n: 3,  port: 1203, proto: 'UDP', auth: 'User name and password', note: 'No client certificate at all.',      site: '10.9.0.13', file: 'lab-03-userpass.ovpn' },
+    { n: 4,  port: 1204, proto: 'UDP', auth: 'Certificate + password', note: 'Both together.',                     site: '10.9.0.14', file: 'lab-04-cert+userpass.ovpn' },
+    { n: 5,  port: 1205, proto: 'TCP', auth: 'User name and password', note: 'The same as three, over TCP.',       site: '10.9.0.15', file: 'lab-05-userpass.ovpn' },
+    { n: 6,  port: 1206, proto: 'UDP', auth: 'Password + code up front', note: 'Answered in the same attempt.',    site: '10.9.0.16', file: 'lab-06-cert+userpass.ovpn' },
+    { n: 7,  port: 1207, proto: 'UDP', auth: 'Password, then a code',   note: 'Refused first, answered next.',     site: '10.9.0.17', file: 'lab-07-userpass.ovpn' },
+    { n: 8,  port: 1208, proto: 'UDP', auth: 'Certificate', note: 'Pushes name servers, a domain and a route.',    site: '10.9.0.18', file: 'lab-08-cert.ovpn' },
+    { n: 9,  port: 1209, proto: 'UDP', auth: 'Certificate', note: 'Asks to carry all traffic.',                    site: '10.9.0.19', file: 'lab-09-cert.ovpn' },
+    { n: 10, port: 1210, proto: 'UDP', auth: 'Certificate', note: 'Pushes compression a client refuses.',          site: '10.9.0.20', file: 'lab-10-cert.ovpn' },
+  ];
+
+  const TIMEOUT = 3000;
+
+  const rows = document.getElementById('rows');
+  const summary = document.getElementById('summary');
+
+  for (const server of SERVERS) {
+    const base = 'http://' + server.site;
+
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td class="n">${server.n}</td>
+      <td><span class="state"><span class="dot" data-dot="${server.n}"></span><span data-state="${server.n}">not checked</span></span></td>
+      <td>
+        <code>127.0.0.1:${server.port}</code> ${server.proto}
+        <div class="note mono">${server.file}</div>
+      </td>
+      <td>${server.auth}<div class="note">${server.note}</div></td>
+      <td><a class="plain" href="${base}/" target="_blank" rel="noreferrer">${server.site}</a></td>
+      <td>
+        <div class="links">
+          <a href="${base}/download.bin" target="_blank" rel="noreferrer">download</a>
+          <a href="${base}/stream.bin" target="_blank" rel="noreferrer">stream</a>
+          <a href="${base}/who" target="_blank" rel="noreferrer">who</a>
+        </div>
+        <button type="button" data-check="${server.n}">Check</button>
+      </td>`;
+
+    rows.appendChild(row);
+  }
+
+  function paint(number, state, text) {
+    const dot = document.querySelector(`[data-dot="${number}"]`);
+    const label = document.querySelector(`[data-state="${number}"]`);
+    dot.className = 'dot' + (state ? ' ' + state : '');
+    label.textContent = text;
+  }
+
+  // Loading an image, rather than asking for the page.
+  //
+  // A page opened from a file has no origin a browser is willing to make requests from: fetch and
+  // XMLHttpRequest are both refused before anything reaches the network, so every site would look
+  // unreachable whether or not it was. An image is the exception, which is why each site serves a
+  // single transparent pixel for exactly this.
+  function check(server) {
+    paint(server.n, 'busy', 'checking');
+
+    return new Promise((resolve) => {
+      const image = new Image();
+      let settled = false;
+
+      const finish = (reachable) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        clearTimeout(timer);
+        image.src = '';
+
+        paint(server.n, reachable ? 'ok' : 'bad', reachable ? 'answers' : 'no answer');
+        resolve(reachable);
+      };
+
+      const timer = setTimeout(() => finish(false), TIMEOUT);
+
+      image.onload = () => finish(true);
+      image.onerror = () => finish(false);
+
+      // A fresh query each time, so a site that answered once is not remembered as reachable after
+      // the tunnel has gone.
+      image.src = 'http://' + server.site + '/pixel.png?' + Date.now();
+    });
+  }
+
+  document.addEventListener('click', async (event) => {
+    const one = event.target.closest('[data-check]');
+
+    if (one) {
+      const server = SERVERS.find((item) => item.n === Number(one.dataset.check));
+      await check(server);
+      summary.textContent = 'Checked site ' + server.n + '.';
+    }
+  });
+
+  document.getElementById('check-all').addEventListener('click', async () => {
+    summary.textContent = 'Checking all ten...';
+
+    const results = await Promise.all(SERVERS.map(check));
+    const reachable = results.filter(Boolean).length;
+
+    summary.textContent = reachable === 0
+      ? 'None of the ten answered. No tunnel is carrying traffic.'
+      : reachable + ' of ' + SERVERS.length + ' answered.';
+  });
+
+  document.getElementById('clear').addEventListener('click', () => {
+    for (const server of SERVERS) {
+      paint(server.n, '', 'not checked');
+    }
+
+    summary.textContent = 'Nothing checked yet.';
+  });
+</script>
+</body>
+</html>

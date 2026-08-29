@@ -1,0 +1,50 @@
+# The site behind one tunnel.
+#
+# Three things are served on purpose: something small to look at, something large to pull as fast as
+# the tunnel allows, and something large served at a fixed rate. The last one is what a video looks
+# like to a network, and it is the only one of the three that produces a steady figure to watch.
+
+server {
+    listen 80 default_server;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Says which site answered and which address asked, which is how a tunnel is proved to be
+    # carrying what it claims.
+    location = /who {
+        default_type text/plain;
+        return 200 "site ${LAB_SITE_NAME}\nserver ${LAB_INDEX}\nyou are ${remote_addr}\n";
+    }
+
+    # One transparent pixel, for a page that has to find out whether this site answers. A browser
+    # loads an image from anywhere; every other way of asking is refused before it reaches the wire.
+    location = /pixel.png {
+        alias /payload/pixel.png;
+        default_type image/png;
+        add_header Cache-Control "no-store";
+    }
+
+    # A reply small enough that the time it takes is the network rather than the payload.
+    location = /ping {
+        default_type text/plain;
+        return 200 "pong\n";
+    }
+
+    # As fast as the tunnel allows.
+    location = /download.bin {
+        alias /payload/download.bin;
+        default_type application/octet-stream;
+        add_header Content-Disposition 'attachment; filename="download.bin"';
+    }
+
+    # At a fixed rate, which is what a stream is. The first megabyte goes at full speed so that
+    # starting one feels the way starting a video does.
+    location = /stream.bin {
+        alias /payload/stream.bin;
+        default_type application/octet-stream;
+        limit_rate_after 1m;
+        limit_rate ${LAB_STREAM_RATE};
+    }
+}
