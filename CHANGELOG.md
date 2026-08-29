@@ -5,13 +5,49 @@ All notable changes to this project are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
-Development happens on `dev`. `main` carries releases, and every entry under Unreleased moves into a
+Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged.
 
 ## [Unreleased]
 
 ### Added
 
+- Windows installer. An MSI puts the application under Program Files, adds a Start menu entry,
+  removes itself from the usual place, and puts the installation directory on the machine PATH so
+  that `ovp` works in any terminal without anyone editing an environment variable.
+- `ovp` is the front door. `ovp connect` starts the application when none is running and hands the
+  request to it, so anything driving the client calls one command and never has to know whether a
+  window happened to be open. `ovp start [--headless]` and `ovp stop` open and end it.
+- Command line options on the application itself, for a shortcut or a scheduled task that starts it:
+  `--headless` for no window and no notification area entry, `--background`, `--connect`,
+  `--disconnect`, `--disconnect-all` and `--quit`. A second launch hands its options to the copy
+  that already runs and exits.
+- A package can carry the saved sign ins. Handing over fifty profiles is most of the work left
+  undone if the recipient still has to be told fifty passwords, so the export screen offers it and
+  `ovp pack --with-credentials` does the same. It is only possible for a package, because only a
+  package is encrypted, and the screen says plainly what it means.
+- Packages can be imported from the interface. Dropping or picking a `.ovppkg` file turns the import
+  screen into one that asks for the passphrase. Until now a package could only be opened from a
+  terminal.
+- Configurations dropped on the main window open the import wizard with them.
+- `ovp completion powershell --install` writes the completion script and references it from the
+  shell profile, rather than leaving the user to paste it somewhere themselves.
+- `ovp connect --challenge <value>` answers a one time code of either kind, which is what lets the
+  challenge paths be exercised without a window.
+- A notice when a server pushes a compression setting. A current client refuses any of them and then
+  abandons the whole set of pushed options, so the tunnel reconnects forever reporting a reason that
+  names neither compression nor the server.
+- A test that every localization key the sources ask for is actually translated. A missing key is
+  not an exception: the localizer falls back to the key itself, so the defect ships as a
+  notification reading `notify.connectingTitle`.
+- Ten OpenVPN servers as a Docker Compose project, each with a site behind it. Certificates, key
+  passphrases, user names and passwords, both kinds of one time code, UDP and TCP, and the two ways
+  a server can take over a client's routing, all running at once.
+- `scripts/dev.ps1`, which stops whatever copy is open, builds, and starts what it just built. Doing
+  those by hand in the wrong order is how an old copy ends up being the one that is running.
+- A page for the lab, `lab/index.html`, listing the ten servers with their credentials and a check
+  that says which of their sites answer. It loads one pixel from each site, because a page opened
+  from a file is not allowed to ask any other way.
 - Export screen. Profiles can be written out either as one encrypted `.ovppkg` package or as one
   `.ovpn` file each. The package always requires a passphrase; plain configurations cannot be
   protected at all, because OpenVPN has to read them, and the screen says so.
@@ -41,9 +77,52 @@ version heading when one is tagged.
 - The search box is much wider and stretches with the window.
 - The mark in the title bar matches the application icon: a ring with a dot in its hole.
 - The diagnostics bundle states plainly that it is not anonymous and lists what it contains.
+- Importing and exporting are reached from the profiles page of the settings screen rather than from
+  the header, which now carries only what is used while tunnels are running.
+- Tab headers are the size of the rest of the interface. The stock size is a twenty four point
+  heading, which made the settings screen read as a different product.
+- The paths the application and the companion command use are defined once rather than in each.
 
 ### Fixed
 
+- A tunnel the server made impossible reported it several times a second forever. A client that
+  refuses the pushed options refuses them again on every attempt, as fast as it can reconnect, and
+  nothing stopped the process. The attempt is now ended once, with the reason kept rather than
+  replaced by the channel closing that follows it.
+- The explanation for a refused compression setting was only shown while a tunnel was up, which is
+  never the case for the tunnel it explains.
+- Stopping a tunnel that could not be stopped ended the application. Anything escaping a command is
+  rethrown on the user interface thread and takes the process with it; a failure to stop one tunnel
+  is now reported and the others are left alone.
+- The action buttons in the detail panel ran off the edge of it. They wrap now, which a translated
+  label needs whatever its length.
+- A connection with no credentials reported that none were available, which reads as a fault in the
+  client rather than a prompt nobody answered.
+- A copy asked to start with no window got one anyway. The lifetime shows whatever window it is
+  handed once startup returns, so deciding afterwards not to show it was not a decision that got
+  respected. This affected the autostart entry as much as `--headless`.
+- The companion command reported a failure to read the profile store as an unhandled exception with
+  a stack trace. It now says what happened in a sentence, names the running application as the
+  likely reason, and returns a code.
+- Building the installer while the application was running from the directory it publishes into
+  failed with a permission error naming a single file. It now says which process holds the
+  directory and what to do about it.
+- The option to carry saved sign ins in a package was hidden entirely when nothing was stored, which
+  is indistinguishable from the option not existing. It is shown and disabled, with a line saying
+  why.
+- Stopping a tunnel whose process had already gone left it reporting that it was disconnecting, for
+  good. The stop signal is answered by the management channel, so a channel that had closed answered
+  nothing and the wait was unbounded; every later attempt then queued behind that one. A command
+  issued after the channel has closed now fails immediately, and a disconnect always ends with the
+  connection reported as stopped whatever the far end does.
+- A tunnel that ended by itself was still counted as running. The profile looked busy, connecting it
+  again was refused as a duplicate, and the automatic reconnect decided there was nothing to
+  reconnect. Connections are now held only while they are running.
+- The notification for a connection that is starting showed `notify.connectingTitle`, because
+  nothing translated it.
+- The search box painted over the wordmark and the buttons beside it at the smallest window size. A
+  column that shares out the space left over is still measured at its content's minimum width, and
+  the minimum was wider than the space there was.
 - The status bar kept its previous language after a language change.
 
 ## [0.1.0] - 2026-08-29

@@ -161,6 +161,18 @@ the expected terminator per command.
 OpenVPN's own log echoes received commands unreliably and may repeat a previous command's text. Trust
 the responses on the socket, not the `MANAGEMENT: CMD` lines in the log file.
 
+**Only the read loop completes a command.** A command registered after that loop has ended waits for
+an answer nobody is left to send, and the wait has no timeout of its own. That is what made a
+disconnect hang: the process was already gone, the stop signal was never answered, the transition
+lock was never released and the profile reported that it was disconnecting for good. `ManagementClient`
+records the end of the read loop and refuses a command issued afterwards, and `ConnectionSupervisor`
+bounds the signal and tears down in a `finally` either way.
+
+**A connection that ends belongs to nobody.** `ConnectionManager` retires an entry as soon as the
+supervisor reports a state that means the tunnel is over and nobody asked for it. Holding it made the
+profile look busy, made connecting again fail as a duplicate, and made the automatic reconnect decide
+there was nothing to reconnect.
+
 Observed notification formats:
 
 ```
@@ -176,6 +188,25 @@ State sequence of a successful connection:
 `WAIT`, `AUTH`, `GET_CONFIG`, `ASSIGN_IP`, `ADD_ROUTES`, `CONNECTED`. The `CONNECTED` line carries the
 assigned local address, the server address and the port, which is what the dashboard displays.
 
+### Verifying against servers
+
+`lab/` is a Docker Compose project with ten OpenVPN servers, each with a site behind it, covering
+what a single server cannot: certificate only, a private key with a passphrase, user name and
+password with and without a client certificate, the same over TCP, both kinds of one time code, a
+server pushing name servers and routes, one asking to carry all traffic, and one pushing compression.
+Every server has its own tunnel network, so ten tunnels can be up at once.
+
+Two facts came out of building it and are worth not re-deriving:
+
+- **OpenVPN builds a fresh environment for a script.** An `auth-user-pass-verify` script does not
+  inherit the server process's environment, so anything it needs has to be put there with `setenv` in
+  the configuration. Without that every server in the lab behaved like the plainest one, quietly.
+- **A script can raise a dynamic challenge.** Writing `CRV1:<flags>:<state>:<base64 user>:<text>` to
+  the file named by `auth_failed_reason_file` and exiting non zero sends it to the client as the
+  reason for the refusal. Confirmed end to end against lab server seven: the client answers in the
+  next attempt with a password of `CRV1::<state>::<response>` and connects. This is the only way to
+  exercise that path without a real server that issues codes.
+
 ### Storing timestamps
 
 SQLite refuses to order or compare a value whose CLR type is `DateTimeOffset`, and reports it as a
@@ -190,6 +221,13 @@ the model.
 - With data channel offload active, a 2.7 client rejects any pushed compression setting, including
   `comp-lzo no`, and fails with `Failed to apply push options`. `pull-filter ignore` is whitelisted and
   is the supported way to defend against a server pushing options the client cannot apply.
+
+  Measured against lab server ten: the client reports `RECONNECTING` with the reason
+  `process-push-msg-failed` and loops there. Neither the state nor the reason names compression, so
+  `PushReplyParser` recognises `comp-lzo` and `compress` in the push reply and the interface says
+  which option it was. The filters are **not** applied automatically: without offload a client can
+  apply compression, and ignoring a setting the server is actually using would produce a tunnel that
+  comes up and then carries nothing.
 - A configuration without `ca`, `capath` or `peer-fingerprint` fails during option parsing, before the
   management interface starts listening. Validate this at import time so the failure is explained rather
   than observed as a process that dies immediately.

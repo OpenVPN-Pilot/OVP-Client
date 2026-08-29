@@ -7,8 +7,8 @@ three connections. It stops working somewhere around twenty. OpenVpnPilot keeps 
 process doing the tunnelling and replaces the interface around it.
 
 > **Status: early development.** The integration layer and the interface are proven end to end
-> against OpenVPN Community 2.7.6, but there is no installer yet and nothing has been released.
-> See [Roadmap](#roadmap).
+> against OpenVPN Community 2.7.6. An installer is built from this repository, but nothing has been
+> released and nothing is signed yet. See [Roadmap](#roadmap).
 
 ## Features
 
@@ -22,7 +22,10 @@ process doing the tunnelling and replaces the interface around it.
 - One time codes, both the kind presented up front and the kind raised after a refusal
 - Session history with durations and transfer volumes, exportable as CSV
 - Bulk import from files, folders and ZIP archives, plus watched folders that keep profiles in sync
-- Export as plain configurations, or as an encrypted `.ovppkg` package for another machine
+- Export as plain configurations, or as an encrypted `.ovppkg` package for another machine, which
+  can carry the saved sign ins so a whole set arrives ready to connect
+- A command line on both the application and `ovp`, so other software can bring a tunnel up before
+  it needs one
 - Notifications for connected, lost, reconnecting and failed, suppressible per event
 - Dark, light and system themes, autostart, bounded auto reconnect
 - English and German, and a new language is a JSON file rather than a new build
@@ -42,6 +45,28 @@ service. That means membership in the local Administrators group, or in the grou
 not create). Without that, configurations must live under the OpenVPN `config_dir`. The application
 reports which of these applies rather than failing with a generic error.
 
+## Installing
+
+```powershell
+pwsh installer/build.ps1
+```
+
+The script is `installer/build.ps1`; the package it describes is `installer/OpenVpnPilot.wxs`.
+It publishes the application and the `ovp` command into one directory and packages them as an MSI
+under `artifacts/release`. Installing it puts the application under Program Files, adds a Start menu
+entry, and puts the installation directory on the machine PATH so that `ovp` works in any terminal.
+It is removed from Apps and features like anything else, and removing it takes the PATH entry with
+it. The package carries the .NET runtime, so OpenVPN itself is the only prerequisite.
+
+Building the installer needs the [WiX toolset](https://wixtoolset.org):
+
+```bash
+dotnet tool install --global wix
+```
+
+The installer is deliberately not part of the solution. Adding it would put WiX between a developer
+and an ordinary build, and building an installer is not something an ordinary build should do.
+
 ## Building
 
 ```bash
@@ -53,6 +78,58 @@ dotnet test
 ```
 
 Requires the .NET 10 SDK. The user interface is built with Avalonia.
+
+To build and run what you just changed, in one step:
+
+```powershell
+pwsh scripts/dev.ps1
+```
+
+It stops whatever copy is open first, which is the part that is easy to forget: only one copy runs
+per user, so starting a new one while an old one is open hands the request to the old one and nothing
+on screen changes. `-Headless` starts it without a window, `-Connect <name>` connects a profile once
+it is up, and `-NoBuild` skips straight to starting what is already built.
+
+The build output is where `dotnet` puts it:
+
+| | |
+| --- | --- |
+| Application | `src/OpenVpnPilot.App/bin/Debug/net10.0/OpenVpnPilot.exe` |
+| Command | `src/OpenVpnPilot.Cli/bin/Debug/net10.0/ovp.exe` |
+| Installer payload | `artifacts/install`, written by `installer/build.ps1` |
+| Installer | `artifacts/release/OpenVpnPilot-<version>-win-x64.msi` |
+
+## Where things are kept
+
+Everything the application writes belongs to the user running it, so an installation for the whole
+machine still keeps each person's profiles apart.
+
+| | |
+| --- | --- |
+| Profiles, tags and history | `%LOCALAPPDATA%\OpenVpnPilot\pilot.db` |
+| Settings | `%LOCALAPPDATA%\OpenVpnPilot\settings.json`, editable by hand |
+| Credentials | `%LOCALAPPDATA%\OpenVpnPilot\secrets\`, one protected file each |
+| Logs | `%LOCALAPPDATA%\OpenVpnPilot\logs\` |
+| Added languages | `%LOCALAPPDATA%\OpenVpnPilot\lang\` |
+| Configurations while connected | `%ProgramData%\OpenVpnPilot\runtime\<user SID>\` |
+
+A materialised configuration carries its private key inline, which is why it lives under
+`%ProgramData%` with an access control list for one user rather than in a temporary directory. It
+exists only for the lifetime of a connection, and anything a crash leaves behind is removed at the
+next start.
+
+The registry holds settings that have nowhere else to go:
+
+| Key | Written by | What for |
+| --- | --- | --- |
+| `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` | the application | The autostart entry, only while "start with Windows" is on. Removing it turns autostart off. |
+| `HKLM\Software\OpenVpnPilot` | the installer | Two markers so the Start menu entry and the PATH entry can be removed again. |
+| `HKLM\...\Uninstall\<product code>` | Windows | The entry under Apps and features. |
+| `HKLM\SOFTWARE\OpenVPN` | nobody, it is only read | Where OpenVPN Community says it is installed, and which group the interactive service authorises. |
+
+Nothing else is written to the registry. Removing the product removes the two keys the installer
+made; the profile store and the credentials are deliberately left alone, because uninstalling an
+application is not the same as asking it to forget everything.
 
 ## The `ovp` command
 
@@ -76,10 +153,16 @@ ovp con site-alpha
 ovp st
 ```
 
-`ovp help <command>` explains one command. `ovp completion powershell` prints a completion script that
-offers the stored profile names.
+`ovp help <command>` explains one command.
 
-The command can be installed so it lands on PATH:
+Completion offers the commands and, wherever one is expected, the stored profile names. It reads them
+at completion time, so a profile imported a minute ago completes without reloading the shell:
+
+```bash
+ovp completion powershell --install
+```
+
+The installer puts `ovp` on PATH. Without it, the command can also be installed as a .NET tool:
 
 ```bash
 dotnet pack src/OpenVpnPilot.Cli -c Release
@@ -88,6 +171,42 @@ dotnet pack src/OpenVpnPilot.Cli -c Release
 ```bash
 dotnet tool install --global --add-source artifacts/packages OpenVpnPilot.Cli
 ```
+
+## Driving it from other software
+
+`ovp` is the only thing anything else has to call. A session manager that brings a tunnel up before
+opening a remote desktop needs one command, and it must not matter whether anyone had the
+application open:
+
+```bash
+ovp connect "site-alpha"
+```
+
+The request is handed to the application, which owns the tunnels and the store. When none is
+running, it is started first. Add `--headless` to start it with no window and no notification area
+entry, which is what something running unattended wants:
+
+```bash
+ovp connect "site-alpha" --headless
+```
+
+```bash
+ovp disconnect "site-alpha"
+```
+
+```bash
+ovp stop
+```
+
+`ovp start [--headless]` opens it without connecting anything, `ovp stop` ends it and its tunnels,
+and `ovp status` reports what is connected, one line per tunnel. Exit codes are 0 for done, 1 for a
+command that was not understood, 4 when nothing was listening, and 6 when the store could not be
+read.
+
+The application understands the same options directly, for a shortcut or a scheduled task that
+starts it: `--headless`, `--background`, `--connect`, `--disconnect`, `--disconnect-all` and
+`--quit`. Only one copy runs per user, so a second launch hands its options to the copy that already
+runs and exits.
 
 ## Organising a set
 
@@ -104,6 +223,38 @@ Language files are JSON. The ones that ship live in `lang` beside the executable
 in `lang` under the application data directory is layered on top of them, key by key. Copy `en.json`,
 translate the values, drop it in and reload from the settings screen: no rebuild, and a key you have
 not translated falls back to English rather than disappearing.
+
+## The test lab
+
+`lab/` is a Docker Compose project with ten OpenVPN servers and a site behind each of them. It exists
+because one server proves one path, and the parts of a VPN client that are hardest to get right are
+the ones a single server never exercises.
+
+```bash
+docker compose -f lab/docker-compose.yml up -d --build
+```
+
+Open `lab/index.html` for a page listing the ten servers, what each one is for, the credentials they
+want, and a check that says which of their sites answer right now. A site that answers is proof the
+tunnel is carrying traffic, which is more than a client reporting that it is connected.
+
+The ten client configurations appear in `lab/clients` once the certificate material has been built.
+Import them and the whole set is covered: a certificate on its own, a private key with a passphrase,
+a user name and password with and without a client certificate, the same over TCP, a one time code
+presented up front and one raised as the reason for a refusal, a server pushing name servers and
+routes, a server asking to carry all traffic, and a server pushing a compression setting a current
+client refuses. Every server has its own tunnel network, so all ten can be connected at once.
+
+Each site answers only through the tunnel in front of it and serves three things: something small to
+look at, something large to pull as fast as the tunnel allows, and something large served at a fixed
+rate, which is what a video looks like to a network. Credentials, addresses and names are invented
+and written into the generated configurations.
+
+```bash
+docker compose -f lab/docker-compose.yml down -v
+```
+
+That stops it and removes the certificate authority with it.
 
 ## Architecture
 
@@ -133,6 +284,7 @@ implementation of the existing interfaces rather than restructuring the applicat
 - [x] Global shortcuts, notifications, telemetry and session history
 - [x] Localization, settings, autostart and auto reconnect
 - [x] Portable packages, watched folders and a diagnostics bundle
-- [ ] Installer, signed releases and an update feed
+- [x] Installer, `ovp` on PATH, and a command line other software can drive
+- [ ] Signed releases and an update feed
 - [ ] Kill switch
 - [ ] macOS
