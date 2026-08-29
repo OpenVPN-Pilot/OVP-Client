@@ -115,4 +115,29 @@ public static class PilotCommands
     /// Reports what is connected, one line per tunnel.
     /// </summary>
     public const string Status = "status";
+
+    /// <summary>
+    /// Asks whether the application is ready to act on a command.
+    /// </summary>
+    /// <remarks>
+    /// A process that has claimed the instance is not yet one that can connect a profile by name:
+    /// the store has to be migrated and the profile list read first. Anything that starts the
+    /// application and then tells it what to do waits for <see cref="Ready"/> rather than for the
+    /// process to exist.
+    /// </remarks>
+    public const string Ping = "ping";
+
+    /// <summary>
+    /// The answer to <see cref="Ping"/> once the profile list has been read.
+    /// </summary>
+    public const string Ready = "ready";
+
+    /// <summary>
+    /// Ends the running copy, stopping its tunnels on the way out.
+    /// </summary>
+    /// <remarks>
+    /// A copy started with no window has no menu to quit from, so ending it has to be something
+    /// another process can ask for.
+    /// </remarks>
+    public const string Quit = "quit";
 }

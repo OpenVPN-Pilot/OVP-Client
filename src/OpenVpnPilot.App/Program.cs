@@ -2,23 +2,55 @@ using System.Globalization;
 using System.Text;
 using Avalonia;
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.Core.Ipc;
 
 namespace OpenVpnPilot.App;
 
 internal sealed class Program
 {
+    /// <summary>
+    /// Reported when the options could not be understood.
+    /// </summary>
+    private const int InvalidArguments = 1;
+
+    /// <summary>
+    /// Reported when actions were asked for and no copy was listening to carry them out.
+    /// </summary>
+    private const int NothingListening = 4;
+
     // Initialization code. Don't use any Avalonia, third-party APIs or any
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
     [STAThread]
     public static int Main(string[] args)
     {
+        StartupOptions options = StartupOptions.Parse(args);
+
+        if (options.Error is { } problem)
+        {
+            WriteConsole($"{problem}{Environment.NewLine}{Environment.NewLine}{StartupOptions.Usage}");
+            return InvalidArguments;
+        }
+
+        if (options.ShowHelp)
+        {
+            WriteConsole(StartupOptions.Usage);
+            return 0;
+        }
+
         SingleInstanceGuard guard = new();
 
         if (!guard.TryClaim())
         {
             // Another copy owns the profile store and the running tunnels, so this one hands over.
-            SingleInstanceGuard.RequestActivationAsync().GetAwaiter().GetResult();
+            int result = HandOver(options);
+            guard.Dispose();
+            return result;
+        }
+
+        if (options.Quit)
+        {
+            // Nothing was running, so there is nothing to end and no reason to start one.
             guard.Dispose();
             return 0;
         }
@@ -26,9 +58,7 @@ internal sealed class Program
         try
         {
             App.InstanceGuard = guard;
-
-            // Set by the autostart entry, which wants the tunnels available rather than a window.
-            App.StartInBackground = args.Contains("--background", StringComparer.Ordinal);
+            App.Startup = options;
 
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
             return 0;
@@ -44,6 +74,65 @@ internal sealed class Program
         finally
         {
             guard.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Passes the requested actions to the copy that already runs.
+    /// </summary>
+    /// <remarks>
+    /// A launcher does not know or care whether the application was already open, so the same
+    /// command line has to mean the same thing either way. Without actions this is the ordinary
+    /// case of someone starting it twice, which brings the window forward.
+    /// </remarks>
+    private static int HandOver(StartupOptions options)
+    {
+        if (!options.HasActions)
+        {
+            SingleInstanceGuard.RequestActivationAsync().GetAwaiter().GetResult();
+            return 0;
+        }
+
+        bool answered = false;
+
+        foreach (string command in options.ToCommands())
+        {
+            string? reply = PilotCommandClient.SendAsync(command).GetAwaiter().GetResult();
+
+            if (reply is null)
+            {
+                continue;
+            }
+
+            answered = true;
+
+            if (reply.Length > 0)
+            {
+                WriteConsole(reply);
+            }
+        }
+
+        return answered ? 0 : NothingListening;
+    }
+
+    /// <summary>
+    /// Writes to the terminal that started the process, when there is one.
+    /// </summary>
+    /// <remarks>
+    /// The application is a windowed executable, so it has no console of its own. Started from a
+    /// terminal it inherits that one and this is read; started from a shortcut it goes nowhere,
+    /// which is the correct outcome for a message nobody asked to see.
+    /// </remarks>
+    private static void WriteConsole(string text)
+    {
+        try
+        {
+            Console.Out.WriteLine(text);
+            Console.Out.Flush();
+        }
+        catch (IOException)
+        {
+            // There is no console attached. The exit code still carries the outcome.
         }
     }
 

@@ -28,9 +28,9 @@ public partial class App : Application
     internal static SingleInstanceGuard? InstanceGuard { get; set; }
 
     /// <summary>
-    /// True when the process was started by the autostart entry, which asks for no window.
+    /// What the command line asked for. Set before the framework starts.
     /// </summary>
-    internal static bool StartInBackground { get; set; }
+    internal static StartupOptions Startup { get; set; } = new();
 
     private IHost? host;
     private WindowCoordinator? windows;
@@ -67,7 +67,11 @@ public partial class App : Application
         windows.Attach();
 
         desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-        desktop.MainWindow = window;
+
+        // The main window is handed to the lifetime only when it is meant to appear. The lifetime
+        // shows whatever it is given once startup returns, so assigning it here and deciding later
+        // not to show it is not a choice that gets respected: a copy asked to start with no window
+        // still got one.
 
         StartServices(desktop, window, viewModel, settings);
 
@@ -78,6 +82,7 @@ public partial class App : Application
 
             // The companion command drives the tunnels this copy owns rather than starting its own.
             RemoteCommandHandler remote = host.Services.GetRequiredService<RemoteCommandHandler>();
+            remote.ShutdownRequested += (_, _) => desktop.Shutdown();
             InstanceGuard.CommandHandler = remote.HandleAsync;
         }
 
@@ -96,44 +101,91 @@ public partial class App : Application
         IServiceProvider services = host!.Services;
 
         services.GetRequiredService<SessionRecorder>().Attach();
-        services.GetRequiredService<NotificationService>().Attach();
-
         services.GetRequiredService<PingMonitor>().Start();
+
+        // A headless copy has no notification area entry, and a balloon has nothing to hang off.
+        if (!Startup.Headless)
+        {
+            services.GetRequiredService<NotificationService>().Attach();
+
+            services.GetRequiredService<NotificationService>().ProfileActivated += (_, profileId) =>
+                Dispatcher.UIThread.Post(() =>
+                {
+                    WindowCoordinator.Reveal(window);
+                    viewModel.SelectProfile(profileId);
+                });
+        }
 
         ReconnectSupervisor reconnects = services.GetRequiredService<ReconnectSupervisor>();
         reconnects.Attach();
         reconnects.Reported += (_, message) =>
             Dispatcher.UIThread.Post(() => viewModel.StatusMessage = message);
 
-        TrayIconController tray = services.GetRequiredService<TrayIconController>();
-        tray.Attach();
-        tray.ShowWindowRequested += (_, _) => WindowCoordinator.Reveal(window);
-        tray.MenuActionRequested += (_, action) => windows!.HandleTrayAction(action, desktop);
+        // A headless copy is driven by whatever launched it, so it offers nothing to click.
+        if (!Startup.Headless)
+        {
+            TrayIconController tray = services.GetRequiredService<TrayIconController>();
+            tray.Attach();
+            tray.ShowWindowRequested += (_, _) => WindowCoordinator.Reveal(window);
+            tray.MenuActionRequested += (_, action) => windows!.HandleTrayAction(action, desktop);
+        }
 
-        services.GetRequiredService<NotificationService>().ProfileActivated += (_, profileId) =>
-            Dispatcher.UIThread.Post(() =>
-            {
-                WindowCoordinator.Reveal(window);
-                viewModel.SelectProfile(profileId);
-            });
+        // A window that starts hidden still has to load, because the tray menu, the shortcuts and
+        // the commands another process sends all act on the same view model.
+        window.Opened += async (_, _) => await LoadAndAnnounceAsync(viewModel);
 
-        // A window that starts hidden still has to load, because the tray menu and the shortcuts act
-        // on the same view model.
-        window.Opened += async (_, _) => await viewModel.LoadAsync();
-
-        bool startHidden = StartInBackground || settings.Current.General.StartMinimised;
+        bool startHidden = Startup.StartsHidden || settings.Current.General.StartMinimised;
 
         if (startHidden)
         {
             // Loading is normally triggered by the window opening, which never happens here.
-            Dispatcher.UIThread.Post(async () => await viewModel.LoadAsync());
+            Dispatcher.UIThread.Post(async () => await LoadAndAnnounceAsync(viewModel));
         }
         else
         {
+            desktop.MainWindow = window;
             window.Show();
         }
 
         Dispatcher.UIThread.Post(async () => await StartBackgroundWorkAsync());
+
+        if (Startup.HasActions)
+        {
+            Dispatcher.UIThread.Post(async () => await RunStartupActionsAsync(viewModel));
+        }
+    }
+
+    /// <summary>
+    /// Reads the profile list, then reports that commands naming a profile can be answered.
+    /// </summary>
+    /// <remarks>
+    /// Whatever started this process may be waiting to tell it what to connect, and a name cannot
+    /// be matched against a list that has not been read yet.
+    /// </remarks>
+    private async Task LoadAndAnnounceAsync(MainWindowViewModel viewModel)
+    {
+        await viewModel.LoadAsync();
+        host!.Services.GetRequiredService<RemoteCommandHandler>().IsReady = true;
+    }
+
+    /// <summary>
+    /// Carries out what the command line asked for, once the profile list has been read.
+    /// </summary>
+    /// <remarks>
+    /// Loading is posted to the same queue just above, so this arrives after it. The actions go
+    /// through the same handler the companion command uses, so a profile named on the command line
+    /// is matched exactly the way one named in a terminal is.
+    /// </remarks>
+    private async Task RunStartupActionsAsync(MainWindowViewModel viewModel)
+    {
+        RemoteCommandHandler handler = host!.Services.GetRequiredService<RemoteCommandHandler>();
+
+        foreach (string command in Startup.ToCommands())
+        {
+            string reply = await handler.HandleAsync(command);
+            viewModel.StatusMessage = reply;
+            AppLog.StartupActionRan(host.Services.GetRequiredService<ILogger<App>>(), command, reply);
+        }
     }
 
     /// <summary>
@@ -162,6 +214,13 @@ public partial class App : Application
         });
 
         await watched.StartAsync();
+
+        // A shortcut that opens a window is not something a headless copy should own, and the
+        // copy that a person is using may be the one that wants them.
+        if (Startup.Headless)
+        {
+            return;
+        }
 
         HotkeyCoordinator hotkeys = services.GetRequiredService<HotkeyCoordinator>();
         hotkeys.ActionRequested += (_, action) => Dispatcher.UIThread.Post(async () =>

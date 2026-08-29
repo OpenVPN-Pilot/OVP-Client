@@ -43,11 +43,25 @@ internal static class ConnectCommand
             return 1;
         }
 
-        // The running application owns the tunnels and the window that shows them, so a request is
-        // handed to it rather than starting a second, invisible one beside it.
+        // The application owns the tunnels, the store and the window that shows them, so a request
+        // is handed to it rather than driving a second, invisible set beside it. When none is
+        // running it is started first: a command that only works when a window happens to be open
+        // is no use to anything calling it.
         if (profileName is not null && !args.Contains("--detached", StringComparer.Ordinal))
         {
             string? reply = await PilotCommandClient.SendAsync(PilotCommands.Connect + profileName);
+
+            if (reply is null && !IsConfigurationFile(profileName))
+            {
+                bool headless = args.Contains("--headless", StringComparer.Ordinal);
+
+                if (!await ApplicationLauncher.StartAsync(headless))
+                {
+                    return 4;
+                }
+
+                reply = await PilotCommandClient.SendAsync(PilotCommands.Connect + profileName);
+            }
 
             if (reply is not null)
             {
@@ -99,6 +113,31 @@ internal static class ConnectCommand
         }
     }
 
+    /// <summary>
+    /// True when the argument names a file on disk rather than a stored profile.
+    /// </summary>
+    /// <remarks>
+    /// Connecting straight from a file is the one case that does not go through the application: it
+    /// is for trying a configuration that has not been imported, and importing it silently to do so
+    /// would be a surprise.
+    /// </remarks>
+    private static bool IsConfigurationFile(string value)
+    {
+        try
+        {
+            return File.Exists(Path.GetFullPath(value));
+        }
+        catch (ArgumentException)
+        {
+            // Not a path at all, which means it is a name.
+            return false;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
+    }
+
     private static async Task<int> RunConnectedAsync(string[] args, Guid profileId, string configurationPath)
     {
         int seconds = ReadInt(args, "--seconds", 30);
@@ -106,7 +145,8 @@ internal static class ConnectCommand
 
         ConsoleCredentialProvider credentials = new(
             ReadValue(args, "--username"),
-            ReadValue(args, "--password"));
+            ReadValue(args, "--password"),
+            ReadValue(args, "--challenge"));
 
         await using ConnectionSupervisor supervisor = new(
             new WindowsOpenVpnLauncher(new InteractiveServicePipeClient()),
@@ -257,7 +297,8 @@ internal static class ConnectCommand
         {
             if (args[index].StartsWith("--", StringComparison.Ordinal))
             {
-                if (args[index] is "--profile" or "--seconds" or "--username" or "--password")
+                if (args[index] is "--profile" or "--seconds" or "--username" or "--password"
+                    or "--challenge")
                 {
                     index++;
                 }
@@ -283,15 +324,25 @@ internal static class ConnectCommand
     /// <summary>
     /// Supplies the credentials given on the command line, and reports when none were supplied.
     /// </summary>
+    /// <summary>
+    /// Answers credential requests from what was given on the command line.
+    /// </summary>
+    /// <remarks>
+    /// A one time code cannot be typed by a command that is not being watched, so it is supplied up
+    /// front. That is not how a person would use a code, and it is exactly how a test does: without
+    /// it neither kind of challenge can be exercised without a window.
+    /// </remarks>
     private sealed class ConsoleCredentialProvider : ICredentialProvider
     {
         private readonly string? username;
         private readonly string? password;
+        private readonly string? challengeResponse;
 
-        public ConsoleCredentialProvider(string? username, string? password)
+        public ConsoleCredentialProvider(string? username, string? password, string? challengeResponse)
         {
             this.username = username;
             this.password = password;
+            this.challengeResponse = challengeResponse;
         }
 
         public Task<VpnCredentials?> RequestAsync(CredentialRequest request, CancellationToken cancellationToken)
@@ -309,8 +360,24 @@ internal static class ConnectCommand
                 return Task.FromResult<VpnCredentials?>(null);
             }
 
-            Console.WriteLine($"  answering credential request for '{request.Realm}'");
-            return Task.FromResult<VpnCredentials?>(new VpnCredentials(username, password));
+            if (request.Challenge is { } challenge)
+            {
+                if (challengeResponse is null)
+                {
+                    Console.Error.WriteLine(
+                        $"  the server asked for a code: {challenge.Text}. Pass --challenge <value>.");
+                    return Task.FromResult<VpnCredentials?>(null);
+                }
+
+                Console.WriteLine($"  answering the code challenge for '{request.Realm}'");
+            }
+            else
+            {
+                Console.WriteLine($"  answering credential request for '{request.Realm}'");
+            }
+
+            return Task.FromResult<VpnCredentials?>(
+                new VpnCredentials(username, password, challengeResponse));
         }
     }
 }

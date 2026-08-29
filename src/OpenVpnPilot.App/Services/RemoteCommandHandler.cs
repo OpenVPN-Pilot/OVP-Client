@@ -30,6 +30,21 @@ public sealed class RemoteCommandHandler
         this.connections = connections;
     }
 
+    /// <summary>
+    /// Raised when another process asked this copy to end.
+    /// </summary>
+    /// <remarks>
+    /// A copy started with no window has no menu to quit from, so ending it has to be something a
+    /// launcher can ask for. Shutting down is the lifetime's business, not this handler's.
+    /// </remarks>
+    public event EventHandler? ShutdownRequested;
+
+    /// <summary>
+    /// Set once the profile list has been read, which is when a command naming a profile can be
+    /// answered truthfully.
+    /// </summary>
+    public bool IsReady { get; set; }
+
     public async Task<string> HandleAsync(string command)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -37,9 +52,22 @@ public sealed class RemoteCommandHandler
         // Everything below touches the view model, which belongs to the user interface thread.
         return await Dispatcher.UIThread.InvokeAsync(async () =>
         {
+            if (command == PilotCommands.Ping)
+            {
+                return IsReady ? PilotCommands.Ready : "starting";
+            }
+
             if (command == PilotCommands.Status)
             {
                 return DescribeStatus();
+            }
+
+            if (command == PilotCommands.Quit)
+            {
+                // Answered before shutting down, so the caller reads the reply rather than a
+                // closed pipe. Stopping the tunnels happens on the way out.
+                Dispatcher.UIThread.Post(() => ShutdownRequested?.Invoke(this, EventArgs.Empty));
+                return "Stopping.";
             }
 
             if (command.StartsWith(PilotCommands.Connect, StringComparison.Ordinal))

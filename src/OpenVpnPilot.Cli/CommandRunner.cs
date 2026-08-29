@@ -45,6 +45,8 @@ internal static class CommandRunner
         return command switch
         {
             "doctor" => await RunDoctorAsync(),
+            "start" => await StartApplicationCommand.RunAsync(args[1..]),
+            "stop" => await StopApplicationCommand.RunAsync(),
             "connect" => await ConnectCommand.RunAsync(args[1..]),
             "disconnect" => await DisconnectCommand.RunAsync(args[1..]),
             "status" => await StatusCommand.RunAsync(),
@@ -68,6 +70,8 @@ internal static class CommandRunner
         "--help" or "-h" or "help" or "-?" => "help",
         "--version" or "-v" or "version" => "version",
         "dr" or "doctor" => "doctor",
+        "start" or "open" or "up" => "start",
+        "stop" or "quit" or "exit" => "stop",
         "ls" or "list" => "list",
         "con" or "conn" or "connect" => "connect",
         "dis" or "disconnect" => "disconnect",
@@ -130,6 +134,8 @@ internal static class CommandRunner
         Console.WriteLine();
         Console.WriteLine("Commands:");
         Console.WriteLine("  doctor, dr                 Check whether OpenVPN is installed and usable.");
+        Console.WriteLine("  start [--headless]         Start the application, with or without a window.");
+        Console.WriteLine("  stop                       End the application and its tunnels.");
         Console.WriteLine("  list, ls                   List the profiles in the local store.");
         Console.WriteLine("  status, st                 Show what is currently connected.");
         Console.WriteLine("  connect, con <name>        Connect a profile.");
@@ -146,13 +152,22 @@ internal static class CommandRunner
         Console.WriteLine("  -h, --help [command]       Show this text, or the help for one command.");
         Console.WriteLine("  -v, --version              Print the version.");
         Console.WriteLine();
-        Console.WriteLine("When the application is running, connect, disconnect and status are handed to");
-        Console.WriteLine("it so they act on the tunnels its window shows.");
+        Console.WriteLine("Exit code 6 means the profile store could not be read or written. The most");
+        Console.WriteLine("common reason is the application writing to it at the same moment.");
+        Console.WriteLine();
+        Console.WriteLine("The application owns the tunnels and the profile store, so connect, disconnect");
+        Console.WriteLine("and status are handed to it. Connecting starts it first when it is not running, so");
+        Console.WriteLine("this command is all anything else has to call.");
         Console.WriteLine();
         Console.WriteLine("Examples:");
         Console.WriteLine(@"  ovp add C:\profiles --commit");
         Console.WriteLine("  ovp con site-alpha");
+        Console.WriteLine("  ovp con site-alpha --headless    start with no window, then connect");
         Console.WriteLine("  ovp dis --all");
+        Console.WriteLine("  ovp stop");
+        Console.WriteLine();
+        Console.WriteLine("Completion for the current shell:");
+        Console.WriteLine("  ovp completion powershell --install");
         return 0;
     }
 
@@ -170,6 +185,27 @@ internal static class CommandRunner
                 Console.WriteLine("OpenVPN configuration directory.");
                 Console.WriteLine();
                 Console.WriteLine("Exit codes: 0 ready, 2 something blocks connecting.");
+                return 0;
+
+            case "start":
+                Console.WriteLine("ovp start [--headless]");
+                Console.WriteLine("Alias: open, up");
+                Console.WriteLine();
+                Console.WriteLine("Starts the application. Only one copy runs per user, so starting one");
+                Console.WriteLine("that is already running does nothing and reports so.");
+                Console.WriteLine();
+                Console.WriteLine("  --headless             No window and no notification area entry. The");
+                Console.WriteLine("                         tunnels are driven by this command alone.");
+                Console.WriteLine();
+                Console.WriteLine("Exit codes: 0 running, 4 it could not be started.");
+                return 0;
+
+            case "stop":
+                Console.WriteLine("ovp stop");
+                Console.WriteLine("Alias: quit, exit");
+                Console.WriteLine();
+                Console.WriteLine("Ends the application. Its tunnels are stopped on the way out. Reports");
+                Console.WriteLine("that nothing is running rather than failing when none is.");
                 return 0;
 
             case "list":
@@ -223,16 +259,22 @@ internal static class CommandRunner
                 Console.WriteLine("ovp connect <config file> [options]");
                 Console.WriteLine("Alias: con, conn");
                 Console.WriteLine();
-                Console.WriteLine("With the application running, the request is handed to it and the tunnel");
-                Console.WriteLine("appears in its window. Otherwise the connection is made by this command,");
-                Console.WriteLine("which prints each state change until the time is up and then disconnects.");
+                Console.WriteLine("The request is handed to the application, which owns the tunnels and the");
+                Console.WriteLine("store. When none is running it is started first, so this works whether or");
+                Console.WriteLine("not anyone had it open. Naming a configuration file instead of a stored");
+                Console.WriteLine("profile connects from this command alone, printing each state change until");
+                Console.WriteLine("the time is up and then disconnecting, which is for trying a file that has");
+                Console.WriteLine("not been imported.");
                 Console.WriteLine();
                 Console.WriteLine("  --profile <name>       Same as passing the name directly.");
+                Console.WriteLine("  --headless             When the application has to be started, start it");
+                Console.WriteLine("                         with no window and no notification area entry.");
                 Console.WriteLine("  --seconds <n>          How long to stay connected. Default 30.");
                 Console.WriteLine("  --protect-routes       Ignore pushed routing and DNS changes, so the");
                 Console.WriteLine("                         host keeps its own default route.");
                 Console.WriteLine("  --username <name>      User name for profiles that need credentials.");
                 Console.WriteLine("  --password <value>     Password for profiles that need credentials.");
+                Console.WriteLine("  --challenge <value>    Answer for a one time code, of either kind.");
                 Console.WriteLine("  --detached             Do not hand the request to the running application.");
                 Console.WriteLine();
                 Console.WriteLine("Exit codes: 0 connected, 2 launch refused, 3 failed, 5 never connected.");
@@ -264,6 +306,10 @@ internal static class CommandRunner
                 Console.WriteLine("  --profile <name>       Only profiles matching that name.");
                 Console.WriteLine("  --tag <name>           Only profiles carrying that tag.");
                 Console.WriteLine("  --passphrase <value>   Required. The key that protects the package.");
+                Console.WriteLine("  --with-credentials     Also carry the saved user names and passwords,");
+                Console.WriteLine("                         so the recipient does not have to enter fifty of");
+                Console.WriteLine("                         them. Anyone with the file and the passphrase can");
+                Console.WriteLine("                         then connect as you, so send the two separately.");
                 return 0;
 
             case "unpack":
@@ -274,6 +320,9 @@ internal static class CommandRunner
                 Console.WriteLine("A configuration the store already holds is recognised by its contents and");
                 Console.WriteLine("skipped, and a name that is taken gets a suffix, so importing the same");
                 Console.WriteLine("package twice changes nothing the second time and never replaces anything.");
+                Console.WriteLine();
+                Console.WriteLine("Saved sign ins the package carries are written into this machine's");
+                Console.WriteLine("protected storage, under the profiles they belong to.");
                 Console.WriteLine();
                 Console.WriteLine("  --commit               Write the package into the store.");
                 Console.WriteLine("  --passphrase <value>   Open a protected package.");

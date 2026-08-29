@@ -18,4 +18,10 @@ internal static partial class AppLog
         Level = LogLevel.Information,
         Message = "Closed {Count} session(s) that a previous run left open.")]
     public static partial void AbandonedSessionsClosed(ILogger logger, int count);
+
+    [LoggerMessage(
+        EventId = 3002,
+        Level = LogLevel.Information,
+        Message = "Command line action '{Command}' answered: {Reply}")]
+    public static partial void StartupActionRan(ILogger logger, string command, string reply);
 }

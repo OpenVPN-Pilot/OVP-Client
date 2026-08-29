@@ -199,82 +199,6 @@ internal static class ExportCommand
 }
 
 /// <summary>
-/// Prints a completion script for the shell the user names.
-/// </summary>
-internal static class CompletionCommand
-{
-    public static int Run(string[] args)
-    {
-        string shell = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
-
-        switch (shell)
-        {
-            case "powershell" or "pwsh":
-                Console.WriteLine(PowerShellScript);
-                return 0;
-
-            case "bash":
-                Console.WriteLine(BashScript);
-                return 0;
-
-            default:
-                Console.Error.WriteLine("Name a shell: powershell or bash.");
-                return 1;
-        }
-    }
-
-    /// <summary>
-    /// Profile names come from the store at completion time, so a newly imported profile can be
-    /// completed without reloading the shell.
-    /// </summary>
-    private const string PowerShellScript = """
-        Register-ArgumentCompleter -Native -CommandName ovp -ScriptBlock {
-            param($wordToComplete, $commandAst, $cursorPosition)
-
-            $commands = @('doctor','list','status','connect','disconnect','import','export','pack','unpack','favourite','remove','completion','help')
-            $tokens = $commandAst.CommandElements | Select-Object -Skip 1
-
-            if ($tokens.Count -le 1) {
-                $commands | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
-                    [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
-                }
-                return
-            }
-
-            $verb = $tokens[0].ToString()
-            if ($verb -in @('connect','con','conn','disconnect','dis','favourite','fav','remove','rm')) {
-                ovp list --names 2>$null | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
-                    [System.Management.Automation.CompletionResult]::new("'$_'", $_, 'ParameterValue', $_)
-                }
-            }
-        }
-        """;
-
-    private const string BashScript = """
-        _ovp_complete() {
-            local current previous commands
-            current="${COMP_WORDS[COMP_CWORD]}"
-            previous="${COMP_WORDS[1]}"
-            commands="doctor list status connect disconnect import export pack unpack favourite remove completion help"
-
-            if [ "$COMP_CWORD" -eq 1 ]; then
-                COMPREPLY=( $(compgen -W "$commands" -- "$current") )
-                return
-            fi
-
-            case "$previous" in
-                connect|con|conn|disconnect|dis|favourite|fav|remove|rm)
-                    local names
-                    names="$(ovp list --names 2>/dev/null)"
-                    COMPREPLY=( $(compgen -W "$names" -- "$current") )
-                    ;;
-            esac
-        }
-        complete -F _ovp_complete ovp
-        """;
-}
-
-/// <summary>
 /// Shared argument parsing for the commands.
 /// </summary>
 internal static class ArgumentReader
@@ -329,7 +253,7 @@ internal static class ArgumentReader
 
     private static bool TakesValue(string flag) => flag
         is "--profile" or "--tag" or "--slot" or "--seconds"
-        or "--username" or "--password" or "--passphrase";
+        or "--username" or "--password" or "--passphrase" or "--challenge";
 }
 
 /// <summary>
