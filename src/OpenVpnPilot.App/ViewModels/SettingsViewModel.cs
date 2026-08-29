@@ -94,6 +94,20 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// </summary>
     public event EventHandler<bool>? Closed;
 
+    /// <summary>
+    /// Raised when a screen reached from here has to be opened, such as the import wizard.
+    /// </summary>
+    /// <remarks>
+    /// The settings screen does not own the other windows any more than the main window does, so it
+    /// asks for one in the same way and whoever coordinates the windows decides what that means.
+    /// </remarks>
+    public event EventHandler<AppScreen>? ScreenRequested;
+
+    /// <summary>
+    /// Raised when the profile list should be read from the store again.
+    /// </summary>
+    public event EventHandler? ProfileReloadRequested;
+
     public ObservableCollection<LanguageChoice> Languages { get; }
 
     public ObservableCollection<ThemeChoice> Themes { get; }
@@ -386,6 +400,28 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     [RelayCommand]
     private void Cancel() => Closed?.Invoke(this, false);
+
+    [RelayCommand]
+    private void OpenImport() => ScreenRequested?.Invoke(this, AppScreen.Import);
+
+    [RelayCommand]
+    private void OpenExport() => ScreenRequested?.Invoke(this, AppScreen.Export);
+
+    /// <summary>
+    /// Reads the profile list from the store again.
+    /// </summary>
+    /// <remarks>
+    /// The list keeps itself current for everything the window does: an import, an edit and a watched
+    /// directory all reload it. What it cannot see is the store being changed from outside, by the
+    /// companion command in a terminal or by a second machine writing to a synchronised copy. This is
+    /// the way back from that, and it is here rather than in the header because it is needed rarely.
+    /// </remarks>
+    [RelayCommand]
+    private void ReloadProfiles()
+    {
+        ProfileReloadRequested?.Invoke(this, EventArgs.Empty);
+        StatusMessage = localizer["settings.profilesReloaded"];
+    }
 
     [RelayCommand]
     private async Task ForgetStoredCredentialsAsync()

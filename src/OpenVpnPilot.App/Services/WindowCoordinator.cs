@@ -19,14 +19,14 @@ namespace OpenVpnPilot.App.Services;
 public sealed class WindowCoordinator
 {
     private readonly IServiceProvider services;
-    private readonly Window mainWindow;
+    private readonly MainWindow mainWindow;
     private readonly MainWindowViewModel viewModel;
     private readonly IClassicDesktopStyleApplicationLifetime desktop;
     private readonly Dictionary<AppScreen, Window> open = [];
 
     public WindowCoordinator(
         IServiceProvider services,
-        Window mainWindow,
+        MainWindow mainWindow,
         MainWindowViewModel viewModel,
         IClassicDesktopStyleApplicationLifetime desktop)
     {
@@ -44,6 +44,11 @@ public sealed class WindowCoordinator
     public void Attach()
     {
         viewModel.ScreenRequested += (_, screen) => Open(screen);
+        mainWindow.FilesDropped += (_, paths) => OpenImport(paths);
+
+        // A copy that started with no window has none to own a dialog. The first time the window is
+        // shown, from the notification area or a shortcut, it becomes the one dialogs belong to.
+        mainWindow.Opened += (_, _) => desktop.MainWindow = mainWindow;
 
         mainWindow.Closing += (_, args) =>
         {
@@ -101,6 +106,22 @@ public sealed class WindowCoordinator
 
             default:
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Opens the import wizard, optionally with sources already picked out for it.
+    /// </summary>
+    public void OpenImport(IReadOnlyList<string>? paths = null)
+    {
+        Open(AppScreen.Import);
+
+        if (paths is { Count: > 0 }
+            && open.TryGetValue(AppScreen.Import, out Window? window)
+            && window.DataContext is ImportViewModel model)
+        {
+            // Fire and forget: examining reports its own outcome on the screen that is now open.
+            _ = model.ExamineAsync(paths);
         }
     }
 
@@ -191,6 +212,8 @@ public sealed class WindowCoordinator
         SettingsWindow window = new() { DataContext = model };
 
         model.Closed += (_, _) => window.Close();
+        model.ScreenRequested += (_, screen) => Open(screen);
+        model.ProfileReloadRequested += async (_, _) => await viewModel.LoadAsync();
         window.Opened += async (_, _) => await model.LoadAsync();
 
         return window;

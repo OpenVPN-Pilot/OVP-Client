@@ -29,11 +29,11 @@
     },
     "header": {
       "search": "Nach Name, Host oder Protokoll suchen",
-      "refresh": "Aktualisieren",
       "disconnectAll": "Alle trennen",
       "settings": "Einstellungen",
       "import": "Importieren",
-      "export": "Exportieren"
+      "export": "Exportieren",
+      "refresh": "Aktualisieren"
     },
     "nav": {
       "library": "BIBLIOTHEK",
@@ -67,6 +67,7 @@
       "noReply": "Keine Antwort",
       "routes": "ÜBERMITTELTE ROUTEN",
       "dns": "ÜBERMITTELTES DNS",
+      "compressionRefused": "Dieser Server schickt eine Komprimierungseinstellung. Ein aktueller OpenVPN-Client lehnt jede davon ab, auch eine, die Komprimierung ausschaltet, und verwirft dann alle übermittelten Optionen. Genau deshalb verbindet sich der Tunnel immer wieder neu. Mit pull-filter ignore \"comp-lzo\" und pull-filter ignore \"compress\" im Profil klappt die Verbindung trotzdem.",
       "defaultRouteRefused": "Der Server wollte den gesamten Verkehr übernehmen. Dieses Profil ignoriert das, daher behält der Host seine eigene Standardroute. Ändern Sie es im Profil, wenn der Tunnel alles tragen soll.",
       "signInAgain": "Neu anmelden",
       "signInAgainHint": "Vergisst die für dieses Profil gespeicherten Anmeldedaten, sodass die nächste Verbindung danach fragt. Nützlich, wenn sich das Passwort auf dem Server geändert hat."
@@ -95,6 +96,8 @@
       "configurationUnreadable": "Die Konfiguration für '{0}' konnte nicht gelesen werden.",
       "connecting": "Verbindung zu {0} wird aufgebaut.",
       "disconnected": "{0} getrennt.",
+      "disconnectFailed": "{0} konnte nicht getrennt werden: {1}",
+      "disconnectAllFailed": "Es konnte nicht alles getrennt werden: {0}",
       "allStopped": "Alle Verbindungen beendet.",
       "profileConnected": "{0} ist verbunden.",
       "profileReconnecting": "{0} verbindet neu. {1}",
@@ -132,6 +135,8 @@
       "hint": "Eingabe verbindet   Pfeiltasten bewegen   Escape schließt"
     },
     "notify": {
+      "connectingTitle": "Verbindung wird aufgebaut",
+      "connectingMessage": "{0} verbindet.",
       "connectedTitle": "Verbunden",
       "connectedMessage": "{0} ist verbunden.",
       "disconnectedTitle": "Getrennt",
@@ -195,7 +200,13 @@
       "clearHistory": "Verbindungsverlauf löschen",
       "historyCleared": "{0} Sitzung(en) entfernt.",
       "conflictNotSaved": "Zwei Tastenkürzel verwenden dieselbe Kombination. Es wurde nichts gespeichert.",
-      "tabWatch": "Überwachte Ordner",
+      "tabProfiles": "Profile",
+      "watchSection": "Überwachte Ordner",
+      "transfer": "Import und Export",
+      "transferHint": "Der Importassistent liest .ovpn-Dateien, Ordner, ZIP-Archive und .ovppkg-Pakete. Der Export schreibt einfache Konfigurationen oder ein verschlüsseltes Paket, das einen ganzen Satz auf einen anderen Rechner mitnimmt.",
+      "reloadProfiles": "Liste neu laden",
+      "reloadProfilesHint": "Die Liste hält sich für alles aktuell, was in diesem Fenster geschieht. Neu laden ist nötig, wenn der Bestand von aussen geändert wurde, etwa durch den Befehl ovp in einem Terminal.",
+      "profilesReloaded": "Die Profilliste wurde neu gelesen.",
       "diagnostics": "Diagnosepaket schreiben",
       "diagnosticsHint": "Fasst den Umgebungsbericht, die Protokolle und eine Profilliste in einem Archiv für eine Supportanfrage zusammen. Konfigurationen und Anmeldedaten sind nie enthalten.",
       "diagnosticsWritten": "{0} Einträge nach {1} geschrieben.",
@@ -258,6 +269,12 @@
       "commit": "Importieren",
       "summary": "{0} Datei(en) geprüft: {1} importierbar, {2} doppelt, {3} abgelehnt.",
       "stored": "{0} Profil(e) importiert.",
+      "packageTitle": "Paket öffnen",
+      "packageChosen": "{0} ist ein Paket. Geben Sie die Passphrase ein, um es zu öffnen.",
+      "packageHint": "Ein Paket ist verschlüsselt, sein Inhalt lässt sich also erst nach dem Öffnen zeigen. Was bereits im Bestand ist, wird am Inhalt erkannt und nicht angetastet.",
+      "packageApplied": "{0} Profil(e) importiert, {1} bereits vorhanden.",
+      "packageAppliedWithCredentials": "{0} Profil(e) importiert, {1} bereits vorhanden, {2} gespeicherte Anmeldung(en) wiederhergestellt.",
+      "packageRefused": "Das Paket konnte nicht geöffnet werden. Die Passphrase ist falsch, oder die Datei wurde nachträglich verändert.",
       "unsupported": "Verwendet Skriptdirektiven: {0}",
       "missingFiles": "Referenzierte Dateien nicht gefunden: {0}",
       "outcome": {
@@ -318,6 +335,11 @@
       "passphraseMismatch": "Die beiden Eingaben stimmen nicht überein.",
       "write": "Exportieren",
       "packageWritten": "{0} Profil(e) nach {1} geschrieben.",
+      "packageWrittenWithCredentials": "{0} Profil(e) und {1} gespeicherte Anmeldung(en) nach {2} geschrieben.",
+      "includeCredentials": "Gespeicherte Anmeldungen mitgeben",
+      "credentialsNone": "Keines der gewählten Profile hat eine gespeicherte Anmeldung, es gibt also nichts mitzugeben. Gespeichert wird eine Anmeldung, wenn eine Verbindung danach fragt und die Abfrage sie sich merken soll.",
+      "credentialsAvailable": "{0} gespeicherte Anmeldung(en) gehören zu den gewählten Profilen.",
+      "credentialsWarning": "Wer diese Datei und ihre Passphrase hat, kann sich als Sie verbinden. Geben Sie die Passphrase getrennt vom Paket weiter, und löschen Sie Gespeichertes auf der Seite Anmeldedaten in den Einstellungen, wenn das nicht gewollt ist.",
       "configurationsWritten": "{0} Konfiguration(en) nach {1} geschrieben."
     }
   }

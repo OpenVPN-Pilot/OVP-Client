@@ -29,11 +29,11 @@
     },
     "header": {
       "search": "Search by name, host or protocol",
-      "refresh": "Refresh",
       "disconnectAll": "Disconnect all",
       "settings": "Settings",
       "import": "Import",
-      "export": "Export"
+      "export": "Export",
+      "refresh": "Refresh"
     },
     "nav": {
       "library": "LIBRARY",
@@ -67,6 +67,7 @@
       "noReply": "No reply",
       "routes": "PUSHED ROUTES",
       "dns": "PUSHED DNS",
+      "compressionRefused": "This server pushed a compression setting. A current OpenVPN client refuses any of them, including one that turns compression off, and then abandons the whole set of pushed options, which is why the tunnel keeps reconnecting. Add pull-filter ignore \"comp-lzo\" and pull-filter ignore \"compress\" to the profile to connect anyway.",
       "defaultRouteRefused": "The server asked to carry all traffic. This profile ignores that, so the host keeps its own default route. Change it in the profile if the tunnel is meant to carry everything.",
       "signInAgain": "Sign in again",
       "signInAgainHint": "Forgets the credentials stored for this profile so the next connection asks for them. Use it when the password changed on the server."
@@ -95,6 +96,8 @@
       "configurationUnreadable": "The configuration for '{0}' could not be read.",
       "connecting": "Connecting to {0}.",
       "disconnected": "Disconnected {0}.",
+      "disconnectFailed": "{0} could not be stopped: {1}",
+      "disconnectAllFailed": "Not everything could be stopped: {0}",
       "allStopped": "All connections stopped.",
       "profileConnected": "{0} is connected.",
       "profileReconnecting": "{0} is reconnecting. {1}",
@@ -132,6 +135,8 @@
       "hint": "Enter connects   Arrow keys move   Escape closes"
     },
     "notify": {
+      "connectingTitle": "Connecting",
+      "connectingMessage": "{0} is connecting.",
       "connectedTitle": "Connected",
       "connectedMessage": "{0} is connected.",
       "disconnectedTitle": "Disconnected",
@@ -195,7 +200,13 @@
       "clearHistory": "Clear the connection history",
       "historyCleared": "{0} session(s) removed.",
       "conflictNotSaved": "Two shortcuts use the same combination. Nothing was saved.",
-      "tabWatch": "Watched folders",
+      "tabProfiles": "Profiles",
+      "watchSection": "Watched folders",
+      "transfer": "Import and export",
+      "transferHint": "The import wizard reads .ovpn files, folders, ZIP archives and .ovppkg packages. Export writes plain configurations, or one encrypted package that carries a whole set to another machine.",
+      "reloadProfiles": "Reload the list",
+      "reloadProfilesHint": "The list keeps itself current for anything done in this window. Reload it after the store was changed from somewhere else, such as the ovp command in a terminal.",
+      "profilesReloaded": "The profile list was read again.",
       "diagnostics": "Write a diagnostics bundle",
       "diagnosticsHint": "Collects the environment report, the logs and a profile listing into one archive for a support request. Configurations and credentials are never included.",
       "diagnosticsWritten": "{0} item(s) written to {1}.",
@@ -258,6 +269,12 @@
       "commit": "Import",
       "summary": "{0} file(s) examined: {1} importable, {2} duplicate, {3} rejected.",
       "stored": "{0} profile(s) imported.",
+      "packageTitle": "Open a package",
+      "packageChosen": "{0} is a package. Enter its passphrase to open it.",
+      "packageHint": "A package is encrypted, so its contents cannot be shown until it is opened. Anything already in the store is recognised by its contents and left alone.",
+      "packageApplied": "{0} profile(s) imported, {1} already stored.",
+      "packageAppliedWithCredentials": "{0} profile(s) imported, {1} already stored, {2} saved sign in(s) restored.",
+      "packageRefused": "The package could not be opened. The passphrase is wrong, or the file was altered after it was written.",
       "unsupported": "Uses script directives: {0}",
       "missingFiles": "Referenced files not found: {0}",
       "outcome": {
@@ -318,6 +335,11 @@
       "passphraseMismatch": "The two entries do not match.",
       "write": "Export",
       "packageWritten": "{0} profile(s) written to {1}.",
+      "packageWrittenWithCredentials": "{0} profile(s) and {1} saved sign in(s) written to {2}.",
+      "includeCredentials": "Include the saved sign ins",
+      "credentialsNone": "None of the selected profiles has a saved sign in, so there is nothing to carry. A sign in is saved when a connection asks for one and the prompt is told to remember it.",
+      "credentialsAvailable": "{0} saved sign in(s) belong to the selected profiles.",
+      "credentialsWarning": "Anyone who has this file and its passphrase can connect as you. Send the passphrase separately from the package, and use the credentials page in the settings to clear what is stored if that is not what you want.",
       "configurationsWritten": "{0} configuration(s) written to {1}."
     }
   }

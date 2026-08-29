@@ -17,11 +17,18 @@
 
   <Grid RowDefinitions="Auto,*,Auto">
 
-    <!-- Header: identity on the left, search in the middle, actions on the right. -->
+    <!--
+      Header: identity on the left, search in the middle, actions on the right.
+
+      The header is clipped and the search box carries no minimum width, because a star column is
+      still measured at its child's minimum size. A minimum wider than the space left over is exactly
+      how a control ends up painted over the ones beside it, which is what the search box did to the
+      wordmark and the buttons at the smallest window size.
+    -->
     <Border Grid.Row="0" Background="{DynamicResource SurfaceSidebar}"
             BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1"
-            Padding="18,13">
-      <Grid ColumnDefinitions="Auto,*,Auto">
+            Padding="18,13" ClipToBounds="True">
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
 
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
           <Border Width="22" Height="22" CornerRadius="11"
@@ -40,21 +47,20 @@
 
         <TextBox Grid.Column="1" Name="SearchBox"
                  PlaceholderText="{loc:Translate header.search}"
-                 Margin="24,0" MinWidth="320"
+                 MinWidth="0" MaxWidth="460"
                  HorizontalAlignment="Stretch"
                  Text="{Binding SearchTerm}" />
 
+        <!--
+          Only what is used while working with tunnels. Importing and exporting are occasional and
+          live on the profiles page of the settings screen, so the header stays legible when the
+          window is small.
+        -->
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-          <Button Content="{loc:Translate header.import}" Classes="quiet"
-                  Command="{Binding OpenImportCommand}" />
-          <Button Content="{loc:Translate header.export}" Classes="quiet"
-                  Command="{Binding OpenExportCommand}" />
           <Button Content="{loc:Translate nav.history}" Classes="quiet"
                   Command="{Binding OpenHistoryCommand}" />
           <Button Content="{loc:Translate header.settings}" Classes="quiet"
                   Command="{Binding OpenSettingsCommand}" />
-          <Button Content="{loc:Translate header.refresh}" Classes="quiet"
-                  Command="{Binding RefreshCommand}" />
           <Button Content="{loc:Translate header.disconnectAll}"
                   Command="{Binding DisconnectAllCommand}"
                   IsEnabled="{Binding HasActiveConnections}" />
@@ -213,7 +219,12 @@
               </StackPanel>
             </StackPanel>
 
-            <StackPanel Orientation="Horizontal" Spacing="8">
+            <!--
+              Wrapping, not a row. The panel is a fixed width and the labels are translated, so a
+              row can only ever be as good as the longest translation somebody has not written yet.
+              A button that runs off the edge is worse than one on a second line.
+            -->
+            <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
               <Button Content="{loc:Translate profile.connect}" Classes="primary" MinWidth="106"
                       IsVisible="{Binding SelectedProfile.IsIdle}"
                       Command="{Binding ConnectCommand}"
@@ -232,7 +243,7 @@
                       IsVisible="{Binding SelectedProfile.RequiresCredentials}"
                       Command="{Binding SignInAgainCommand}"
                       CommandParameter="{Binding SelectedProfile}" />
-            </StackPanel>
+            </WrapPanel>
 
             <Border Classes="divider" />
 
@@ -317,6 +328,19 @@
                            Text="{Binding SelectedProfile.TagsDisplay}" />
               </Grid>
             </StackPanel>
+
+            <!--
+              Outside the block that only appears while a tunnel is up. This is the explanation for
+              a tunnel that never comes up at all, so showing it only once connected would be
+              showing it only when it is not needed.
+            -->
+            <Border CornerRadius="7" Padding="12,10"
+                    Background="{DynamicResource StateFailedSoft}"
+                    IsVisible="{Binding SelectedProfile.HasRefusedCompression}">
+              <TextBlock TextWrapping="Wrap" FontSize="12"
+                         Foreground="{DynamicResource StateFailed}"
+                         Text="{loc:Translate profile.compressionRefused}" />
+            </Border>
 
             <Border CornerRadius="7" Padding="12,10"
                     Background="{DynamicResource StatePendingSoft}"

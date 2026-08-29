@@ -117,6 +117,7 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(DnsDisplay))]
     [NotifyPropertyChangedFor(nameof(HasPushedOptions))]
     [NotifyPropertyChangedFor(nameof(HasRefusedDefaultRoute))]
+    [NotifyPropertyChangedFor(nameof(HasRefusedCompression))]
     public partial VpnConnectionStatus Status { get; set; } = VpnConnectionStatus.Disconnected;
 
     public bool IsConnected => Status.State == VpnConnectionState.Connected;
@@ -190,6 +191,16 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     /// </remarks>
     public bool HasRefusedDefaultRoute =>
         Status.ServerRequestedDefaultRoute && ProtectRoutes != false;
+
+    /// <summary>
+    /// True when the server pushed a compression setting this client cannot apply.
+    /// </summary>
+    /// <remarks>
+    /// Worth saying plainly, because the failure that follows names neither compression nor the
+    /// server: the tunnel reconnects forever reporting that it could not process the push message,
+    /// and nothing else in the interface would reveal which option it was.
+    /// </remarks>
+    public bool HasRefusedCompression => Status.ServerRequestedCompression;
 
     public string AuthenticationDisplay => RequiresCredentials
         ? localizer["profile.authPassword"]

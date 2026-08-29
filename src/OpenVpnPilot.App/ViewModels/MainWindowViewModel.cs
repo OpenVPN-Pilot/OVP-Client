@@ -427,6 +427,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         "--pull-filter ignore \"block-outside-dns\"",
     ];
 
+    /// <summary>
+    /// Stops one tunnel.
+    /// </summary>
+    /// <remarks>
+    /// Anything that escapes a command is rethrown on the user interface thread and ends the
+    /// process. Stopping a tunnel talks to a socket and to a process that may already be gone, which
+    /// is the least surprising place for that to happen, and a failure to stop something is never
+    /// worth losing every other tunnel over.
+    /// </remarks>
     [RelayCommand]
     private async Task DisconnectAsync(ProfileItemViewModel? profile)
     {
@@ -436,15 +445,31 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        await connections.DisconnectAsync(profile.Id);
-        StatusMessage = localizer.Translate("status.disconnected", profile.Name);
+        try
+        {
+            await connections.DisconnectAsync(profile.Id);
+            StatusMessage = localizer.Translate("status.disconnected", profile.Name);
+        }
+        catch (Exception exception)
+            when (exception is IOException or InvalidOperationException or ObjectDisposedException)
+        {
+            StatusMessage = localizer.Translate("status.disconnectFailed", profile.Name, exception.Message);
+        }
     }
 
     [RelayCommand]
     private async Task DisconnectAllAsync()
     {
-        await connections.DisconnectAllAsync();
-        StatusMessage = localizer["status.allStopped"];
+        try
+        {
+            await connections.DisconnectAllAsync();
+            StatusMessage = localizer["status.allStopped"];
+        }
+        catch (Exception exception)
+            when (exception is IOException or InvalidOperationException or ObjectDisposedException)
+        {
+            StatusMessage = localizer.Translate("status.disconnectAllFailed", exception.Message);
+        }
     }
 
     [RelayCommand]
@@ -536,9 +561,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             ? localizer.Translate("status.noStoredCredentials", profile.Name)
             : localizer.Translate("status.credentialsForgotten", profile.Name);
     }
-
-    [RelayCommand]
-    private Task RefreshAsync() => LoadAsync();
 
     [RelayCommand]
     private void OpenSettings() => ScreenRequested?.Invoke(this, AppScreen.Settings);
