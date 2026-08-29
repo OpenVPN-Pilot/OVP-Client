@@ -2,6 +2,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:OpenVpnPilot.App.ViewModels"
         xmlns:loc="using:OpenVpnPilot.App.Localization"
+        xmlns:conv="using:OpenVpnPilot.App.Converters"
+        xmlns:services="using:OpenVpnPilot.App.Services"
         x:Class="OpenVpnPilot.App.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Width="760" Height="680"
@@ -200,6 +202,49 @@
         </ScrollViewer>
       </TabItem>
 
+      <!-- Watched folders -->
+      <TabItem Header="{loc:Translate settings.tabWatch}">
+        <Grid RowDefinitions="Auto,*,Auto">
+          <TextBlock Grid.Row="0" Margin="16,14,16,8" Classes="muted" TextWrapping="Wrap"
+                     Text="{loc:Translate watch.hint}" />
+
+          <Grid Grid.Row="1" Margin="16,0">
+            <ListBox Classes="records" ItemsSource="{Binding WatchedFolders}"
+                     SelectedItem="{Binding SelectedWatchedFolder}"
+                     IsVisible="{Binding HasWatchedFolders}">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="services:WatchedFolderRecord">
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding Path}" Classes="body"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Classes="muted" FontSize="11"
+                               Text="{Binding LastScanAt, Converter={x:Static conv:AppConverters.LastScan}}" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+
+            <TextBlock Text="{loc:Translate watch.empty}" Classes="muted"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       IsVisible="{Binding !HasWatchedFolders}" />
+          </Grid>
+
+          <StackPanel Grid.Row="2" Margin="16,10,16,16" Spacing="10">
+            <StackPanel Orientation="Horizontal" Spacing="16">
+              <CheckBox Content="{loc:Translate watch.autoImport}" IsChecked="{Binding WatchAutoImports}" />
+              <CheckBox Content="{loc:Translate watch.recursive}" IsChecked="{Binding WatchRecursively}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Name="AddWatchButton" Content="{loc:Translate watch.add}" />
+              <Button Content="{loc:Translate common.remove}"
+                      Command="{Binding RemoveWatchedFolderCommand}" />
+              <Button Content="{loc:Translate watch.scanNow}"
+                      Command="{Binding ScanWatchedFoldersCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </Grid>
+      </TabItem>
+
       <!-- Advanced -->
       <TabItem Header="{loc:Translate settings.tabAdvanced}">
         <ScrollViewer>
@@ -224,9 +269,13 @@
 
             <Border Classes="divider" />
 
-            <Button Content="{loc:Translate settings.clearHistory}"
-                    HorizontalAlignment="Left"
-                    Command="{Binding ClearHistoryCommand}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="{loc:Translate settings.clearHistory}"
+                      Command="{Binding ClearHistoryCommand}" />
+              <Button Name="DiagnosticsButton" Content="{loc:Translate settings.diagnostics}" />
+            </StackPanel>
+            <TextBlock Text="{loc:Translate settings.diagnosticsHint}" Classes="muted"
+                       TextWrapping="Wrap" />
 
           </StackPanel>
         </ScrollViewer>

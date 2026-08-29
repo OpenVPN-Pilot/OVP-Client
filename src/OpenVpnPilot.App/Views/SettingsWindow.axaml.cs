@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using Avalonia.Platform.Storage;
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.Core.Abstractions;
 
@@ -22,6 +23,46 @@ public partial class SettingsWindow : Window
 
         // Tunnelling, so an armed row wins over whatever currently has the focus.
         AddHandler(KeyDownEvent, OnPreviewKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
+        this.FindControl<Button>("AddWatchButton")!.Click += async (_, _) => await AddWatchedFolderAsync();
+        this.FindControl<Button>("DiagnosticsButton")!.Click += async (_, _) => await WriteDiagnosticsAsync();
+    }
+
+    /// <summary>
+    /// Asks where the diagnostics bundle should go and writes it there.
+    /// </summary>
+    private async Task WriteDiagnosticsAsync()
+    {
+        if (ViewModel is null)
+        {
+            return;
+        }
+
+        IStorageFile? target = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            SuggestedFileName = ViewModel.DiagnosticsFileName,
+            DefaultExtension = "zip",
+            FileTypeChoices = [new FilePickerFileType("ZIP") { Patterns = ["*.zip"] }],
+        });
+
+        if (target?.TryGetLocalPath() is { } path)
+        {
+            await ViewModel.WriteDiagnosticsAsync(path);
+        }
+    }
+
+    /// <summary>
+    /// Picks a directory to watch. The picker belongs to the window, not to the view model.
+    /// </summary>
+    private async Task AddWatchedFolderAsync()
+    {
+        IReadOnlyList<IStorageFolder> folders = await StorageProvider.OpenFolderPickerAsync(
+            new FolderPickerOpenOptions { AllowMultiple = false });
+
+        if (folders.Count > 0 && folders[0].TryGetLocalPath() is { } path && ViewModel is not null)
+        {
+            await ViewModel.AddWatchedFolderAsync(path);
+        }
     }
 
     private void InitializeComponent()

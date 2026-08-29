@@ -231,7 +231,7 @@ internal static class CompletionCommand
         Register-ArgumentCompleter -Native -CommandName ovp -ScriptBlock {
             param($wordToComplete, $commandAst, $cursorPosition)
 
-            $commands = @('doctor','list','status','connect','disconnect','import','export','favourite','remove','completion','help')
+            $commands = @('doctor','list','status','connect','disconnect','import','export','pack','unpack','favourite','remove','completion','help')
             $tokens = $commandAst.CommandElements | Select-Object -Skip 1
 
             if ($tokens.Count -le 1) {
@@ -255,7 +255,7 @@ internal static class CompletionCommand
             local current previous commands
             current="${COMP_WORDS[COMP_CWORD]}"
             previous="${COMP_WORDS[1]}"
-            commands="doctor list status connect disconnect import export favourite remove completion help"
+            commands="doctor list status connect disconnect import export pack unpack favourite remove completion help"
 
             if [ "$COMP_CWORD" -eq 1 ]; then
                 COMPREPLY=( $(compgen -W "$commands" -- "$current") )
@@ -328,7 +328,8 @@ internal static class ArgumentReader
     }
 
     private static bool TakesValue(string flag) => flag
-        is "--profile" or "--folder" or "--tag" or "--slot" or "--seconds" or "--username" or "--password";
+        is "--profile" or "--folder" or "--tag" or "--slot" or "--seconds"
+        or "--username" or "--password" or "--passphrase";
 }
 
 /// <summary>

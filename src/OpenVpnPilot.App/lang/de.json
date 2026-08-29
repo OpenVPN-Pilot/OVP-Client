@@ -187,7 +187,11 @@
       "logLevel": "Protokollstufe",
       "clearHistory": "Verbindungsverlauf löschen",
       "historyCleared": "{0} Sitzung(en) entfernt.",
-      "conflictNotSaved": "Zwei Tastenkürzel verwenden dieselbe Kombination. Es wurde nichts gespeichert."
+      "conflictNotSaved": "Zwei Tastenkürzel verwenden dieselbe Kombination. Es wurde nichts gespeichert.",
+      "tabWatch": "Überwachte Ordner",
+      "diagnostics": "Diagnosepaket schreiben",
+      "diagnosticsHint": "Fasst den Umgebungsbericht, die Protokolle und eine Profilliste in einem Archiv für eine Supportanfrage zusammen. Konfigurationen und Anmeldedaten sind nie enthalten.",
+      "diagnosticsWritten": "{0} Einträge nach {1} geschrieben."
     },
     "hotkey": {
       "unbound": "Nicht gesetzt",
@@ -281,6 +285,18 @@
       "connectAll": "Alles hier verbinden",
       "fileSelected": "Ausgewähltes Profil hierher verschieben",
       "delete": "Diesen Ordner löschen"
+    },
+    "watch": {
+      "hint": "Ein überwachter Ordner wird beim Start der Anwendung geprüft und erneut, sobald dort eine Datei erscheint. Eine bereits gespeicherte Konfiguration wird an ihrem Inhalt erkannt, es wird also nichts doppelt importiert.",
+      "empty": "Es werden keine Ordner überwacht.",
+      "add": "Ordner überwachen",
+      "scanNow": "Jetzt prüfen",
+      "autoImport": "Gefundenes ohne Nachfrage importieren",
+      "recursive": "Unterordner einbeziehen",
+      "added": "{0} wird überwacht.",
+      "removed": "{0} wird nicht mehr überwacht.",
+      "scanned": "{0} Profil(e) importiert.",
+      "imported": "{0} Profil(e) aus {1} importiert."
     }
   }
 }

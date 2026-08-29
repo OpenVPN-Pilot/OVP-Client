@@ -27,6 +27,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private readonly ISecretStore secrets;
     private readonly IAutoStartManager autoStart;
     private readonly ISessionStore sessions;
+    private readonly IWatchedFolderStore watchedFolders;
+    private readonly WatchedFolderMonitor watchedFolderMonitor;
+    private readonly DiagnosticsBundle diagnostics;
 
     private PilotSettings draft;
 
@@ -38,7 +41,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
         HotkeyCoordinator hotkeys,
         ISecretStore secrets,
         IAutoStartManager autoStart,
-        ISessionStore sessions)
+        ISessionStore sessions,
+        IWatchedFolderStore watchedFolders,
+        WatchedFolderMonitor watchedFolderMonitor,
+        DiagnosticsBundle diagnostics)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(localizer);
@@ -48,6 +54,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(secrets);
         ArgumentNullException.ThrowIfNull(autoStart);
         ArgumentNullException.ThrowIfNull(sessions);
+        ArgumentNullException.ThrowIfNull(watchedFolders);
+        ArgumentNullException.ThrowIfNull(watchedFolderMonitor);
+        ArgumentNullException.ThrowIfNull(diagnostics);
 
         this.settings = settings;
         this.localizer = localizer;
@@ -57,6 +66,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         this.secrets = secrets;
         this.autoStart = autoStart;
         this.sessions = sessions;
+        this.watchedFolders = watchedFolders;
+        this.watchedFolderMonitor = watchedFolderMonitor;
+        this.diagnostics = diagnostics;
 
         draft = settings.Current.Clone();
 
@@ -87,6 +99,22 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public ObservableCollection<ThemeChoice> Themes { get; }
 
     public ObservableCollection<HotkeyEditorViewModel> Hotkeys { get; } = [];
+
+    public ObservableCollection<WatchedFolderRecord> WatchedFolders { get; } = [];
+
+    public bool HasWatchedFolders => WatchedFolders.Count > 0;
+
+    [ObservableProperty]
+    public partial WatchedFolderRecord? SelectedWatchedFolder { get; set; }
+
+    /// <summary>
+    /// Whether a directory added from here imports on its own or only reports what it found.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool WatchAutoImports { get; set; } = true;
+
+    [ObservableProperty]
+    public partial bool WatchRecursively { get; set; } = true;
 
     [ObservableProperty]
     public partial LanguageChoice? SelectedLanguage { get; set; }
@@ -203,6 +231,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
             Hotkeys.Add(editor);
         }
+
+        WatchedFolders.Clear();
+        foreach (WatchedFolderRecord folder in await watchedFolders.GetAllAsync(cancellationToken))
+        {
+            WatchedFolders.Add(folder);
+        }
+
+        OnPropertyChanged(nameof(HasWatchedFolders));
 
         StoredSecretCount = (await secrets.ListAsync(cancellationToken)).Count;
 
@@ -354,6 +390,71 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         int removed = await sessions.PruneAsync(DateTimeOffset.UtcNow);
         StatusMessage = localizer.Translate("settings.historyCleared", removed);
+    }
+
+    /// <summary>
+    /// Starts watching a directory. The path comes from the view, which owns the picker.
+    /// </summary>
+    public async Task AddWatchedFolderAsync(string path, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        await watchedFolders.AddAsync(
+            path,
+            WatchRecursively,
+            WatchAutoImports,
+            targetFolderId: null,
+            cancellationToken);
+
+        await watchedFolderMonitor.ReloadAsync(cancellationToken);
+        await LoadAsync(cancellationToken);
+
+        StatusMessage = localizer.Translate("watch.added", path);
+    }
+
+    [RelayCommand]
+    private async Task RemoveWatchedFolderAsync()
+    {
+        if (SelectedWatchedFolder is not { } folder)
+        {
+            return;
+        }
+
+        await watchedFolders.RemoveAsync(folder.Id);
+        await watchedFolderMonitor.ReloadAsync();
+        await LoadAsync();
+
+        StatusMessage = localizer.Translate("watch.removed", folder.Path);
+    }
+
+    [RelayCommand]
+    private async Task ScanWatchedFoldersAsync()
+    {
+        int total = 0;
+
+        foreach (WatchedFolderRecord folder in WatchedFolders.ToList())
+        {
+            total += await watchedFolderMonitor.ScanAsync(folder);
+        }
+
+        await LoadAsync();
+        StatusMessage = localizer.Translate("watch.scanned", total);
+    }
+
+    /// <summary>
+    /// The name a diagnostics bundle should be offered under.
+    /// </summary>
+    public string DiagnosticsFileName => diagnostics.SuggestedFileName;
+
+    /// <summary>
+    /// Writes a diagnostics bundle. The destination comes from the view, which owns the picker.
+    /// </summary>
+    public async Task WriteDiagnosticsAsync(string path, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        int entries = await diagnostics.WriteAsync(path, cancellationToken);
+        StatusMessage = localizer.Translate("settings.diagnosticsWritten", entries, path);
     }
 
     [RelayCommand]

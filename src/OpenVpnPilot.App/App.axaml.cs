@@ -151,6 +151,18 @@ public partial class App : Application
             AppLog.AbandonedSessionsClosed(services.GetRequiredService<ILogger<App>>(), abandoned);
         }
 
+        WatchedFolderMonitor watched = services.GetRequiredService<WatchedFolderMonitor>();
+
+        watched.Imported += (_, imported) => Dispatcher.UIThread.Post(async () =>
+        {
+            MainWindowViewModel model = services.GetRequiredService<MainWindowViewModel>();
+            await model.LoadAsync();
+            model.StatusMessage = services.GetRequiredService<Core.Localization.ILocalizer>()
+                .Translate("watch.imported", imported.Count, imported.Path);
+        });
+
+        await watched.StartAsync();
+
         HotkeyCoordinator hotkeys = services.GetRequiredService<HotkeyCoordinator>();
         hotkeys.ActionRequested += (_, action) => Dispatcher.UIThread.Post(async () =>
             await services.GetRequiredService<MainWindowViewModel>().ExecuteHotkeyActionAsync(action));
@@ -202,6 +214,7 @@ public partial class App : Application
         services.GetRequiredService<HotkeyCoordinator>().Dispose();
         services.GetRequiredService<ReconnectSupervisor>().Dispose();
         RunOffUiThread(async () => await services.GetRequiredService<PingMonitor>().DisposeAsync());
+        RunOffUiThread(async () => await services.GetRequiredService<WatchedFolderMonitor>().DisposeAsync());
         services.GetRequiredService<TrayIconController>().Dispose();
 
         host.Dispose();

@@ -15,4 +15,25 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!--
+    Packed as a .NET global tool so that installing it puts ovp on PATH, which is the only way a
+    command meant to be typed all day is worth having. The package is only produced on demand, so an
+    ordinary build stays as fast as it was.
+  -->
+  <PropertyGroup>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>ovp</ToolCommandName>
+    <PackageId>OpenVpnPilot.Cli</PackageId>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts\packages</PackageOutputPath>
+    <Description>Command line companion for OpenVpnPilot: import, list, connect and inspect OpenVPN profiles.</Description>
+    <PackageTags>openvpn;vpn;cli</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
 </Project>

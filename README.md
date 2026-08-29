@@ -6,22 +6,26 @@ The stock OpenVPN GUI on Windows is a tray icon with a flat, unsearchable list. 
 three connections. It stops working somewhere around twenty. OpenVpnPilot keeps the proven OpenVPN
 process doing the tunnelling and replaces the interface around it.
 
-> **Status: early development.** The OpenVPN integration layer has been proven end to end against
-> OpenVPN Community 2.7.6, but the application itself is not usable yet. See [Roadmap](#roadmap).
+> **Status: early development.** The integration layer and the interface are proven end to end
+> against OpenVPN Community 2.7.6, but there is no installer yet and nothing has been released.
+> See [Roadmap](#roadmap).
 
-## Planned features
+## Features
 
 - Instant search across profile name, folder, tag and remote host
-- Folders, tags and favourites with numbered slots
-- A quick switcher: one global hotkey, type a few letters, connect
-- Bulk import of `.ovpn` files, plus watched folders that keep profiles in sync
-- Freely assignable global hotkeys for connect, reconnect, disconnect and favourite slots
+- A quick switcher: one global shortcut, type a few letters, press return
+- Folders, tags and favourites with numbered slots bound to shortcuts
+- Global shortcuts for connect, reconnect, disconnect and the favourite slots
 - Several tunnels connected at once, each with its own live telemetry
-- Live dashboard with throughput, ping, assigned addresses and pushed routes
-- Session history with durations and transfer volumes, exportable as CSV
+- Live figures per tunnel: throughput, uptime, round trip, assigned address, pushed routes and DNS
 - Credentials kept in the operating system keystore, never in a file on disk
-- Import and export packages for sharing a profile set between machines
-- Dark, light and system themes, autostart, auto reconnect and multiple languages
+- One time codes, both the kind presented up front and the kind raised after a refusal
+- Session history with durations and transfer volumes, exportable as CSV
+- Bulk import from files, folders and ZIP archives, plus watched folders that keep profiles in sync
+- Portable `.ovppkg` packages for moving a profile set between machines, optionally encrypted
+- Notifications for connected, lost, reconnecting and failed, suppressible per event
+- Dark, light and system themes, autostart, bounded auto reconnect
+- English and German, and a new language is a JSON file rather than a new build
 
 ## Requirements
 
@@ -50,15 +54,57 @@ dotnet test
 
 Requires the .NET 10 SDK. The user interface is built with Avalonia.
 
+## The `ovp` command
+
+`ovp` is a companion for the terminal. When the application is running, `connect`, `disconnect` and
+`status` are handed to it over the instance channel, so they act on the tunnels its window shows
+rather than starting a second, invisible set beside them.
+
+```bash
+ovp doctor
+```
+
+```bash
+ovp add C:\profiles --commit --folder Customers --tag production
+```
+
+```bash
+ovp con site-alpha
+```
+
+```bash
+ovp st
+```
+
+`ovp help <command>` explains one command. `ovp completion powershell` prints a completion script that
+offers the stored profile names.
+
+The command can be installed so it lands on PATH:
+
+```bash
+dotnet pack src/OpenVpnPilot.Cli -c Release
+```
+
+```bash
+dotnet tool install --global --add-source artifacts/packages OpenVpnPilot.Cli
+```
+
+## Adding a language
+
+Language files are JSON. The ones that ship live in `lang` beside the executable, and anything placed
+in `lang` under the application data directory is layered on top of them, key by key. Copy `en.json`,
+translate the values, drop it in and reload from the settings screen: no rebuild, and a key you have
+not translated falls back to English rather than disappearing.
+
 ## Architecture
 
 | Project | Responsibility |
 | --- | --- |
-| `OpenVpnPilot.Core` | Domain model, abstractions, connect middleware pipeline |
+| `OpenVpnPilot.Core` | Domain model, abstractions, localization, settings, update check |
 | `OpenVpnPilot.OpenVpn` | Management interface protocol, `.ovpn` parsing, connection supervision |
-| `OpenVpnPilot.Data` | SQLite persistence, repositories, import and export |
-| `OpenVpnPilot.Platform.Windows` | Interactive service client, secret storage, hotkeys, autostart |
-| `OpenVpnPilot.App` | Avalonia user interface and tray integration |
+| `OpenVpnPilot.Data` | SQLite persistence, import, portable packages |
+| `OpenVpnPilot.Platform.Windows` | Interactive service client, secret storage, notification area, shortcuts |
+| `OpenVpnPilot.App` | Avalonia user interface and the services that drive it |
 | `OpenVpnPilot.Cli` | `ovp`, a headless companion command |
 
 Each tunnel runs as its own `openvpn` process with its own management interface on a loopback port.
@@ -71,11 +117,13 @@ implementation of the existing interfaces rather than restructuring the applicat
 - [x] Prove the interactive service and management interface integration end to end
 - [x] Solution structure and coding standards
 - [x] Configuration parsing and inlining, management client, interactive service launcher
-- [x] `ovp doctor` and `ovp connect`
-- [x] Connection supervisor with credential handling
+- [x] Connection supervisor, credential handling and one time codes
 - [x] SQLite store, schema and profile import with duplicate detection
-- [x] User interface with profile list, search, live status and tray icon
-- [x] Visual design, single instance handling and the `ovp` command with help
-- [ ] Folders, favourites, search, quick switcher and import
-- [ ] Hotkeys, notifications, dashboard and session history
-- [ ] Localization, autostart, packaging and releases
+- [x] User interface with profile list, search, live status and notification area icon
+- [x] Folders, tags, favourites, quick switcher and import
+- [x] Global shortcuts, notifications, telemetry and session history
+- [x] Localization, settings, autostart and auto reconnect
+- [x] Portable packages, watched folders and a diagnostics bundle
+- [ ] Installer, signed releases and an update feed
+- [ ] Kill switch
+- [ ] macOS

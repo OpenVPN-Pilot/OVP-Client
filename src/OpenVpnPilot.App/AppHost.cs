@@ -44,6 +44,9 @@ internal static class AppHost
         builder.Services.AddSingleton<ISessionStore, SessionStore>();
         builder.Services.AddSingleton<IHotkeyStore, HotkeyStore>();
         builder.Services.AddSingleton<IProfileImportService, ProfileImportService>();
+        builder.Services.AddSingleton<IWatchedFolderStore, WatchedFolderStore>();
+        builder.Services.AddSingleton<WatchedFolderMonitor>();
+        builder.Services.AddSingleton<DiagnosticsBundle>();
 
         RegisterSettings(builder.Services, paths);
         RegisterLocalization(builder.Services, paths);

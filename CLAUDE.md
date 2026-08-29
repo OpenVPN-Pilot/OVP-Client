@@ -176,6 +176,15 @@ State sequence of a successful connection:
 `WAIT`, `AUTH`, `GET_CONFIG`, `ASSIGN_IP`, `ADD_ROUTES`, `CONNECTED`. The `CONNECTED` line carries the
 assigned local address, the server address and the port, which is what the dashboard displays.
 
+### Storing timestamps
+
+SQLite refuses to order or compare a value whose CLR type is `DateTimeOffset`, and reports it as a
+query that cannot be translated rather than as a runtime failure. A history sorted by time or
+filtered by period is therefore impossible while the default text storage is used. Every timestamp in
+the model is stored as ticks through a value converter applied in `PilotDbContext`, which sorts as an
+integer and indexes well. Adding a new timestamp needs nothing: the converter is applied by walking
+the model.
+
 ### Client side gotchas
 
 - With data channel offload active, a 2.7 client rejects any pushed compression setting, including
@@ -184,3 +193,15 @@ assigned local address, the server address and the port, which is what the dashb
 - A configuration without `ca`, `capath` or `peer-fingerprint` fails during option parsing, before the
   management interface starts listening. Validate this at import time so the failure is explained rather
   than observed as a process that dies immediately.
+- The pushed options are not available through any management command. The only place they appear is
+  the log stream, as `PUSH: Received control message: 'PUSH_REPLY,...'`, which is what
+  `PushReplyParser` reads.
+- The status that reports the end of a connection carries no byte counters, because nothing is
+  flowing any more. Anything that records what a session transferred has to keep the last values it
+  saw while the tunnel was up.
+- One time codes take two forms and both are implemented. A static challenge arrives appended to the
+  password request as `SC:<echo>,<text>` and is answered in the same attempt with a password of
+  `SCRV1:base64(password):base64(response)`. A dynamic challenge arrives as the reason for a
+  verification failure, `CRV1:<flags>:<state>:<base64 user>:<text>`, and is answered in the next
+  attempt with a password of `CRV1::<state>::<response>`. A dynamic challenge is a request for a
+  code, not a wrong password, so it must not be reported to the user as a rejected credential.

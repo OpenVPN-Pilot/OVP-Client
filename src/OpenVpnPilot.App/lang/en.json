@@ -187,7 +187,11 @@
       "logLevel": "Log level",
       "clearHistory": "Clear the connection history",
       "historyCleared": "{0} session(s) removed.",
-      "conflictNotSaved": "Two shortcuts use the same combination. Nothing was saved."
+      "conflictNotSaved": "Two shortcuts use the same combination. Nothing was saved.",
+      "tabWatch": "Watched folders",
+      "diagnostics": "Write a diagnostics bundle",
+      "diagnosticsHint": "Collects the environment report, the logs and a profile listing into one archive for a support request. Configurations and credentials are never included.",
+      "diagnosticsWritten": "{0} item(s) written to {1}."
     },
     "hotkey": {
       "unbound": "Not set",
@@ -281,6 +285,18 @@
       "connectAll": "Connect everything here",
       "fileSelected": "Move the selected profile here",
       "delete": "Delete this folder"
+    },
+    "watch": {
+      "hint": "A watched directory is scanned when the application starts and again whenever a file appears in it. A configuration that is already stored is recognised by its contents, so nothing is imported twice.",
+      "empty": "No directories are being watched.",
+      "add": "Watch a folder",
+      "scanNow": "Scan now",
+      "autoImport": "Import what is found without asking",
+      "recursive": "Include subfolders",
+      "added": "Watching {0}.",
+      "removed": "No longer watching {0}.",
+      "scanned": "{0} profile(s) imported.",
+      "imported": "{0} profile(s) imported from {1}."
     }
   }
 }

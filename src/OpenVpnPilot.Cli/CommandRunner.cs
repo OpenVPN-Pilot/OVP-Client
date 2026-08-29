@@ -51,6 +51,8 @@ internal static class CommandRunner
             "import" => await ImportCommand.RunAsync(args[1..]),
             "list" => await ListCommand.RunAsync(args[1..]),
             "export" => await ExportCommand.RunAsync(args[1..]),
+            "pack" => await PackCommand.RunAsync(args[1..]),
+            "unpack" => await UnpackCommand.RunAsync(args[1..]),
             "favourite" => await FavouriteCommand.RunAsync(args[1..]),
             "remove" => await RemoveCommand.RunAsync(args[1..]),
             "completion" => CompletionCommand.Run(args[1..]),
@@ -74,6 +76,8 @@ internal static class CommandRunner
         "fav" or "favourite" or "favorite" => "favourite",
         "rm" or "remove" or "delete" => "remove",
         "export" => "export",
+        "pack" => "pack",
+        "unpack" => "unpack",
         "completion" => "completion",
         _ => command,
     };
@@ -132,6 +136,8 @@ internal static class CommandRunner
         Console.WriteLine("  disconnect, dis <name>     Disconnect a profile, or --all.");
         Console.WriteLine("  import, add <path>         Examine .ovpn files and optionally store them.");
         Console.WriteLine("  export <path>              Write profiles back out as .ovpn files.");
+        Console.WriteLine("  pack <file>                Write a portable .ovppkg package.");
+        Console.WriteLine("  unpack <file>              Read a package back into the store.");
         Console.WriteLine("  favourite, fav <name>      Set or clear a favourite and its slot.");
         Console.WriteLine("  remove, rm <name>          Delete a profile from the store.");
         Console.WriteLine("  completion <shell>         Print a shell completion script.");
@@ -244,6 +250,37 @@ internal static class CommandRunner
                 Console.WriteLine("nothing here to stop.");
                 Console.WriteLine();
                 Console.WriteLine("Exit codes: 0 stopped, 1 no match, 4 no application is running.");
+                return 0;
+
+            case "pack":
+                Console.WriteLine("ovp pack <file> [--profile <name>] [--folder <name>] [--passphrase <value>]");
+                Console.WriteLine();
+                Console.WriteLine("Writes profiles, the folders they are filed under and the shortcut");
+                Console.WriteLine("bindings into one .ovppkg file that can be moved to another machine.");
+                Console.WriteLine("The session history stays behind: it belongs to the machine it happened on.");
+                Console.WriteLine();
+                Console.WriteLine("A package carries private keys. Without a passphrase it is written in the");
+                Console.WriteLine("clear and the command says so. With one it is encrypted and authenticated,");
+                Console.WriteLine("so a package that was altered fails to open rather than opening changed.");
+                Console.WriteLine();
+                Console.WriteLine("  --profile <name>       Only profiles matching that name.");
+                Console.WriteLine("  --folder <name>        Only profiles filed under that folder.");
+                Console.WriteLine("  --passphrase <value>   Encrypt the package.");
+                return 0;
+
+            case "unpack":
+                Console.WriteLine("ovp unpack <file> [--commit] [--passphrase <value>]");
+                Console.WriteLine();
+                Console.WriteLine("Reads a package. Nothing is written without --commit.");
+                Console.WriteLine();
+                Console.WriteLine("A configuration the store already holds is recognised by its contents and");
+                Console.WriteLine("skipped, and a name that is taken gets a suffix, so importing the same");
+                Console.WriteLine("package twice changes nothing the second time and never replaces anything.");
+                Console.WriteLine();
+                Console.WriteLine("  --commit               Write the package into the store.");
+                Console.WriteLine("  --passphrase <value>   Open a protected package.");
+                Console.WriteLine();
+                Console.WriteLine("Exit codes: 0 read, 1 no such package, 3 it could not be opened.");
                 return 0;
 
             case "favourite":

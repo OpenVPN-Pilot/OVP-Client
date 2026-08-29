@@ -10,4 +10,9 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Parsing helpers are tested directly rather than only through the surface that uses them. -->
+    <InternalsVisibleTo Include="OpenVpnPilot.Core.Tests" />
+  </ItemGroup>
+
 </Project>

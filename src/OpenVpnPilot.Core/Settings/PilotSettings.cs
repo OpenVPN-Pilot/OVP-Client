@@ -180,5 +180,19 @@ public sealed class AdvancedSettings
     /// </summary>
     public bool PortableMode { get; set; }
 
+    /// <summary>
+    /// Look for a newer release on start. Off by default.
+    /// </summary>
+    /// <remarks>
+    /// Checking contacts a third party, so it is something the user turns on rather than something
+    /// they have to discover and turn off.
+    /// </remarks>
+    public bool CheckForUpdates { get; set; }
+
+    /// <summary>
+    /// The repository to check, in the form owner/name. Empty means no check is made.
+    /// </summary>
+    public string? UpdateRepository { get; set; }
+
     public AdvancedSettings Clone() => (AdvancedSettings)MemberwiseClone();
 }
