@@ -214,9 +214,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             UpdateFilterCounts();
             ApplyFilter();
 
-            StatusMessage = allProfiles.Count == 0
-                ? localizer["status.libraryEmpty"]
-                : localizer.Translate("status.profileCount", allProfiles.Count);
+            StatusMessage = RestingStatusMessage;
 
             OnPropertyChanged(nameof(HasProfiles));
             OnPropertyChanged(nameof(EmptyStateTitle));
@@ -692,6 +690,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         TotalBytesSent = sent;
     }
 
+    /// <summary>
+    /// What the status bar says when nothing has just happened.
+    /// </summary>
+    private string RestingStatusMessage => allProfiles.Count == 0
+        ? localizer["status.libraryEmpty"]
+        : localizer.Translate("status.profileCount", allProfiles.Count);
+
     private void TickUptime()
     {
         foreach (ProfileItemViewModel profile in allProfiles)
@@ -715,6 +720,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(EmptyStateTitle));
         OnPropertyChanged(nameof(EmptyStateDetail));
         OnPropertyChanged(nameof(ActiveSummary));
+
+        // The status bar holds a sentence rather than a key, so it cannot re-translate itself.
+        // Whatever it was reporting has been read by now, and the resting text is correct again.
+        StatusMessage = RestingStatusMessage;
     });
 
     private string DescribeTransition(ProfileItemViewModel profile, VpnConnectionStatus status) =>
