@@ -39,6 +39,9 @@ This repository is public. Keep it free of context about who uses it or why it w
 
 - No usage scenarios, origin stories, organisation names, machine names, user names or internal hosts
   in code, comments, commit messages, README, tests or sample data.
+- One exception, and only one: the author is named in `LICENSE`, in the assembly metadata and as the
+  installer's publisher. That is the name the work is published under and nothing else about the
+  person belongs anywhere in the repository.
 - Examples use invented names such as `example-site` and `vpn.example.com`, and addresses from the
   documentation ranges (`203.0.113.0/24`, `198.51.100.0/24`).
 

@@ -6,9 +6,9 @@ The stock OpenVPN GUI on Windows is a tray icon with a flat, unsearchable list. 
 three connections. It stops working somewhere around twenty. OpenVpnPilot keeps the proven OpenVPN
 process doing the tunnelling and replaces the interface around it.
 
-> **Status: early development.** The integration layer and the interface are proven end to end
-> against OpenVPN Community 2.7.6. An installer is built from this repository, but nothing has been
-> released and nothing is signed yet. See [Roadmap](#roadmap).
+> **Status: version 1.0.0.** The integration layer and the interface are proven end to end against
+> OpenVPN Community 2.7.6 and against the ten server lab in this repository. Builds are unsigned by
+> choice. See [Roadmap](#roadmap).
 
 ## Features
 
@@ -355,6 +355,12 @@ implementation of the existing interfaces rather than restructuring the applicat
 - [x] Localization, settings, autostart and auto reconnect
 - [x] Portable packages, watched folders and a diagnostics bundle
 - [x] Installer, `ovp` on PATH, and a command line other software can drive
-- [ ] Signed releases and an update feed
-- [ ] Kill switch
+- [ ] An update feed
 - [ ] macOS
+
+Releases are not code signed. A certificate costs money every year to tell people what the source
+already tells them, so builds are unsigned: build it yourself with the two commands above, or accept
+the warning Windows shows for anything unsigned.
+
+There is no kill switch and none is planned. This is a client for reaching another network, not for
+being an exit node, so a tunnel that drops leaks nothing that was not already going out the same way.
