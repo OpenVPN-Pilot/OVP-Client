@@ -10,6 +10,11 @@ version heading when one is tagged.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-08-29
+
+The first version worth installing. An installer, a command line other software can drive, and ten
+servers to prove it against.
+
 ### Added
 
 - Windows installer. An MSI puts the application under Program Files, adds a Start menu entry,
@@ -45,6 +50,15 @@ version heading when one is tagged.
   a server can take over a client's routing, all running at once.
 - `scripts/dev.ps1`, which stops whatever copy is open, builds, and starts what it just built. Doing
   those by hand in the wrong order is how an old copy ends up being the one that is running.
+- Checkboxes on demand. Select in the header puts one on every row, and what is ticked can be
+  connected, disconnected or deleted together. Deleting asks a second time, because it is the one
+  action here that cannot be undone and the one most likely to be aimed at twenty rows.
+- Connect everything shown, which acts on what the current filter and search leave visible. Choosing
+  a tag first is how a whole set is brought up at once.
+- Control and return in the quick switcher connects and brings the window up. Return alone still
+  connects and leaves you where you were, which is what a palette is for.
+- The connection timeout is finally used. It was declared, defaulted to a minute and read by nothing,
+  so a tunnel that could not come up reported that it was connecting until the application closed.
 - A page for the lab, `lab/index.html`, listing the ten servers with their credentials and a check
   that says which of their sites answer. It loads one pixel from each site, because a page opened
   from a file is not allowed to ask any other way.
@@ -85,6 +99,19 @@ version heading when one is tagged.
 
 ### Fixed
 
+- Every OpenVPN process a retried connection started was left running. Sixty three of them
+  accumulated in eight minutes, which exhausted the virtual adapters and left the machine unable to
+  connect anything at all. Ending the process is now the last thing a teardown does whatever else
+  went wrong, and retiring a connection cannot leave one behind however it fails.
+- A refusal the client can never recover from was retried like a dropped connection. The server asks
+  for the same thing on the next attempt and the client refuses it again, so retrying produced
+  nothing but another process, several times a minute.
+- Choosing a tag left the built in filters holding a selected item they did not contain, and they
+  answered by writing their own selection back. Both entries looked chosen and the list showed
+  everything.
+- The quick switcher answered a search for something that does not exist with the entire set. Every
+  letter of "lab-11" can be found somewhere in "lab-10-cert 127.0.0.1:1210 udp", so looking for a
+  subsequence across the endpoint and the tags matched almost anything.
 - A tunnel the server made impossible reported it several times a second forever. A client that
   refuses the pushed options refuses them again on every attempt, as fast as it can reconnect, and
   nothing stopped the process. The attempt is now ended once, with the reason kept rather than

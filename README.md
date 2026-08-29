@@ -13,7 +13,9 @@ process doing the tunnelling and replaces the interface around it.
 ## Features
 
 - Instant search across profile name, tag and remote host
-- A quick switcher: one global shortcut, type a few letters, press return
+- A quick switcher: one global shortcut, type a few letters, press return. Return connects and
+  leaves you where you were; control and return brings the window up as well
+- Checkboxes on demand, to connect, disconnect or delete a set of profiles together
 - Tags and favourites with numbered slots bound to shortcuts
 - Global shortcuts for connect, reconnect, disconnect and the favourite slots
 - Several tunnels connected at once, each with its own live telemetry
@@ -66,6 +68,24 @@ dotnet tool install --global wix
 
 The installer is deliberately not part of the solution. Adding it would put WiX between a developer
 and an ordinary build, and building an installer is not something an ordinary build should do.
+
+### Deploying it with group policy
+
+The package is built for it. Assign or publish it under **Computer Configuration, Software Settings,
+Software installation** from a UNC path every machine can read. Read out of the built package:
+
+| | |
+| --- | --- |
+| Scope | per machine, `ALLUSERS=1` |
+| Custom actions | none, so nothing runs outside the installer's own sequence |
+| Reboot | never scheduled |
+| Platform | x64, one language |
+
+Nothing has to be answered during the installation, so no transform is needed. The directory, the
+Start menu entry and the PATH entry are the same for everyone on the machine; the profile store, the
+settings and the credentials belong to whoever runs it.
+
+Uninstall by removing the assignment, or with `msiexec /x` and the product code.
 
 ## Building
 
@@ -207,6 +227,21 @@ The application understands the same options directly, for a shortcut or a sched
 starts it: `--headless`, `--background`, `--connect`, `--disconnect`, `--disconnect-all` and
 `--quit`. Only one copy runs per user, so a second launch hands its options to the copy that already
 runs and exits.
+
+## Working on more than one at a time
+
+**Select** in the header puts a checkbox on every row. Tick some and connect, disconnect or delete
+them together; deleting asks a second time, because it is the one action here that cannot be undone.
+
+**Connect everything shown** in the sidebar acts on what the current filter and search leave visible,
+which is how a whole tag is brought up in one go. Profiles are connected one after another rather
+than all at once: each tunnel is a process, an adapter and a port, and twenty starting in the same
+instant is how a machine runs out of all three.
+
+There is no built in limit on how many tunnels run at once, and ten at a time is what the lab is for.
+The real limits are outside the application: one OpenVPN process and one virtual adapter per tunnel,
+and the adapter pool is what runs out first. A tunnel that cannot come up is given a minute and then
+abandoned, so a saturated machine reports what happened instead of leaving processes behind.
 
 ## Organising a set
 
