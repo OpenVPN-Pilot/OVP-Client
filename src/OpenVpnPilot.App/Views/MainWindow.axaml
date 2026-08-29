@@ -2,13 +2,14 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:OpenVpnPilot.App.ViewModels"
         xmlns:conv="using:OpenVpnPilot.App.Converters"
+        xmlns:loc="using:OpenVpnPilot.App.Localization"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="1120" d:DesignHeight="700"
+        mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="720"
         x:Class="OpenVpnPilot.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Width="1120" Height="700"
-        MinWidth="880" MinHeight="520"
+        Width="1180" Height="720"
+        MinWidth="920" MinHeight="560"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource SurfaceWindow}"
         Icon="/Assets/openvpnpilot.ico"
@@ -29,61 +30,98 @@
                     Background="{DynamicResource SurfaceSidebar}"
                     HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Border>
-          <TextBlock Text="OpenVpnPilot" FontSize="14.5" FontWeight="SemiBold"
+          <TextBlock Text="{loc:Translate app.name}" FontSize="14.5" FontWeight="SemiBold"
                      Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" />
         </StackPanel>
 
-        <TextBox Grid.Column="1" PlaceholderText="Search by name, host or protocol"
+        <TextBox Grid.Column="1" Name="SearchBox"
+                 PlaceholderText="{loc:Translate header.search}"
                  MaxWidth="440" HorizontalAlignment="Center"
                  Text="{Binding SearchTerm}" />
 
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-          <Button Content="Refresh" Classes="quiet" Command="{Binding RefreshCommand}" />
-          <Button Content="Disconnect all" Command="{Binding DisconnectAllCommand}"
-                  IsEnabled="{Binding ActiveCount}" />
+          <Button Content="{loc:Translate header.import}" Classes="quiet"
+                  Command="{Binding OpenImportCommand}" />
+          <Button Content="{loc:Translate nav.history}" Classes="quiet"
+                  Command="{Binding OpenHistoryCommand}" />
+          <Button Content="{loc:Translate header.settings}" Classes="quiet"
+                  Command="{Binding OpenSettingsCommand}" />
+          <Button Content="{loc:Translate header.refresh}" Classes="quiet"
+                  Command="{Binding RefreshCommand}" />
+          <Button Content="{loc:Translate header.disconnectAll}"
+                  Command="{Binding DisconnectAllCommand}"
+                  IsEnabled="{Binding HasActiveConnections}" />
         </StackPanel>
 
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" ColumnDefinitions="216,*,340">
+    <Grid Grid.Row="1" ColumnDefinitions="228,*,352">
 
       <!-- Sidebar -->
       <Border Grid.Column="0" Background="{DynamicResource SurfaceSidebar}"
               BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,1,0">
-        <StackPanel Margin="12,16" Spacing="18">
+        <ScrollViewer>
+          <StackPanel Margin="12,16" Spacing="18">
 
-          <StackPanel Spacing="6">
-            <TextBlock Text="LIBRARY" Classes="overline" Margin="10,0,0,2" />
-            <ListBox Classes="nav" ItemsSource="{Binding Filters}"
-                     SelectedItem="{Binding SelectedFilter}">
-              <ListBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:SidebarFilterViewModel">
-                  <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13"
-                               Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="1" VerticalAlignment="Center"
-                               Text="{Binding Count, Converter={x:Static conv:AppConverters.CountBadge}}"
-                               FontSize="11" Foreground="{DynamicResource TextTertiary}" />
-                  </Grid>
-                </DataTemplate>
-              </ListBox.ItemTemplate>
-            </ListBox>
+            <StackPanel Spacing="6">
+              <TextBlock Text="{loc:Translate nav.library}" Classes="overline" Margin="10,0,0,2" />
+              <ListBox Classes="nav" ItemsSource="{Binding Filters}"
+                       SelectedItem="{Binding SelectedFilter}">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SidebarFilterViewModel">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13"
+                                 Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="1" VerticalAlignment="Center"
+                                 Text="{Binding Count, Converter={x:Static conv:AppConverters.CountBadge}}"
+                                 FontSize="11" Foreground="{DynamicResource TextTertiary}" />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </StackPanel>
+
+            <StackPanel Spacing="6" IsVisible="{Binding HasFolders}">
+              <TextBlock Text="{loc:Translate nav.folders}" Classes="overline" Margin="10,0,0,2" />
+              <ListBox Classes="nav" ItemsSource="{Binding FolderFilters}"
+                       SelectedItem="{Binding SelectedFilter}">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SidebarFilterViewModel">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13"
+                                 TextTrimming="CharacterEllipsis"
+                                 Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="1" VerticalAlignment="Center"
+                                 Text="{Binding Count, Converter={x:Static conv:AppConverters.CountBadge}}"
+                                 FontSize="11" Foreground="{DynamicResource TextTertiary}" />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </StackPanel>
+
+            <StackPanel Spacing="6" IsVisible="{Binding HasTags}">
+              <TextBlock Text="{loc:Translate nav.tags}" Classes="overline" Margin="10,0,0,2" />
+              <ListBox Classes="nav" ItemsSource="{Binding TagFilters}"
+                       SelectedItem="{Binding SelectedFilter}">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SidebarFilterViewModel">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13"
+                                 TextTrimming="CharacterEllipsis"
+                                 Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="1" VerticalAlignment="Center"
+                                 Text="{Binding Count, Converter={x:Static conv:AppConverters.CountBadge}}"
+                                 FontSize="11" Foreground="{DynamicResource TextTertiary}" />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </StackPanel>
+
           </StackPanel>
-
-          <StackPanel Spacing="6" IsVisible="{Binding Folders.Count}">
-            <TextBlock Text="FOLDERS" Classes="overline" Margin="10,0,0,2" />
-            <ItemsControl ItemsSource="{Binding Folders}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                  <TextBlock Text="{Binding Name}" Padding="10,6" FontSize="13"
-                             Foreground="{DynamicResource TextSecondary}" />
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </StackPanel>
-
-        </StackPanel>
+        </ScrollViewer>
       </Border>
 
       <!-- Profile list -->
@@ -105,18 +143,27 @@
                       <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"
                                  Foreground="{DynamicResource TextPrimary}"
                                  TextTrimming="CharacterEllipsis" />
+                      <Border Classes="slot" IsVisible="{Binding HasFavouriteSlot}">
+                        <TextBlock Text="{Binding FavouriteSlotDisplay}" />
+                      </Border>
                       <TextBlock Text="*" FontSize="14" VerticalAlignment="Center"
                                  Foreground="{DynamicResource StatePending}"
                                  IsVisible="{Binding IsFavourite}" />
                     </StackPanel>
-                    <TextBlock Text="{Binding Endpoint}" Classes="muted" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="{Binding Endpoint}" Classes="muted" />
+                      <TextBlock Text="{Binding TagsDisplay}" Classes="muted"
+                                 Foreground="{DynamicResource TextTertiary}"
+                                 IsVisible="{Binding HasTags}"
+                                 TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
                   </StackPanel>
 
                   <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
                               VerticalAlignment="Center">
                     <TextBlock Text="!" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"
                                Foreground="{DynamicResource StatePending}"
-                               ToolTip.Tip="Uses script directives the interactive service refuses for unauthorised callers"
+                               ToolTip.Tip="{loc:Translate profile.unsupportedTooltip}"
                                IsVisible="{Binding HasUnsupportedOptions}" />
                     <Border Classes="pill" IsVisible="{Binding !IsIdle}"
                             Background="{Binding Status.State, Converter={x:Static conv:AppConverters.StatePillBackground}}">
@@ -132,11 +179,14 @@
         </ListBox>
 
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
-                    MaxWidth="320" IsVisible="{Binding !VisibleProfiles.Count}">
+                    MaxWidth="340" IsVisible="{Binding !VisibleProfiles.Count}">
           <TextBlock Text="{Binding EmptyStateTitle}" FontSize="14" FontWeight="SemiBold"
                      Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Center" />
           <TextBlock Text="{Binding EmptyStateDetail}" Classes="muted"
                      TextWrapping="Wrap" TextAlignment="Center" />
+          <Button Content="{loc:Translate header.import}" Classes="primary"
+                  HorizontalAlignment="Center" Margin="0,6,0,0"
+                  Command="{Binding OpenImportCommand}" />
         </StackPanel>
       </Grid>
 
@@ -160,57 +210,69 @@
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" Spacing="8">
-              <Button Content="Connect" Classes="primary" MinWidth="112"
+              <Button Content="{loc:Translate profile.connect}" Classes="primary" MinWidth="106"
                       IsVisible="{Binding SelectedProfile.IsIdle}"
                       Command="{Binding ConnectCommand}"
                       CommandParameter="{Binding SelectedProfile}" />
-              <Button Content="Disconnect" MinWidth="112"
+              <Button Content="{loc:Translate profile.disconnect}" MinWidth="106"
                       IsVisible="{Binding !SelectedProfile.IsIdle}"
                       Command="{Binding DisconnectCommand}"
                       CommandParameter="{Binding SelectedProfile}" />
               <Button Content="{Binding SelectedProfile.FavouriteActionLabel}" Classes="quiet"
                       Command="{Binding ToggleFavouriteCommand}"
                       CommandParameter="{Binding SelectedProfile}" />
+              <Button Content="{loc:Translate profile.edit}" Classes="quiet"
+                      Command="{Binding OpenProfileEditorCommand}" />
             </StackPanel>
 
             <Border Classes="divider" />
 
             <StackPanel Spacing="14" IsVisible="{Binding SelectedProfile.IsConnected}">
-              <Grid ColumnDefinitions="*,*">
+              <Grid ColumnDefinitions="*,*,*">
                 <StackPanel Grid.Column="0" Spacing="3">
-                  <TextBlock Text="RECEIVED" Classes="overline" />
-                  <TextBlock Classes="body" FontSize="16" FontWeight="SemiBold"
+                  <TextBlock Text="{loc:Translate profile.received}" Classes="overline" />
+                  <TextBlock Classes="body" FontSize="15" FontWeight="SemiBold"
                              Text="{Binding SelectedProfile.Status.BytesReceived, Converter={x:Static conv:AppConverters.ByteSize}}" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Spacing="3">
-                  <TextBlock Text="SENT" Classes="overline" />
-                  <TextBlock Classes="body" FontSize="16" FontWeight="SemiBold"
+                  <TextBlock Text="{loc:Translate profile.sent}" Classes="overline" />
+                  <TextBlock Classes="body" FontSize="15" FontWeight="SemiBold"
                              Text="{Binding SelectedProfile.Status.BytesSent, Converter={x:Static conv:AppConverters.ByteSize}}" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Spacing="3">
+                  <TextBlock Text="{loc:Translate profile.uptime}" Classes="overline" />
+                  <TextBlock Classes="body" FontSize="15" FontWeight="SemiBold"
+                             Text="{Binding SelectedProfile.UptimeDisplay}" />
                 </StackPanel>
               </Grid>
               <Border Classes="divider" />
             </StackPanel>
 
             <StackPanel Spacing="11">
-              <Grid ColumnDefinitions="96,*">
-                <TextBlock Grid.Column="0" Text="Local address" Classes="muted" />
+              <Grid ColumnDefinitions="104,*">
+                <TextBlock Grid.Column="0" Text="{loc:Translate profile.localAddress}" Classes="muted" />
                 <TextBlock Grid.Column="1" Classes="body"
                            Text="{Binding SelectedProfile.LocalAddressDisplay}" />
               </Grid>
-              <Grid ColumnDefinitions="96,*">
-                <TextBlock Grid.Column="0" Text="Server" Classes="muted" />
+              <Grid ColumnDefinitions="104,*">
+                <TextBlock Grid.Column="0" Text="{loc:Translate profile.server}" Classes="muted" />
                 <TextBlock Grid.Column="1" Classes="body"
                            Text="{Binding SelectedProfile.ServerDisplay}" />
               </Grid>
-              <Grid ColumnDefinitions="96,*">
-                <TextBlock Grid.Column="0" Text="Sign in" Classes="muted" />
+              <Grid ColumnDefinitions="104,*">
+                <TextBlock Grid.Column="0" Text="{loc:Translate profile.signIn}" Classes="muted" />
                 <TextBlock Grid.Column="1" Classes="body"
                            Text="{Binding SelectedProfile.AuthenticationDisplay}" />
               </Grid>
-              <Grid ColumnDefinitions="96,*">
-                <TextBlock Grid.Column="0" Text="Last used" Classes="muted" />
+              <Grid ColumnDefinitions="104,*">
+                <TextBlock Grid.Column="0" Text="{loc:Translate profile.lastUsed}" Classes="muted" />
                 <TextBlock Grid.Column="1" Classes="body"
                            Text="{Binding SelectedProfile.LastConnectedDisplay}" />
+              </Grid>
+              <Grid ColumnDefinitions="104,*" IsVisible="{Binding SelectedProfile.HasTags}">
+                <TextBlock Grid.Column="0" Text="{loc:Translate nav.tags}" Classes="muted" />
+                <TextBlock Grid.Column="1" Classes="body" TextWrapping="Wrap"
+                           Text="{Binding SelectedProfile.TagsDisplay}" />
               </Grid>
             </StackPanel>
 
@@ -219,7 +281,7 @@
                     IsVisible="{Binding SelectedProfile.HasUnsupportedOptions}">
               <TextBlock TextWrapping="Wrap" FontSize="12"
                          Foreground="{DynamicResource StatePending}"
-                         Text="This profile uses script directives. The interactive service refuses those for callers that are not authorised." />
+                         Text="{loc:Translate profile.unsupportedNotice}" />
             </Border>
 
             <Border CornerRadius="7" Padding="12,10"
@@ -243,7 +305,7 @@
         <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Classes="muted"
                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7" VerticalAlignment="Center"
-                    IsVisible="{Binding ActiveCount}">
+                    IsVisible="{Binding HasActiveConnections}">
           <Border Width="7" Height="7" CornerRadius="4" VerticalAlignment="Center"
                   Background="{DynamicResource StateConnected}" />
           <TextBlock Text="{Binding ActiveSummary}" Classes="muted" />

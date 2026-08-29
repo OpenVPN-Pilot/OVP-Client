@@ -12,4 +12,10 @@ internal static partial class AppLog
         Level = LogLevel.Information,
         Message = "Removed {Count} stale runtime configuration(s) from a previous run.")]
     public static partial void StaleRuntimeFilesRemoved(ILogger logger, int count);
+
+    [LoggerMessage(
+        EventId = 3001,
+        Level = LogLevel.Information,
+        Message = "Closed {Count} session(s) that a previous run left open.")]
+    public static partial void AbandonedSessionsClosed(ILogger logger, int count);
 }

@@ -1,0 +1,253 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:OpenVpnPilot.App.ViewModels"
+        xmlns:loc="using:OpenVpnPilot.App.Localization"
+        x:Class="OpenVpnPilot.App.Views.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Width="760" Height="680"
+        MinWidth="640" MinHeight="520"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceWindow}"
+        Icon="/Assets/openvpnpilot.ico"
+        Title="{loc:Translate header.settings}">
+
+  <Grid RowDefinitions="*,Auto">
+
+    <TabControl Grid.Row="0" Margin="12,10">
+
+      <!-- General -->
+      <TabItem Header="{loc:Translate settings.tabGeneral}">
+        <ScrollViewer>
+          <StackPanel Margin="16" Spacing="14">
+
+            <TextBlock Text="{loc:Translate settings.language}" Classes="section" />
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}"
+                        MinWidth="240">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:LanguageChoice">
+                    <TextBlock Text="{Binding Name}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <Button Content="{loc:Translate settings.reloadLanguages}" Classes="quiet"
+                      Command="{Binding ReloadLanguagesCommand}" />
+            </StackPanel>
+            <TextBlock Text="{loc:Translate settings.languageHint}" Classes="muted"
+                       TextWrapping="Wrap" />
+
+            <Border Classes="divider" />
+
+            <TextBlock Text="{loc:Translate settings.appearance}" Classes="section" />
+            <ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}"
+                      MinWidth="240" HorizontalAlignment="Left">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ThemeChoice">
+                  <TextBlock Text="{Binding Name}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+
+            <Border Classes="divider" />
+
+            <TextBlock Text="{loc:Translate settings.startup}" Classes="section" />
+            <CheckBox Content="{loc:Translate settings.startWithSystem}"
+                      IsChecked="{Binding StartWithSystem}"
+                      IsEnabled="{Binding AutoStartAvailable}" />
+            <CheckBox Content="{loc:Translate settings.startMinimised}"
+                      IsChecked="{Binding StartMinimised}" />
+            <CheckBox Content="{loc:Translate settings.closeToTray}"
+                      IsChecked="{Binding CloseToTray}" />
+
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- Connections -->
+      <TabItem Header="{loc:Translate settings.tabConnections}">
+        <ScrollViewer>
+          <StackPanel Margin="16" Spacing="14">
+
+            <TextBlock Text="{loc:Translate settings.routing}" Classes="section" />
+            <CheckBox Content="{loc:Translate settings.protectRoutes}"
+                      IsChecked="{Binding ProtectRoutes}" />
+            <TextBlock Text="{loc:Translate settings.protectRoutesHint}" Classes="muted"
+                       TextWrapping="Wrap" />
+
+            <Border Classes="divider" />
+
+            <TextBlock Text="{loc:Translate settings.reconnect}" Classes="section" />
+            <CheckBox Content="{loc:Translate settings.autoReconnect}"
+                      IsChecked="{Binding AutoReconnect}" />
+
+            <Grid ColumnDefinitions="220,140" RowDefinitions="Auto,Auto,Auto" >
+              <TextBlock Grid.Row="0" Grid.Column="0" Classes="muted" VerticalAlignment="Center"
+                         Text="{loc:Translate settings.maxAttempts}" />
+              <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="0" Maximum="100" Increment="1"
+                             FormatString="0" Value="{Binding MaxReconnectAttempts}" />
+
+              <TextBlock Grid.Row="1" Grid.Column="0" Classes="muted" VerticalAlignment="Center"
+                         Margin="0,8,0,0" Text="{loc:Translate settings.reconnectDelay}" />
+              <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="1" Maximum="600" Increment="1"
+                             Margin="0,8,0,0" FormatString="0" Value="{Binding ReconnectDelaySeconds}" />
+
+              <TextBlock Grid.Row="2" Grid.Column="0" Classes="muted" VerticalAlignment="Center"
+                         Margin="0,8,0,0" Text="{loc:Translate settings.connectTimeout}" />
+              <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="5" Maximum="600" Increment="5"
+                             Margin="0,8,0,0" FormatString="0" Value="{Binding ConnectTimeoutSeconds}" />
+            </Grid>
+
+            <TextBlock Text="{loc:Translate settings.maxAttemptsHint}" Classes="muted"
+                       TextWrapping="Wrap" />
+
+            <CheckBox Content="{loc:Translate settings.restoreOnStart}"
+                      IsChecked="{Binding RestoreOnStart}" />
+
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- Shortcuts -->
+      <TabItem Header="{loc:Translate settings.tabHotkeys}">
+        <Grid RowDefinitions="Auto,*">
+          <TextBlock Grid.Row="0" Margin="16,14,16,6" Classes="muted" TextWrapping="Wrap"
+                     Text="{loc:Translate settings.hotkeyHint}" />
+
+          <ScrollViewer Grid.Row="1">
+            <ItemsControl ItemsSource="{Binding Hotkeys}" Margin="16,0,16,16">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:HotkeyEditorViewModel">
+                  <Grid ColumnDefinitions="*,190,Auto,Auto" Margin="0,3">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+                      <TextBlock Text="{Binding DisplayName}" Classes="body" />
+                      <TextBlock Text="{Binding Problem}" FontSize="11"
+                                 Foreground="{DynamicResource StateFailed}"
+                                 TextWrapping="Wrap"
+                                 IsVisible="{Binding HasProblem}" />
+                    </StackPanel>
+
+                    <Border Grid.Column="1" Margin="8,0" VerticalAlignment="Center"
+                            CornerRadius="{StaticResource RadiusMedium}"
+                            Background="{DynamicResource SurfaceInput}"
+                            BorderBrush="{DynamicResource BorderSubtle}"
+                            BorderThickness="1" Padding="10,7">
+                      <TextBlock Text="{Binding GestureDisplay}" FontSize="12.5"
+                                 Foreground="{DynamicResource TextPrimary}" />
+                    </Border>
+
+                    <Button Grid.Column="2" Classes="quiet" VerticalAlignment="Center"
+                            Content="{loc:Translate settings.record}"
+                            Command="{Binding StartRecordingCommand}" />
+                    <Button Grid.Column="3" Classes="quiet" VerticalAlignment="Center"
+                            Content="{loc:Translate common.clear}"
+                            Command="{Binding ClearCommand}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
+      </TabItem>
+
+      <!-- Notifications -->
+      <TabItem Header="{loc:Translate settings.tabNotifications}">
+        <ScrollViewer>
+          <StackPanel Margin="16" Spacing="12">
+            <CheckBox Content="{loc:Translate settings.notificationsEnabled}"
+                      IsChecked="{Binding NotificationsEnabled}" />
+            <Border Classes="divider" />
+            <CheckBox Content="{loc:Translate settings.notifyConnected}"
+                      IsChecked="{Binding NotifyOnConnected}"
+                      IsEnabled="{Binding NotificationsEnabled}" />
+            <CheckBox Content="{loc:Translate settings.notifyDisconnected}"
+                      IsChecked="{Binding NotifyOnDisconnected}"
+                      IsEnabled="{Binding NotificationsEnabled}" />
+            <CheckBox Content="{loc:Translate settings.notifyConnectionLost}"
+                      IsChecked="{Binding NotifyOnConnectionLost}"
+                      IsEnabled="{Binding NotificationsEnabled}" />
+            <CheckBox Content="{loc:Translate settings.notifyReconnecting}"
+                      IsChecked="{Binding NotifyOnReconnecting}"
+                      IsEnabled="{Binding NotificationsEnabled}" />
+            <CheckBox Content="{loc:Translate settings.notifyFailed}"
+                      IsChecked="{Binding NotifyOnFailed}"
+                      IsEnabled="{Binding NotificationsEnabled}" />
+            <TextBlock Text="{loc:Translate settings.notificationsHint}" Classes="muted"
+                       TextWrapping="Wrap" />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- Credentials -->
+      <TabItem Header="{loc:Translate settings.tabCredentials}">
+        <ScrollViewer>
+          <StackPanel Margin="16" Spacing="12">
+            <CheckBox Content="{loc:Translate settings.useStoredSecrets}"
+                      IsChecked="{Binding UseStoredSecrets}"
+                      IsEnabled="{Binding SecretsAvailable}" />
+            <CheckBox Content="{loc:Translate settings.rememberByDefault}"
+                      IsChecked="{Binding RememberByDefault}"
+                      IsEnabled="{Binding SecretsAvailable}" />
+            <TextBlock Text="{loc:Translate settings.credentialsHint}" Classes="muted"
+                       TextWrapping="Wrap" />
+            <Border Classes="divider" />
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <TextBlock Classes="body" VerticalAlignment="Center"
+                         Text="{Binding StoredSecretCount, StringFormat={}{0}}" />
+              <Button Content="{loc:Translate settings.forgetCredentials}"
+                      Command="{Binding ForgetStoredCredentialsCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- Advanced -->
+      <TabItem Header="{loc:Translate settings.tabAdvanced}">
+        <ScrollViewer>
+          <StackPanel Margin="16" Spacing="12">
+
+            <TextBlock Text="{loc:Translate settings.openVpnPath}" Classes="muted" />
+            <TextBox Text="{Binding OpenVpnPath}"
+                     Watermark="{loc:Translate settings.openVpnPathHint}" />
+
+            <Grid ColumnDefinitions="220,140">
+              <TextBlock Grid.Column="0" Classes="muted" VerticalAlignment="Center"
+                         Text="{loc:Translate settings.verbosity}" />
+              <NumericUpDown Grid.Column="1" Minimum="0" Maximum="11" Increment="1"
+                             FormatString="0" Value="{Binding OpenVpnVerbosity}" />
+            </Grid>
+
+            <StackPanel Spacing="6">
+              <TextBlock Text="{loc:Translate settings.logLevel}" Classes="muted" />
+              <ComboBox ItemsSource="{Binding LogLevels}" SelectedItem="{Binding LogLevel}"
+                        MinWidth="200" HorizontalAlignment="Left" />
+            </StackPanel>
+
+            <Border Classes="divider" />
+
+            <Button Content="{loc:Translate settings.clearHistory}"
+                    HorizontalAlignment="Left"
+                    Command="{Binding ClearHistoryCommand}" />
+
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+    </TabControl>
+
+    <Border Grid.Row="1" Background="{DynamicResource SurfaceSidebar}"
+            BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
+            Padding="16,12">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Classes="muted"
+                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+          <Button Content="{loc:Translate common.cancel}" MinWidth="96"
+                  Command="{Binding CancelCommand}" />
+          <Button Content="{loc:Translate common.save}" Classes="primary" MinWidth="96"
+                  Command="{Binding SaveCommand}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+  </Grid>
+</Window>

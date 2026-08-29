@@ -23,6 +23,12 @@ internal static partial class ConnectionSupervisorLog
     public static partial void CredentialsUnavailable(ILogger logger, string realm);
 
     [LoggerMessage(
+        EventId = 2005,
+        Level = LogLevel.Information,
+        Message = "The server raised a one time code challenge for realm {Realm}.")]
+    public static partial void ChallengeReceived(ILogger logger, string realm);
+
+    [LoggerMessage(
         EventId = 2003,
         Level = LogLevel.Warning,
         Message = "OpenVPN process {ProcessId} ignored the shutdown signal and is being terminated.")]

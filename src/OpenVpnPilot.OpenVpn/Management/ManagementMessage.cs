@@ -91,7 +91,45 @@ public sealed record PasswordRequestMessage : ManagementMessage
     /// True when both a username and a password are expected, false when only a password is.
     /// </summary>
     public required bool NeedsUsername { get; init; }
+
+    /// <summary>
+    /// Present when the server appended a static challenge, written as SC:echo,text.
+    /// </summary>
+    public StaticChallenge? Challenge { get; init; }
 }
+
+/// <summary>
+/// A one time code the server asks for together with the password.
+/// </summary>
+/// <param name="Text">The prompt the server wants shown.</param>
+/// <param name="Echo">
+/// True when the response may be displayed while it is typed. The server sets this for a code read
+/// off a token, and clears it for anything it considers secret.
+/// </param>
+public sealed record StaticChallenge(string Text, bool Echo);
+
+/// <summary>
+/// A challenge raised after an attempt was refused, carried in the verification failure.
+/// </summary>
+/// <remarks>
+/// The wire form is CRV1:flags:state,username:text. Answering it means connecting again with the
+/// same user name and a password of CRV1::state::response, which is why the state identifier has to
+/// survive the failed attempt.
+/// </remarks>
+/// <param name="StateId">Opaque token the server uses to match the answer to the challenge.</param>
+/// <param name="Username">The user name the server echoed back, already decoded.</param>
+/// <param name="Text">The prompt the server wants shown.</param>
+/// <param name="Echo">True when the response may be displayed while it is typed.</param>
+/// <param name="ResponseRequired">
+/// False when the server only wants the attempt repeated, for example after a push notification was
+/// approved out of band.
+/// </param>
+public sealed record DynamicChallenge(
+    string StateId,
+    string? Username,
+    string Text,
+    bool Echo,
+    bool ResponseRequired);
 
 /// <summary>
 /// Reports that supplied credentials were rejected.
@@ -101,6 +139,11 @@ public sealed record PasswordVerificationFailedMessage : ManagementMessage
     public required string Realm { get; init; }
 
     public required string Reason { get; init; }
+
+    /// <summary>
+    /// Present when the refusal is really a request for a one time code rather than a wrong password.
+    /// </summary>
+    public DynamicChallenge? Challenge { get; init; }
 }
 
 /// <summary>

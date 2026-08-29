@@ -3,6 +3,9 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.Core.Abstractions;
+using OpenVpnPilot.Core.Localization;
+using OpenVpnPilot.Core.Settings;
 using OpenVpnPilot.Core.Vpn;
 using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.OpenVpn.Runtime;
@@ -12,60 +15,81 @@ namespace OpenVpnPilot.App.ViewModels;
 /// <summary>
 /// The main window: the profile list, the current filter and the detail panel.
 /// </summary>
-public sealed partial class MainWindowViewModel : ViewModelBase
+public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
-    /// <summary>
-    /// Pull filters that stop a server from redirecting the host's traffic or DNS. Applied until the
-    /// application offers a per profile setting for it.
-    /// </summary>
-    private static readonly string[] RouteProtection =
-    [
-        "--pull-filter ignore \"redirect-gateway\"",
-        "--pull-filter ignore \"dhcp-option\"",
-        "--pull-filter ignore \"block-outside-dns\"",
-    ];
-
     private readonly IProfileStore store;
     private readonly ConnectionManager connections;
     private readonly ProfileNameCache nameCache;
+    private readonly ISettingsService settings;
+    private readonly ILocalizer localizer;
     private readonly TimeProvider timeProvider;
+
     private readonly List<ProfileItemViewModel> allProfiles = [];
     private readonly Dictionary<Guid, ProfileItemViewModel> byId = [];
+    private readonly Dictionary<Guid, string> folderNames = [];
+    private readonly DispatcherTimer uptimeTimer;
+    private bool disposed;
 
     public MainWindowViewModel(
         IProfileStore store,
         ConnectionManager connections,
         ProfileNameCache nameCache,
+        ISettingsService settings,
+        ILocalizer localizer,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(connections);
         ArgumentNullException.ThrowIfNull(nameCache);
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(localizer);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.store = store;
         this.connections = connections;
         this.nameCache = nameCache;
+        this.settings = settings;
+        this.localizer = localizer;
         this.timeProvider = timeProvider;
 
         connections.StatusChanged += OnConnectionStatusChanged;
+        localizer.LanguageChanged += OnLanguageChanged;
+
+        Filters =
+        [
+            SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.All, "nav.all", localizer),
+            SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.Active, "nav.active", localizer),
+            SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.Favourites, "nav.favourites", localizer),
+            SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.Recent, "nav.recent", localizer),
+        ];
+
+        // A connected row shows its uptime, which has to advance on its own because nothing in the
+        // connection state changes while it does.
+        uptimeTimer = new DispatcherTimer(
+            TimeSpan.FromSeconds(1),
+            DispatcherPriority.Background,
+            (_, _) => TickUptime());
     }
+
+    /// <summary>
+    /// Raised when a screen has to be opened. The window owns the dialogs, not the view model.
+    /// </summary>
+    public event EventHandler<AppScreen>? ScreenRequested;
 
     /// <summary>
     /// The profiles currently shown, after the search term and the sidebar filter are applied.
     /// </summary>
     public ObservableCollection<ProfileItemViewModel> VisibleProfiles { get; } = [];
 
-    public ObservableCollection<SidebarFilterViewModel> Filters { get; } =
-    [
-        new SidebarFilterViewModel(SidebarFilterKind.All, "All profiles"),
-        new SidebarFilterViewModel(SidebarFilterKind.Active, "Active"),
-        new SidebarFilterViewModel(SidebarFilterKind.Favourites, "Favourites"),
-        new SidebarFilterViewModel(SidebarFilterKind.Recent, "Recent"),
-    ];
+    public ObservableCollection<SidebarFilterViewModel> Filters { get; }
 
-    [ObservableProperty]
-    public partial ObservableCollection<Folder> Folders { get; set; } = [];
+    public ObservableCollection<SidebarFilterViewModel> FolderFilters { get; } = [];
+
+    public ObservableCollection<SidebarFilterViewModel> TagFilters { get; } = [];
+
+    public bool HasFolders => FolderFilters.Count > 0;
+
+    public bool HasTags => TagFilters.Count > 0;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelection))]
@@ -85,28 +109,38 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ActiveSummary))]
+    [NotifyPropertyChangedFor(nameof(HasActiveConnections))]
     public partial int ActiveCount { get; set; }
 
     public bool HasSelection => SelectedProfile is not null;
+
+    public bool HasActiveConnections => ActiveCount > 0;
 
     /// <summary>
     /// Heading of the placeholder shown when the list is empty. The wording distinguishes an empty
     /// library from a search that matched nothing, because the two need different actions.
     /// </summary>
     public string EmptyStateTitle => allProfiles.Count == 0
-        ? "No profiles yet"
-        : "Nothing matches";
+        ? localizer["empty.noProfilesTitle"]
+        : localizer["empty.noMatchTitle"];
 
     public string EmptyStateDetail => allProfiles.Count == 0
-        ? "Import .ovpn files with the ovp import command to fill the library."
-        : "Try a different search term, or pick another entry in the sidebar.";
+        ? localizer["empty.noProfilesDetail"]
+        : localizer["empty.noMatchDetail"];
 
     /// <summary>
     /// Short summary of the active connections for the status bar.
     /// </summary>
-    public string ActiveSummary => ActiveCount == 1 ? "1 connection" : $"{ActiveCount} connections";
+    public string ActiveSummary => ActiveCount == 1
+        ? localizer["status.connectionSingular"]
+        : localizer.Translate("status.connectionPlural", ActiveCount);
 
     public bool HasProfiles => allProfiles.Count > 0;
+
+    /// <summary>
+    /// Every profile currently loaded, for screens that need the whole set rather than the filtered one.
+    /// </summary>
+    public IReadOnlyList<ProfileItemViewModel> AllProfiles => allProfiles;
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
@@ -116,37 +150,55 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             IReadOnlyList<Profile> profiles = await store.GetProfilesAsync(cancellationToken);
             IReadOnlyList<Folder> folders = await store.GetFoldersAsync(cancellationToken);
+            IReadOnlyList<TagSummary> tags = await store.GetTagsAsync(cancellationToken);
+            IReadOnlyDictionary<Guid, IReadOnlyList<string>> profileTags =
+                await store.GetProfileTagsAsync(cancellationToken);
 
             allProfiles.Clear();
             byId.Clear();
+            folderNames.Clear();
+
+            foreach (Folder folder in folders)
+            {
+                folderNames[folder.Id] = folder.Name;
+            }
 
             foreach (Profile profile in profiles)
             {
-                ProfileItemViewModel item = new(profile)
+                profileTags.TryGetValue(profile.Id, out IReadOnlyList<string>? assigned);
+
+                ProfileItemViewModel item = new(profile, localizer, assigned)
                 {
                     Status = connections.GetStatus(profile.Id),
+                    FolderName = profile.FolderId is { } id && folderNames.TryGetValue(id, out string? name)
+                        ? name
+                        : null,
                 };
 
                 allProfiles.Add(item);
                 byId[profile.Id] = item;
             }
 
-            // The credential prompt reads names from here, so it stays in step with the list.
+            // The credential prompt and the notifications read names from here, so it stays in step.
             nameCache.Replace(allProfiles.Select(
                 profile => new KeyValuePair<Guid, string>(profile.Id, profile.Name)));
 
-            Folders = new ObservableCollection<Folder>(folders);
+            RebuildSidebar(folders, tags);
+
             SelectedFilter ??= Filters[0];
             UpdateFilterCounts();
             ApplyFilter();
 
             StatusMessage = allProfiles.Count == 0
-                ? "No profiles yet. Import .ovpn files to get started."
-                : $"{allProfiles.Count} profile(s)";
+                ? localizer["status.libraryEmpty"]
+                : localizer.Translate("status.profileCount", allProfiles.Count);
 
             OnPropertyChanged(nameof(HasProfiles));
             OnPropertyChanged(nameof(EmptyStateTitle));
             OnPropertyChanged(nameof(EmptyStateDetail));
+
+            ActiveCount = connections.ActiveCount;
+            uptimeTimer.IsEnabled = true;
         }
         finally
         {
@@ -154,9 +206,105 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Executes a shortcut action. Called on the user interface thread.
+    /// </summary>
+    public async Task ExecuteHotkeyActionAsync(string actionId)
+    {
+        ArgumentNullException.ThrowIfNull(actionId);
+
+        if (HotkeyActions.FavouriteSlotOf(actionId) is { } slot)
+        {
+            await ConnectSlotAsync(slot);
+            return;
+        }
+
+        switch (actionId)
+        {
+            case HotkeyActions.ToggleQuickSwitcher:
+                ScreenRequested?.Invoke(this, AppScreen.QuickSwitcher);
+                break;
+
+            case HotkeyActions.ShowMainWindow:
+                ScreenRequested?.Invoke(this, AppScreen.MainWindow);
+                break;
+
+            case HotkeyActions.ConnectLastUsed:
+                await ConnectLastUsedAsync();
+                break;
+
+            case HotkeyActions.ReconnectActive:
+                await ReconnectActiveAsync();
+                break;
+
+            case HotkeyActions.DisconnectActive:
+                await DisconnectActiveAsync();
+                break;
+
+            case HotkeyActions.DisconnectAll:
+                await DisconnectAllAsync();
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Connects a profile by identifier, which is how the quick switcher and the shortcuts reach one.
+    /// </summary>
+    public async Task ConnectByIdAsync(Guid profileId)
+    {
+        if (byId.TryGetValue(profileId, out ProfileItemViewModel? profile))
+        {
+            await ConnectAsync(profile);
+        }
+    }
+
+    public void SelectProfile(Guid profileId)
+    {
+        if (byId.TryGetValue(profileId, out ProfileItemViewModel? profile))
+        {
+            SelectedFilter = Filters[0];
+            SearchTerm = string.Empty;
+            SelectedProfile = VisibleProfiles.FirstOrDefault(item => item.Id == profileId) ?? profile;
+        }
+    }
+
     partial void OnSearchTermChanged(string value) => ApplyFilter();
 
     partial void OnSelectedFilterChanged(SidebarFilterViewModel? value) => ApplyFilter();
+
+    private void RebuildSidebar(IReadOnlyList<Folder> folders, IReadOnlyList<TagSummary> tags)
+    {
+        Guid? selectedFolder = SelectedFilter?.FolderId;
+        string? selectedTag = SelectedFilter?.TagName;
+
+        FolderFilters.Clear();
+        foreach (Folder folder in folders)
+        {
+            FolderFilters.Add(SidebarFilterViewModel.ForFolder(folder.Id, folder.Name));
+        }
+
+        TagFilters.Clear();
+        foreach (TagSummary tag in tags)
+        {
+            TagFilters.Add(SidebarFilterViewModel.ForTag(tag.Name));
+        }
+
+        // A rebuild replaces the instances, so a selection has to be re-established by identity.
+        if (selectedFolder is { } folderId)
+        {
+            SelectedFilter = FolderFilters.FirstOrDefault(filter => filter.FolderId == folderId) ?? Filters[0];
+        }
+        else if (selectedTag is not null)
+        {
+            SelectedFilter = TagFilters.FirstOrDefault(filter => filter.TagName == selectedTag) ?? Filters[0];
+        }
+
+        OnPropertyChanged(nameof(HasFolders));
+        OnPropertyChanged(nameof(HasTags));
+    }
 
     /// <summary>
     /// Refreshes the badge next to each sidebar entry.
@@ -174,6 +322,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 _ => 0,
             };
         }
+
+        foreach (SidebarFilterViewModel folder in FolderFilters)
+        {
+            folder.Count = allProfiles.Count(profile => profile.FolderId == folder.FolderId);
+        }
+
+        foreach (SidebarFilterViewModel tag in TagFilters)
+        {
+            tag.Count = allProfiles.Count(profile =>
+                profile.Tags.Contains(tag.TagName!, StringComparer.OrdinalIgnoreCase));
+        }
     }
 
     private void ApplyFilter()
@@ -182,13 +341,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         IEnumerable<ProfileItemViewModel> matches = allProfiles.Where(profile => profile.Matches(term));
 
-        matches = (SelectedFilter?.Kind ?? SidebarFilterKind.All) switch
+        SidebarFilterViewModel? filter = SelectedFilter;
+
+        matches = (filter?.Kind ?? SidebarFilterKind.All) switch
         {
             SidebarFilterKind.Active => matches.Where(profile => !profile.IsIdle),
             SidebarFilterKind.Favourites => matches.Where(profile => profile.IsFavourite),
             SidebarFilterKind.Recent => matches
                 .Where(profile => profile.LastConnectedAt is not null)
                 .OrderByDescending(profile => profile.LastConnectedAt),
+            SidebarFilterKind.Folder => matches.Where(profile => profile.FolderId == filter!.FolderId),
+            SidebarFilterKind.Tag => matches.Where(profile =>
+                profile.Tags.Contains(filter!.TagName!, StringComparer.OrdinalIgnoreCase)),
             _ => matches,
         };
 
@@ -218,7 +382,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         string? configuration = await store.GetConfigurationAsync(profile.Id);
         if (configuration is null)
         {
-            StatusMessage = $"The configuration for '{profile.Name}' could not be read.";
+            StatusMessage = localizer.Translate("status.configurationUnreadable", profile.Name);
             return;
         }
 
@@ -227,27 +391,47 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             VpnConnectionStatus status = await connections.ConnectAsync(
                 profile.Id,
                 configuration,
-                RouteProtection);
+                RouteProtectionFor(profile));
 
             if (status.State == VpnConnectionState.Failed)
             {
-                StatusMessage = $"{profile.Name}: {status.Message}";
+                StatusMessage = localizer.Translate("status.profileFailed", profile.Name, status.Message);
                 return;
             }
 
             profile.MarkConnected(timeProvider.GetUtcNow());
             await store.RecordConnectionAsync(profile.Id);
-            StatusMessage = $"Connecting to {profile.Name}.";
+            StatusMessage = localizer.Translate("status.connecting", profile.Name);
         }
         catch (ManagementUnavailableException exception)
         {
-            StatusMessage = $"{profile.Name}: {exception.Message}";
+            StatusMessage = localizer.Translate("status.profileFailed", profile.Name, exception.Message);
         }
         catch (InvalidOperationException exception)
         {
-            StatusMessage = $"{profile.Name}: {exception.Message}";
+            StatusMessage = localizer.Translate("status.profileFailed", profile.Name, exception.Message);
         }
     }
+
+    /// <summary>
+    /// The pull filters that stop a server from taking over the host routing table and DNS.
+    /// </summary>
+    /// <remarks>
+    /// A profile may override the application wide setting, because a tunnel meant to carry all
+    /// traffic needs the pushed default route while one that reaches a single network must not take
+    /// the host's routing with it.
+    /// </remarks>
+    private string[] RouteProtectionFor(ProfileItemViewModel profile) =>
+        profile.ProtectRoutes ?? settings.Current.Connections.ProtectRoutes
+            ? RouteProtection
+            : [];
+
+    private static readonly string[] RouteProtection =
+    [
+        "--pull-filter ignore \"redirect-gateway\"",
+        "--pull-filter ignore \"dhcp-option\"",
+        "--pull-filter ignore \"block-outside-dns\"",
+    ];
 
     [RelayCommand]
     private async Task DisconnectAsync(ProfileItemViewModel? profile)
@@ -259,14 +443,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         await connections.DisconnectAsync(profile.Id);
-        StatusMessage = $"Disconnected {profile.Name}.";
+        StatusMessage = localizer.Translate("status.disconnected", profile.Name);
     }
 
     [RelayCommand]
     private async Task DisconnectAllAsync()
     {
         await connections.DisconnectAllAsync();
-        StatusMessage = "All connections stopped.";
+        StatusMessage = localizer["status.allStopped"];
     }
 
     [RelayCommand]
@@ -279,22 +463,147 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         profile.IsFavourite = !profile.IsFavourite;
+
+        if (!profile.IsFavourite)
+        {
+            profile.FavouriteSlot = null;
+        }
+
         await store.SetFavouriteAsync(profile.Id, profile.IsFavourite);
         UpdateFilterCounts();
         ApplyFilter();
     }
 
+    /// <summary>
+    /// Connects every profile filed under the selected folder that is not already up.
+    /// </summary>
+    [RelayCommand]
+    private async Task ConnectFolderAsync()
+    {
+        if (SelectedFilter is not { Kind: SidebarFilterKind.Folder, FolderId: { } folderId })
+        {
+            return;
+        }
+
+        foreach (ProfileItemViewModel profile in allProfiles
+            .Where(profile => profile.FolderId == folderId && profile.IsIdle)
+            .ToList())
+        {
+            await ConnectAsync(profile);
+        }
+    }
+
     [RelayCommand]
     private Task RefreshAsync() => LoadAsync();
 
-    private static string DescribeTransition(ProfileItemViewModel profile, VpnConnectionStatus status) =>
+    [RelayCommand]
+    private void OpenSettings() => ScreenRequested?.Invoke(this, AppScreen.Settings);
+
+    [RelayCommand]
+    private void OpenHistory() => ScreenRequested?.Invoke(this, AppScreen.History);
+
+    [RelayCommand]
+    private void OpenImport() => ScreenRequested?.Invoke(this, AppScreen.Import);
+
+    [RelayCommand]
+    private void OpenQuickSwitcher() => ScreenRequested?.Invoke(this, AppScreen.QuickSwitcher);
+
+    [RelayCommand]
+    private void OpenProfileEditor()
+    {
+        if (SelectedProfile is not null)
+        {
+            ScreenRequested?.Invoke(this, AppScreen.ProfileEditor);
+        }
+    }
+
+    private async Task ConnectSlotAsync(int slot)
+    {
+        Guid? profileId = await store.GetProfileInSlotAsync(slot);
+
+        if (profileId is { } id)
+        {
+            await ConnectByIdAsync(id);
+        }
+    }
+
+    private async Task ConnectLastUsedAsync()
+    {
+        Guid? profileId = await store.GetLastConnectedAsync();
+
+        if (profileId is { } id)
+        {
+            await ConnectByIdAsync(id);
+        }
+    }
+
+    private async Task ReconnectActiveAsync()
+    {
+        // Reconnecting the most recently started tunnel is the useful reading of "the active one"
+        // when several are up, because that is the one the user was last working with.
+        ProfileItemViewModel? active = allProfiles
+            .Where(profile => !profile.IsIdle)
+            .OrderByDescending(profile => profile.Status.ConnectedSince ?? DateTimeOffset.MinValue)
+            .FirstOrDefault();
+
+        if (active is null)
+        {
+            return;
+        }
+
+        await connections.DisconnectAsync(active.Id);
+        await ConnectAsync(active);
+    }
+
+    private async Task DisconnectActiveAsync()
+    {
+        ProfileItemViewModel? active = allProfiles
+            .Where(profile => !profile.IsIdle)
+            .OrderByDescending(profile => profile.Status.ConnectedSince ?? DateTimeOffset.MinValue)
+            .FirstOrDefault();
+
+        if (active is not null)
+        {
+            await DisconnectAsync(active);
+        }
+    }
+
+    private void TickUptime()
+    {
+        foreach (ProfileItemViewModel profile in allProfiles)
+        {
+            profile.RefreshUptime();
+        }
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() =>
+    {
+        foreach (SidebarFilterViewModel filter in Filters)
+        {
+            filter.RefreshLocalizedText();
+        }
+
+        foreach (ProfileItemViewModel profile in allProfiles)
+        {
+            profile.RefreshLocalizedText();
+        }
+
+        OnPropertyChanged(nameof(EmptyStateTitle));
+        OnPropertyChanged(nameof(EmptyStateDetail));
+        OnPropertyChanged(nameof(ActiveSummary));
+    });
+
+    private string DescribeTransition(ProfileItemViewModel profile, VpnConnectionStatus status) =>
         status.State switch
         {
-            VpnConnectionState.Connected => $"{profile.Name} is connected.",
-            VpnConnectionState.Reconnecting => $"{profile.Name} is reconnecting. {status.Message}".TrimEnd(),
-            VpnConnectionState.Failed => $"{profile.Name}: {status.Message}",
-            VpnConnectionState.Disconnected => $"{profile.Name} is disconnected.",
-            _ => $"{profile.Name}: {status.State.ToString().ToLowerInvariant()}.",
+            VpnConnectionState.Connected => localizer.Translate("status.profileConnected", profile.Name),
+            VpnConnectionState.Reconnecting =>
+                localizer.Translate("status.profileReconnecting", profile.Name, status.Message).TrimEnd(),
+            VpnConnectionState.Failed =>
+                localizer.Translate("status.profileFailed", profile.Name, status.Message),
+            VpnConnectionState.Disconnected =>
+                localizer.Translate("status.profileDisconnected", profile.Name),
+            _ => localizer.Translate("status.profileBusy", profile.Name, profile.StatusLabel),
         };
 
     private void OnConnectionStatusChanged(object? sender, ConnectionStatusChanged change)
@@ -323,4 +632,30 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             }
         });
     }
+
+    public void Dispose()
+    {
+        if (disposed)
+        {
+            return;
+        }
+
+        disposed = true;
+        uptimeTimer.IsEnabled = false;
+        connections.StatusChanged -= OnConnectionStatusChanged;
+        localizer.LanguageChanged -= OnLanguageChanged;
+    }
+}
+
+/// <summary>
+/// The screens the main window can open on the view model's behalf.
+/// </summary>
+public enum AppScreen
+{
+    MainWindow,
+    QuickSwitcher,
+    Settings,
+    History,
+    Import,
+    ProfileEditor,
 }

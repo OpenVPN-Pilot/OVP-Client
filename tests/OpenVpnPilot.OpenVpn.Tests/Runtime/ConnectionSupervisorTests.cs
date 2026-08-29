@@ -275,6 +275,92 @@ public sealed class ConnectionSupervisorTests
         Assert.Equal(VpnConnectionState.Disconnected, supervisor.Status.State);
     }
 
+    [Fact]
+    public async Task StaticChallenge_IsPassedToTheProviderAndEncodedIntoThePassword()
+    {
+        Harness harness = new();
+        harness.Credentials.Response = new VpnCredentials("operator", "secret", "123456");
+
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor);
+
+        harness.Transport.SendLine(">PASSWORD:Need 'Auth' username/password SC:1,Enter your token code");
+
+        Assert.Equal("username \"Auth\" \"operator\"", await harness.Transport.ReceiveLineAsync());
+        harness.Transport.SendLine("SUCCESS: ok");
+
+        Assert.Equal(
+            "password \"Auth\" \"SCRV1:c2VjcmV0:MTIzNDU2\"",
+            await harness.Transport.ReceiveLineAsync());
+
+        CredentialChallenge challenge = Assert.Single(harness.Credentials.Requests).Challenge!;
+        Assert.Equal("Enter your token code", challenge.Text);
+        Assert.True(challenge.EchoResponse);
+        Assert.False(challenge.IsDynamic);
+    }
+
+    [Fact]
+    public async Task StaticChallenge_WithoutAResponse_SendsThePasswordUnchanged()
+    {
+        Harness harness = new();
+        harness.Credentials.Response = new VpnCredentials("operator", "secret");
+
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor);
+
+        harness.Transport.SendLine(">PASSWORD:Need 'Auth' username/password SC:1,Enter your token code");
+
+        await harness.Transport.ReceiveLineAsync();
+        harness.Transport.SendLine("SUCCESS: ok");
+
+        Assert.Equal("password \"Auth\" \"secret\"", await harness.Transport.ReceiveLineAsync());
+    }
+
+    [Fact]
+    public async Task DynamicChallenge_IsAnsweredOnTheFollowingAttemptWithTheServerState()
+    {
+        Harness harness = new();
+        harness.Credentials.Response = new VpnCredentials("operator", "secret", "987654");
+
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor);
+
+        harness.Transport.SendLine(
+            ">PASSWORD:Verification Failed: 'Auth' ['CRV1:R,E:state-7:b3BlcmF0b3I=:Enter your token code']");
+        harness.Transport.SendLine(">PASSWORD:Need 'Auth' username/password");
+
+        Assert.Equal("username \"Auth\" \"operator\"", await harness.Transport.ReceiveLineAsync());
+        harness.Transport.SendLine("SUCCESS: ok");
+
+        Assert.Equal(
+            "password \"Auth\" \"CRV1::state-7::987654\"",
+            await harness.Transport.ReceiveLineAsync());
+
+        CredentialRequest request = Assert.Single(harness.Credentials.Requests);
+        Assert.NotNull(request.Challenge);
+        Assert.True(request.Challenge.IsDynamic);
+        Assert.Equal("Enter your token code", request.Challenge.Text);
+
+        // A challenge is a request for a code, not a wrong password, so it must not warn about one.
+        Assert.False(request.IsRetry);
+    }
+
+    [Fact]
+    public async Task DynamicChallenge_UsesTheUsernameTheServerEchoedWhenTheProviderSuppliesNone()
+    {
+        Harness harness = new();
+        harness.Credentials.Response = new VpnCredentials(Username: null, "unused", "987654");
+
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor);
+
+        harness.Transport.SendLine(
+            ">PASSWORD:Verification Failed: 'Auth' ['CRV1:R,E:state-7:b3BlcmF0b3I=:Enter your token code']");
+        harness.Transport.SendLine(">PASSWORD:Need 'Auth' username/password");
+
+        Assert.Equal("username \"Auth\" \"operator\"", await harness.Transport.ReceiveLineAsync());
+    }
+
     private static ConnectionRequest Request() =>
         new(ProfileId, @"C:\profiles\example.ovpn", @"C:\profiles", 25340, []);
 

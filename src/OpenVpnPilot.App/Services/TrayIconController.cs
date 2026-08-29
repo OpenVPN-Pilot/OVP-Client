@@ -1,94 +1,122 @@
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Platform;
 using Avalonia.Threading;
+using OpenVpnPilot.Core.Abstractions;
+using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.OpenVpn.Runtime;
 
 namespace OpenVpnPilot.App.Services;
 
 /// <summary>
-/// Keeps a tray icon in step with the connection state and offers the common actions there.
+/// Keeps the notification area entry in step with the connection state and offers the common actions.
 /// </summary>
 /// <remarks>
 /// The tray is the fastest route to a connection for someone who keeps the window closed, which is
 /// how the stock client is normally used. Closing the window hides it rather than exiting, so the
 /// tunnels keep running and the icon stays the way back in.
+///
+/// The menu is rebuilt whenever the language or the active count changes, because the entries carry
+/// both translated wording and an enabled state that depends on what is running.
 /// </remarks>
 public sealed class TrayIconController : IDisposable
 {
+    public const string ShowWindowAction = "show";
+    public const string QuickSwitcherAction = "switcher";
+    public const string SettingsAction = "settings";
+    public const string DisconnectAllAction = "disconnect-all";
+    public const string QuitAction = "quit";
+
+    private readonly ISystemTrayIcon tray;
     private readonly ConnectionManager connections;
-    private TrayIcon? icon;
-    private NativeMenuItem? disconnectAllItem;
+    private readonly ILocalizer localizer;
     private bool disposed;
 
-    public TrayIconController(ConnectionManager connections)
+    public TrayIconController(
+        ISystemTrayIcon tray,
+        ConnectionManager connections,
+        ILocalizer localizer)
     {
+        ArgumentNullException.ThrowIfNull(tray);
         ArgumentNullException.ThrowIfNull(connections);
+        ArgumentNullException.ThrowIfNull(localizer);
+
+        this.tray = tray;
         this.connections = connections;
+        this.localizer = localizer;
     }
 
-    public void Attach(Application application, IClassicDesktopStyleApplicationLifetime desktop)
+    /// <summary>
+    /// Raised when the icon itself is activated, which is the way back to the window.
+    /// </summary>
+    public event EventHandler? ShowWindowRequested;
+
+    /// <summary>
+    /// Raised with the identifier of the menu entry the user chose.
+    /// </summary>
+    public event EventHandler<string>? MenuActionRequested;
+
+    /// <summary>
+    /// Places the icon. Must be called from the user interface thread, because the icon is driven by
+    /// a window whose messages the application's own loop dispatches.
+    /// </summary>
+    public void Attach()
     {
-        ArgumentNullException.ThrowIfNull(application);
-        ArgumentNullException.ThrowIfNull(desktop);
-
-        NativeMenuItem showItem = new("Show window");
-        showItem.Click += (_, _) => ShowWindow(desktop);
-
-        disconnectAllItem = new NativeMenuItem("Disconnect all") { IsEnabled = false };
-        disconnectAllItem.Click += async (_, _) => await connections.DisconnectAllAsync();
-
-        NativeMenuItem quitItem = new("Quit");
-        quitItem.Click += (_, _) => desktop.Shutdown();
-
-        NativeMenu menu = [showItem, disconnectAllItem, new NativeMenuItemSeparator(), quitItem];
-
-        icon = new TrayIcon
-        {
-            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://OpenVpnPilot/Assets/openvpnpilot.ico"))),
-            ToolTipText = "OpenVpnPilot",
-            Menu = menu,
-        };
-
-        icon.Clicked += (_, _) => ShowWindow(desktop);
-
-        TrayIcon.SetIcons(application, [icon]);
-
-        connections.StatusChanged += OnStatusChanged;
-    }
-
-    private void OnStatusChanged(object? sender, ConnectionStatusChanged change)
-    {
-        Dispatcher.UIThread.Post(() =>
-        {
-            int active = connections.ActiveCount;
-
-            if (disconnectAllItem is not null)
-            {
-                disconnectAllItem.IsEnabled = active > 0;
-            }
-
-            if (icon is not null)
-            {
-                icon.ToolTipText = active == 0
-                    ? "OpenVpnPilot"
-                    : $"OpenVpnPilot - {active} connection(s) active";
-            }
-        });
-    }
-
-    private static void ShowWindow(IClassicDesktopStyleApplicationLifetime desktop)
-    {
-        Window? window = desktop.MainWindow;
-        if (window is null)
+        if (!tray.IsAvailable)
         {
             return;
         }
 
-        window.Show();
-        window.WindowState = WindowState.Normal;
-        window.Activate();
+        tray.Show(localizer["tray.tooltipIdle"]);
+        RebuildMenu();
+
+        tray.Activated += OnActivated;
+        tray.MenuItemInvoked += OnMenuItemInvoked;
+
+        connections.StateChanged += OnStateChanged;
+        localizer.LanguageChanged += OnLanguageChanged;
+    }
+
+    private void OnActivated(object? sender, EventArgs e) =>
+        Dispatcher.UIThread.Post(() => ShowWindowRequested?.Invoke(this, EventArgs.Empty));
+
+    private void OnMenuItemInvoked(object? sender, string actionId) =>
+        Dispatcher.UIThread.Post(() => MenuActionRequested?.Invoke(this, actionId));
+
+    private void OnLanguageChanged(object? sender, EventArgs e) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            RebuildMenu();
+            UpdateTooltip();
+        });
+
+    private void OnStateChanged(object? sender, ConnectionStatusChanged change) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            RebuildMenu();
+            UpdateTooltip();
+        });
+
+    private void UpdateTooltip()
+    {
+        int active = connections.ActiveCount;
+
+        tray.SetTooltip(active == 0
+            ? localizer["tray.tooltipIdle"]
+            : localizer.Translate("tray.tooltipActive", active));
+    }
+
+    private void RebuildMenu()
+    {
+        bool anyActive = connections.ActiveCount > 0;
+
+        tray.SetMenu(
+        [
+            new TrayMenuEntry(ShowWindowAction, localizer["tray.show"]),
+            new TrayMenuEntry(QuickSwitcherAction, localizer["tray.quickSwitcher"]),
+            TrayMenuEntry.Separator,
+            new TrayMenuEntry(DisconnectAllAction, localizer["tray.disconnectAll"], anyActive),
+            TrayMenuEntry.Separator,
+            new TrayMenuEntry(SettingsAction, localizer["tray.settings"]),
+            new TrayMenuEntry(QuitAction, localizer["tray.quit"]),
+        ]);
     }
 
     public void Dispose()
@@ -99,8 +127,11 @@ public sealed class TrayIconController : IDisposable
         }
 
         disposed = true;
-        connections.StatusChanged -= OnStatusChanged;
-        icon?.Dispose();
-        icon = null;
+
+        tray.Activated -= OnActivated;
+        tray.MenuItemInvoked -= OnMenuItemInvoked;
+        connections.StateChanged -= OnStateChanged;
+        localizer.LanguageChanged -= OnLanguageChanged;
+        tray.Dispose();
     }
 }

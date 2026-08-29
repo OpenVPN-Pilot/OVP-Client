@@ -141,6 +141,71 @@
     <Setter Property="FontWeight" Value="Medium" />
   </Style>
 
+  <!-- Numbered favourite slot, shown next to the profile name. -->
+  <Style Selector="Border.slot">
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusSmall}" />
+    <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+    <Setter Property="Padding" Value="5,1" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="Border.slot > TextBlock">
+    <Setter Property="FontSize" Value="10.5" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+  </Style>
+
+  <!-- Section heading inside a settings or history panel. -->
+  <Style Selector="TextBlock.section">
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+    <Setter Property="Margin" Value="0,6,0,2" />
+  </Style>
+
+  <!-- Rows of the quick switcher, denser than the main list. -->
+  <Style Selector="ListBox.switcher">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="6" />
+  </Style>
+
+  <Style Selector="ListBox.switcher ListBoxItem">
+    <Setter Property="Padding" Value="10,7" />
+    <Setter Property="Margin" Value="0,1" />
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusMedium}" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style Selector="ListBox.switcher ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+  </Style>
+
+  <!-- Tabular listing used by the history and the import preview. -->
+  <Style Selector="ListBox.records">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+
+  <Style Selector="ListBox.records ListBoxItem">
+    <Setter Property="Padding" Value="12,9" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style Selector="CheckBox">
+    <Setter Property="FontSize" Value="12.5" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+  </Style>
+
+  <Style Selector="ComboBox">
+    <Setter Property="Background" Value="{DynamicResource SurfaceInput}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusMedium}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="MinHeight" Value="34" />
+  </Style>
+
   <!-- Separator used between grouped detail rows. -->
   <Style Selector="Border.divider">
     <Setter Property="Height" Value="1" />

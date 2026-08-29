@@ -1,0 +1,104 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:OpenVpnPilot.App.ViewModels"
+        xmlns:loc="using:OpenVpnPilot.App.Localization"
+        x:Class="OpenVpnPilot.App.Views.HistoryWindow"
+        x:DataType="vm:HistoryViewModel"
+        Width="900" Height="620"
+        MinWidth="700" MinHeight="440"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceWindow}"
+        Icon="/Assets/openvpnpilot.ico"
+        Title="{loc:Translate nav.history}">
+
+  <Grid RowDefinitions="Auto,*,Auto">
+
+    <Border Grid.Row="0" Background="{DynamicResource SurfaceSidebar}"
+            BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1"
+            Padding="16,12">
+      <StackPanel Orientation="Horizontal" Spacing="10">
+        <ComboBox ItemsSource="{Binding ProfileChoices}" SelectedItem="{Binding SelectedProfile}"
+                  MinWidth="240">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:HistoryProfileChoice">
+              <TextBlock Text="{Binding Name}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+
+        <ComboBox ItemsSource="{Binding Periods}" SelectedItem="{Binding SelectedPeriod}"
+                  MinWidth="180">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:HistoryPeriod">
+              <TextBlock Text="{Binding Name}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+
+        <Button Content="{loc:Translate header.refresh}" Classes="quiet"
+                Command="{Binding RefreshCommand}" />
+      </StackPanel>
+    </Border>
+
+    <Grid Grid.Row="1">
+      <ScrollViewer>
+        <StackPanel>
+          <Grid ColumnDefinitions="2*,1.4*,1.1*,1.4*,1.4*,1.2*" Margin="16,10,16,4">
+            <TextBlock Grid.Column="0" Text="{loc:Translate history.columnProfile}" Classes="overline" />
+            <TextBlock Grid.Column="1" Text="{loc:Translate history.columnStarted}" Classes="overline" />
+            <TextBlock Grid.Column="2" Text="{loc:Translate history.columnDuration}" Classes="overline" />
+            <TextBlock Grid.Column="3" Text="{loc:Translate history.columnTransfer}" Classes="overline" />
+            <TextBlock Grid.Column="4" Text="{loc:Translate history.columnServer}" Classes="overline" />
+            <TextBlock Grid.Column="5" Text="{loc:Translate history.columnReason}" Classes="overline" />
+          </Grid>
+
+          <Border Classes="divider" Margin="16,0" />
+
+          <ItemsControl ItemsSource="{Binding Rows}" Margin="16,4,16,16">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:SessionRowViewModel">
+                <StackPanel Margin="0,0,0,6">
+                  <Grid ColumnDefinitions="2*,1.4*,1.1*,1.4*,1.4*,1.2*">
+                    <TextBlock Grid.Column="0" Text="{Binding ProfileName}" Classes="body"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="1" Text="{Binding StartedDisplay}" Classes="muted" />
+                    <TextBlock Grid.Column="2" Text="{Binding DurationDisplay}" Classes="muted" />
+                    <TextBlock Grid.Column="3" Text="{Binding TransferDisplay}" Classes="muted" />
+                    <TextBlock Grid.Column="4" Text="{Binding ServerDisplay}" Classes="muted"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="5" Text="{Binding ReasonDisplay}" Classes="muted" />
+                  </Grid>
+                  <TextBlock Text="{Binding Detail}" FontSize="11" TextWrapping="Wrap"
+                             Margin="0,2,0,0"
+                             Foreground="{DynamicResource StateFailed}"
+                             IsVisible="{Binding HasDetail}" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+
+      <TextBlock Text="{Binding EmptyText}" Classes="muted"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 IsVisible="{Binding !HasRows}" />
+    </Grid>
+
+    <Border Grid.Row="2" Background="{DynamicResource SurfaceSidebar}"
+            BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
+            Padding="16,12">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+          <TextBlock Text="{Binding TotalsDisplay}" Classes="body" />
+          <TextBlock Text="{Binding StatusMessage}" Classes="muted"
+                     TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+          <Button Name="ExportButton" Content="{loc:Translate history.export}" MinWidth="120" />
+          <Button Name="CloseButton" Content="{loc:Translate common.close}" MinWidth="96" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+  </Grid>
+</Window>

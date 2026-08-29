@@ -1,5 +1,6 @@
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.Core.Vpn;
 using OpenVpnPilot.Data.Entities;
 
@@ -10,9 +11,14 @@ namespace OpenVpnPilot.App.ViewModels;
 /// </summary>
 public sealed partial class ProfileItemViewModel : ViewModelBase
 {
-    public ProfileItemViewModel(Profile profile)
+    private readonly ILocalizer localizer;
+
+    public ProfileItemViewModel(Profile profile, ILocalizer localizer, IReadOnlyList<string>? tags = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(localizer);
+
+        this.localizer = localizer;
 
         Id = profile.Id;
         Name = profile.Name;
@@ -21,14 +27,21 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
         RequiresCredentials = profile.RequiresCredentials;
         HasUnsupportedOptions = profile.HasUnsupportedOptions;
         LastConnectedAt = profile.LastConnectedAt;
+        ConnectCount = profile.ConnectCount;
+        Notes = profile.Notes;
+        ProtectRoutes = profile.ProtectRoutes;
+        Tags = tags ?? [];
+
         IsFavourite = profile.IsFavourite;
+        FavouriteSlot = profile.FavouriteSlot;
 
         // Matching happens on a prepared lower case string so filtering does not allocate per keystroke.
         SearchText = string.Join(
             ' ',
             profile.Name,
             profile.RemoteHost ?? string.Empty,
-            profile.Protocol ?? string.Empty).ToLowerInvariant();
+            profile.Protocol ?? string.Empty,
+            string.Join(' ', Tags)).ToLowerInvariant();
     }
 
     public Guid Id { get; }
@@ -49,13 +62,46 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
 
     public DateTimeOffset? LastConnectedAt { get; private set; }
 
+    public int ConnectCount { get; }
+
+    public string? Notes { get; }
+
+    /// <summary>
+    /// Per profile override for the route protection. Null follows the application wide setting.
+    /// </summary>
+    public bool? ProtectRoutes { get; }
+
+    public IReadOnlyList<string> Tags { get; }
+
+    public bool HasTags => Tags.Count > 0;
+
+    public string TagsDisplay => string.Join(", ", Tags);
+
+    /// <summary>
+    /// Name of the folder this profile is filed under, filled in by the list that knows the tree.
+    /// </summary>
+    [ObservableProperty]
+    public partial string? FolderName { get; set; }
+
     internal string SearchText { get; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FavouriteActionLabel))]
     public partial bool IsFavourite { get; set; }
 
-    public string FavouriteActionLabel => IsFavourite ? "Unfavourite" : "Favourite";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasFavouriteSlot))]
+    [NotifyPropertyChangedFor(nameof(FavouriteSlotDisplay))]
+    public partial int? FavouriteSlot { get; set; }
+
+    public bool HasFavouriteSlot => FavouriteSlot is not null;
+
+    public string FavouriteSlotDisplay =>
+        FavouriteSlot?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+
+    public string FavouriteActionLabel => IsFavourite
+        ? localizer["profile.favouriteRemove"]
+        : localizer["profile.favouriteAdd"];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatusText))]
@@ -66,6 +112,7 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(HasFailureMessage))]
     [NotifyPropertyChangedFor(nameof(LocalAddressDisplay))]
     [NotifyPropertyChangedFor(nameof(ServerDisplay))]
+    [NotifyPropertyChangedFor(nameof(UptimeDisplay))]
     public partial VpnConnectionStatus Status { get; set; } = VpnConnectionStatus.Disconnected;
 
     public bool IsConnected => Status.State == VpnConnectionState.Connected;
@@ -84,20 +131,20 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
 
     public string StatusText => Status.State switch
     {
-        VpnConnectionState.Connected => "Connected",
-        VpnConnectionState.Connecting => "Connecting",
-        VpnConnectionState.Launching => "Starting",
-        VpnConnectionState.Authenticating => "Authenticating",
-        VpnConnectionState.Reconnecting => "Reconnecting",
-        VpnConnectionState.Disconnecting => "Disconnecting",
-        VpnConnectionState.Failed => "Failed",
+        VpnConnectionState.Connected => localizer["state.connected"],
+        VpnConnectionState.Connecting => localizer["state.connecting"],
+        VpnConnectionState.Launching => localizer["state.launching"],
+        VpnConnectionState.Authenticating => localizer["state.authenticating"],
+        VpnConnectionState.Reconnecting => localizer["state.reconnecting"],
+        VpnConnectionState.Disconnecting => localizer["state.disconnecting"],
+        VpnConnectionState.Failed => localizer["state.failed"],
         _ => string.Empty,
     };
 
     /// <summary>
     /// Status text that is never empty, for places that always show a label.
     /// </summary>
-    public string StatusLabel => StatusText.Length == 0 ? "Not connected" : StatusText;
+    public string StatusLabel => StatusText.Length == 0 ? localizer["state.disconnected"] : StatusText;
 
     public bool HasFailureMessage =>
         Status.State == VpnConnectionState.Failed && Status.Message.Length > 0;
@@ -108,12 +155,17 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
         ? $"{address}:{Status.ServerPort}"
         : Endpoint;
 
-    public string AuthenticationDisplay =>
-        RequiresCredentials ? "User name and password" : "Certificate";
+    public string UptimeDisplay => Status.ConnectedSince is { } since
+        ? FormatDuration(DateTimeOffset.UtcNow - since)
+        : "-";
+
+    public string AuthenticationDisplay => RequiresCredentials
+        ? localizer["profile.authPassword"]
+        : localizer["profile.authCertificate"];
 
     public string LastConnectedDisplay => LastConnectedAt is { } when
         ? when.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
-        : "Never";
+        : localizer["common.never"];
 
     public void MarkConnected(DateTimeOffset when)
     {
@@ -122,11 +174,31 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// Re-reads every computed label, which is what a language change requires.
+    /// </summary>
+    public void RefreshLocalizedText() => OnPropertyChanged(propertyName: null);
+
+    /// <summary>
+    /// Raises the uptime so a connected row keeps counting without the status itself changing.
+    /// </summary>
+    public void RefreshUptime()
+    {
+        if (IsConnected)
+        {
+            OnPropertyChanged(nameof(UptimeDisplay));
+        }
+    }
+
+    /// <summary>
     /// True when the profile matches a search term. An empty term matches everything.
     /// </summary>
     public bool Matches(string lowerCaseTerm) =>
         lowerCaseTerm.Length == 0
         || SearchText.Contains(lowerCaseTerm, StringComparison.Ordinal);
+
+    private static string FormatDuration(TimeSpan value) => value.TotalDays >= 1
+        ? value.ToString(@"d\.hh\:mm\:ss", CultureInfo.InvariantCulture)
+        : value.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
 
     private static string FormatEndpoint(Profile profile)
     {

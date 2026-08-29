@@ -7,11 +7,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using OpenVpnPilot.Core.Abstractions;
+using OpenVpnPilot.App.Localization;
 using OpenVpnPilot.App.Services;
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.App.Views;
+using OpenVpnPilot.Core.Abstractions;
+using OpenVpnPilot.Core.Settings;
 using OpenVpnPilot.Data;
+using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.OpenVpn.Runtime;
 
 namespace OpenVpnPilot.App;
@@ -24,7 +27,13 @@ public partial class App : Application
     /// </summary>
     internal static SingleInstanceGuard? InstanceGuard { get; set; }
 
+    /// <summary>
+    /// True when the process was started by the autostart entry, which asks for no window.
+    /// </summary>
+    internal static bool StartInBackground { get; set; }
+
     private IHost? host;
+    private WindowCoordinator? windows;
 
     public override void Initialize()
     {
@@ -43,40 +52,99 @@ public partial class App : Application
         ApplyMigrations();
         RemoveStaleRuntimeFiles();
 
+        // Settings and the language have to be in place before anything reads a label.
+        ISettingsService settings = host.Services.GetRequiredService<ISettingsService>();
+        settings.LoadAsync().GetAwaiter().GetResult();
+
+        host.Services.GetRequiredService<LanguageCoordinator>().Attach();
+        host.Services.GetRequiredService<LocalizationResourceBridge>().Attach(this);
+        host.Services.GetRequiredService<AppearanceController>().Attach(this);
+
         MainWindowViewModel viewModel = host.Services.GetRequiredService<MainWindowViewModel>();
         MainWindow window = new() { DataContext = viewModel };
 
-        window.Opened += async (_, _) => await viewModel.LoadAsync();
-
-        // Closing the window keeps the tunnels running; the tray icon is the way back in.
-        window.Closing += (_, args) =>
-        {
-            if (desktop.ShutdownMode == ShutdownMode.OnExplicitShutdown)
-            {
-                args.Cancel = true;
-                window.Hide();
-            }
-        };
+        windows = new WindowCoordinator(host.Services, window, viewModel, desktop);
+        windows.Attach();
 
         desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
         desktop.MainWindow = window;
 
-        host.Services.GetRequiredService<TrayIconController>().Attach(this, desktop);
+        StartServices(desktop, window, viewModel, settings);
 
         if (InstanceGuard is not null)
         {
-            InstanceGuard.ActivationRequested += (_, _) => Dispatcher.UIThread.Post(() =>
-            {
-                window.Show();
-                window.WindowState = WindowState.Normal;
-                window.Activate();
-            });
+            InstanceGuard.ActivationRequested += (_, _) =>
+                Dispatcher.UIThread.Post(() => WindowCoordinator.Reveal(window));
         }
 
         // Closing the application must not leave tunnels running unattended.
         desktop.ShutdownRequested += OnShutdownRequested;
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private void StartServices(
+        IClassicDesktopStyleApplicationLifetime desktop,
+        MainWindow window,
+        MainWindowViewModel viewModel,
+        ISettingsService settings)
+    {
+        IServiceProvider services = host!.Services;
+
+        services.GetRequiredService<SessionRecorder>().Attach();
+        services.GetRequiredService<NotificationService>().Attach();
+
+        TrayIconController tray = services.GetRequiredService<TrayIconController>();
+        tray.Attach();
+        tray.ShowWindowRequested += (_, _) => WindowCoordinator.Reveal(window);
+        tray.MenuActionRequested += (_, action) => windows!.HandleTrayAction(action, desktop);
+
+        services.GetRequiredService<NotificationService>().ProfileActivated += (_, profileId) =>
+            Dispatcher.UIThread.Post(() =>
+            {
+                WindowCoordinator.Reveal(window);
+                viewModel.SelectProfile(profileId);
+            });
+
+        // A window that starts hidden still has to load, because the tray menu and the shortcuts act
+        // on the same view model.
+        window.Opened += async (_, _) => await viewModel.LoadAsync();
+
+        bool startHidden = StartInBackground || settings.Current.General.StartMinimised;
+
+        if (startHidden)
+        {
+            // Loading is normally triggered by the window opening, which never happens here.
+            Dispatcher.UIThread.Post(async () => await viewModel.LoadAsync());
+        }
+        else
+        {
+            window.Show();
+        }
+
+        Dispatcher.UIThread.Post(async () => await StartBackgroundWorkAsync());
+    }
+
+    /// <summary>
+    /// Work that needs the interface to exist but must not delay it appearing.
+    /// </summary>
+    private async Task StartBackgroundWorkAsync()
+    {
+        IServiceProvider services = host!.Services;
+
+        // A session left open by a forced exit would otherwise be shown as still running.
+        int abandoned = await services.GetRequiredService<ISessionStore>().CloseAbandonedAsync();
+
+        if (abandoned > 0)
+        {
+            AppLog.AbandonedSessionsClosed(services.GetRequiredService<ILogger<App>>(), abandoned);
+        }
+
+        HotkeyCoordinator hotkeys = services.GetRequiredService<HotkeyCoordinator>();
+        hotkeys.ActionRequested += (_, action) => Dispatcher.UIThread.Post(async () =>
+            await services.GetRequiredService<MainWindowViewModel>().ExecuteHotkeyActionAsync(action));
+
+        await hotkeys.AttachAsync();
     }
 
     /// <summary>
@@ -108,10 +176,18 @@ public partial class App : Application
             return;
         }
 
-        ConnectionManager connections = host.Services.GetRequiredService<ConnectionManager>();
+        IServiceProvider services = host.Services;
 
         // Shutdown cannot await, so the tunnels are stopped before the process exits.
-        connections.DisconnectAllAsync().GetAwaiter().GetResult();
+        services.GetRequiredService<SessionRecorder>()
+            .CloseOpenSessionsAsync(SessionEndReason.ApplicationClosed)
+            .GetAwaiter()
+            .GetResult();
+
+        services.GetRequiredService<ConnectionManager>().DisconnectAllAsync().GetAwaiter().GetResult();
+
+        services.GetRequiredService<HotkeyCoordinator>().Dispose();
+        services.GetRequiredService<TrayIconController>().Dispose();
 
         host.Dispose();
         host = null;

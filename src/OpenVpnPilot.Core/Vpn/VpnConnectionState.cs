@@ -82,6 +82,16 @@ public sealed record VpnConnectionStatus
     public string Message { get; init; } = string.Empty;
 
     /// <summary>
+    /// Why the connection ended, when it ended for a reason worth acting on.
+    /// </summary>
+    /// <remarks>
+    /// The message alone cannot be acted on, because it is free text from OpenVPN. This is what
+    /// tells the history what to record and tells the retry logic whether another attempt could
+    /// possibly succeed.
+    /// </remarks>
+    public VpnFailureKind Failure { get; init; } = VpnFailureKind.None;
+
+    /// <summary>
     /// How long the tunnel has been up, or null when it is not connected.
     /// </summary>
     public TimeSpan? Uptime(DateTimeOffset now) =>
@@ -89,4 +99,40 @@ public sealed record VpnConnectionStatus
 
     public static VpnConnectionStatus Disconnected { get; } =
         new() { State = VpnConnectionState.Disconnected };
+}
+
+/// <summary>
+/// Why a connection stopped, in terms the application can act on.
+/// </summary>
+public enum VpnFailureKind
+{
+    /// <summary>
+    /// Nothing went wrong, or nothing has gone wrong yet.
+    /// </summary>
+    None,
+
+    /// <summary>
+    /// The user asked for the disconnect.
+    /// </summary>
+    UserRequested,
+
+    /// <summary>
+    /// The process could not be started at all, so nothing was ever negotiated.
+    /// </summary>
+    LaunchRefused,
+
+    /// <summary>
+    /// Credentials were missing or refused. Retrying with the same values cannot help.
+    /// </summary>
+    Authentication,
+
+    /// <summary>
+    /// The tunnel or the management connection dropped. Another attempt may well succeed.
+    /// </summary>
+    ConnectionLost,
+
+    /// <summary>
+    /// OpenVPN reported an unrecoverable error, such as a configuration it cannot parse.
+    /// </summary>
+    Fatal,
 }

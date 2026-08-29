@@ -1,0 +1,97 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:OpenVpnPilot.App.ViewModels"
+        xmlns:loc="using:OpenVpnPilot.App.Localization"
+        x:Class="OpenVpnPilot.App.Views.ImportWindow"
+        x:DataType="vm:ImportViewModel"
+        Width="820" Height="620"
+        MinWidth="640" MinHeight="440"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceWindow}"
+        Icon="/Assets/openvpnpilot.ico"
+        Title="{loc:Translate header.import}">
+
+  <Grid RowDefinitions="Auto,*,Auto,Auto">
+
+    <Border Grid.Row="0" Background="{DynamicResource SurfaceSidebar}"
+            BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1"
+            Padding="16,12">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Name="PickFilesButton" Content="{loc:Translate import.pickFiles}" />
+        <Button Name="PickFolderButton" Content="{loc:Translate import.pickFolder}" />
+        <Button Name="PickArchiveButton" Content="{loc:Translate import.pickArchive}" />
+      </StackPanel>
+    </Border>
+
+    <Grid Grid.Row="1">
+      <ScrollViewer>
+        <ItemsControl ItemsSource="{Binding Rows}" Margin="16,12">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ImportRowViewModel">
+              <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,8">
+                <Border Grid.Column="0" Classes="pill" Margin="0,0,12,0" VerticalAlignment="Top"
+                        Background="{DynamicResource SurfaceCardHover}">
+                  <TextBlock Text="{Binding OutcomeDisplay}"
+                             Foreground="{DynamicResource TextSecondary}" />
+                </Border>
+
+                <StackPanel Grid.Column="1" Spacing="2">
+                  <TextBlock Text="{Binding Name}" Classes="body" FontWeight="SemiBold"
+                             TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding Endpoint}" Classes="muted" />
+                  <TextBlock Text="{Binding Detail}" FontSize="11" TextWrapping="Wrap"
+                             Foreground="{DynamicResource StatePending}"
+                             IsVisible="{Binding HasDetail}" />
+                </StackPanel>
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
+                  MaxWidth="360" IsVisible="{Binding !HasRows}">
+        <TextBlock Text="{Binding DropHint}" Classes="muted"
+                   TextWrapping="Wrap" TextAlignment="Center" />
+      </StackPanel>
+    </Grid>
+
+    <Border Grid.Row="2" BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
+            Padding="16,12">
+      <Grid ColumnDefinitions="Auto,*,Auto,*">
+        <TextBlock Grid.Column="0" Classes="muted" VerticalAlignment="Center"
+                   Text="{loc:Translate import.targetFolder}" Margin="0,0,10,0" />
+        <ComboBox Grid.Column="1" ItemsSource="{Binding Folders}"
+                  SelectedItem="{Binding SelectedFolder}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ImportFolderChoice">
+              <TextBlock Text="{Binding Name}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+
+        <TextBlock Grid.Column="2" Classes="muted" VerticalAlignment="Center"
+                   Text="{loc:Translate import.tags}" Margin="16,0,10,0" />
+        <TextBox Grid.Column="3" Text="{Binding TagsInput}"
+                 Watermark="{loc:Translate import.tagsHint}" />
+      </Grid>
+    </Border>
+
+    <Border Grid.Row="3" Background="{DynamicResource SurfaceSidebar}"
+            BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
+            Padding="16,12">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Classes="muted"
+                   VerticalAlignment="Center" TextWrapping="Wrap" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+          <Button Content="{loc:Translate common.cancel}" MinWidth="96"
+                  Command="{Binding CancelCommand}" />
+          <Button Content="{loc:Translate import.commit}" Classes="primary" MinWidth="120"
+                  Command="{Binding CommitCommand}"
+                  IsEnabled="{Binding CanCommit}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+  </Grid>
+</Window>

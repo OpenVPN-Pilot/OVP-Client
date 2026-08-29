@@ -1,0 +1,104 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:OpenVpnPilot.App.ViewModels"
+        xmlns:loc="using:OpenVpnPilot.App.Localization"
+        x:Class="OpenVpnPilot.App.Views.ProfileEditorWindow"
+        x:DataType="vm:ProfileEditorViewModel"
+        Width="520" SizeToContent="Height"
+        MinWidth="460"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="{DynamicResource SurfaceWindow}"
+        Icon="/Assets/openvpnpilot.ico"
+        Title="{loc:Translate editor.title}">
+
+  <StackPanel Margin="22" Spacing="14">
+
+    <StackPanel Spacing="5">
+      <TextBlock Text="{loc:Translate editor.name}" Classes="muted" />
+      <TextBox Text="{Binding Name}" />
+    </StackPanel>
+
+    <TextBlock Text="{Binding Endpoint}" Classes="muted" />
+
+    <Border Classes="divider" />
+
+    <StackPanel Spacing="5">
+      <TextBlock Text="{loc:Translate editor.folder}" Classes="muted" />
+      <ComboBox ItemsSource="{Binding Folders}" SelectedItem="{Binding SelectedFolder}"
+                HorizontalAlignment="Stretch">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ProfileFolderChoice">
+            <TextBlock Text="{Binding Name}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+    </StackPanel>
+
+    <StackPanel Spacing="5">
+      <TextBlock Text="{loc:Translate editor.tags}" Classes="muted" />
+      <TextBox Text="{Binding TagsInput}" Watermark="{loc:Translate import.tagsHint}" />
+    </StackPanel>
+
+    <Border Classes="divider" />
+
+    <CheckBox Content="{loc:Translate editor.favourite}" IsChecked="{Binding IsFavourite}" />
+
+    <StackPanel Spacing="5">
+      <TextBlock Text="{loc:Translate editor.slot}" Classes="muted" />
+      <ComboBox ItemsSource="{Binding Slots}" SelectedItem="{Binding SelectedSlot}"
+                HorizontalAlignment="Left" MinWidth="120" />
+      <TextBlock Text="{loc:Translate editor.slotHint}" Classes="muted" TextWrapping="Wrap" />
+    </StackPanel>
+
+    <StackPanel Spacing="5">
+      <TextBlock Text="{loc:Translate editor.routing}" Classes="muted" />
+      <ComboBox ItemsSource="{Binding RouteProtectionChoices}"
+                SelectedItem="{Binding SelectedRouteProtection}"
+                HorizontalAlignment="Stretch">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:RouteProtectionChoice">
+            <TextBlock Text="{Binding Name}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+    </StackPanel>
+
+    <StackPanel Spacing="5">
+      <TextBlock Text="{loc:Translate editor.notes}" Classes="muted" />
+      <TextBox Text="{Binding Notes}" AcceptsReturn="True" Height="76" TextWrapping="Wrap" />
+    </StackPanel>
+
+    <TextBlock Text="{Binding StatusMessage}" Classes="muted"
+               Foreground="{DynamicResource StateFailed}" TextWrapping="Wrap" />
+
+    <Border Classes="divider" />
+
+    <Grid ColumnDefinitions="Auto,*,Auto,Auto" IsVisible="{Binding !IsConfirmingDelete}">
+      <Button Grid.Column="0" Classes="quiet" Content="{loc:Translate editor.delete}"
+              Foreground="{DynamicResource StateFailed}"
+              Command="{Binding RequestDeleteCommand}" />
+      <Button Grid.Column="2" Content="{loc:Translate common.cancel}" MinWidth="92" Margin="0,0,8,0"
+              Command="{Binding CancelCommand}" />
+      <Button Grid.Column="3" Content="{loc:Translate common.save}" Classes="primary" MinWidth="92"
+              Command="{Binding SaveCommand}" />
+    </Grid>
+
+    <Border CornerRadius="7" Padding="12,10"
+            Background="{DynamicResource StateFailedSoft}"
+            IsVisible="{Binding IsConfirmingDelete}">
+      <StackPanel Spacing="10">
+        <TextBlock Text="{loc:Translate editor.deleteConfirm}" TextWrapping="Wrap" FontSize="12"
+                   Foreground="{DynamicResource StateFailed}" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+          <Button Content="{loc:Translate common.cancel}" MinWidth="92"
+                  Command="{Binding CancelDeleteCommand}" />
+          <Button Content="{loc:Translate editor.delete}" MinWidth="92"
+                  Foreground="{DynamicResource StateFailed}"
+                  Command="{Binding ConfirmDeleteCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+  </StackPanel>
+</Window>

@@ -35,6 +35,10 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
     private Task? pump;
     private VpnConnectionStatus status = VpnConnectionStatus.Disconnected;
     private readonly HashSet<string> rejectedRealms = new(StringComparer.Ordinal);
+
+    // A dynamic challenge arrives with the refusal of one attempt and is answered in the next, so
+    // it has to outlive the attempt that raised it.
+    private readonly Dictionary<string, DynamicChallenge> pendingChallenges = new(StringComparer.Ordinal);
     private bool disposed;
 
     public ConnectionSupervisor(
@@ -96,7 +100,13 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
             }
 
             rejectedRealms.Clear();
-            Publish(status with { State = VpnConnectionState.Launching, Message = string.Empty });
+            pendingChallenges.Clear();
+            Publish(status with
+            {
+                State = VpnConnectionState.Launching,
+                Message = string.Empty,
+                Failure = VpnFailureKind.None,
+            });
 
             string managementPassword = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
 
@@ -116,6 +126,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                 {
                     State = VpnConnectionState.Failed,
                     Message = launch.Message,
+                    Failure = VpnFailureKind.LaunchRefused,
                 });
 
                 return status;
@@ -167,7 +178,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
             }
 
             await TearDownAsync();
-            Publish(VpnConnectionStatus.Disconnected);
+            Publish(VpnConnectionStatus.Disconnected with { Failure = VpnFailureKind.UserRequested });
         }
         finally
         {
@@ -191,7 +202,12 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
         catch (Exception exception) when (exception is IOException or InvalidOperationException)
         {
             ConnectionSupervisorLog.PumpFailed(logger, exception);
-            Publish(status with { State = VpnConnectionState.Failed, Message = exception.Message });
+            Publish(status with
+            {
+                State = VpnConnectionState.Failed,
+                Message = exception.Message,
+                Failure = VpnFailureKind.ConnectionLost,
+            });
         }
     }
 
@@ -224,8 +240,19 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                 break;
 
             case PasswordVerificationFailedMessage rejection:
-                rejectedRealms.Add(rejection.Realm);
-                ConnectionSupervisorLog.CredentialsRejected(logger, rejection.Realm);
+                // A dynamic challenge is reported as a refusal, but it is a request for a code
+                // rather than a wrong password, so the retry warning is not shown for it.
+                if (rejection.Challenge is { } challenge)
+                {
+                    pendingChallenges[rejection.Realm] = challenge;
+                    ConnectionSupervisorLog.ChallengeReceived(logger, rejection.Realm);
+                }
+                else
+                {
+                    rejectedRealms.Add(rejection.Realm);
+                    ConnectionSupervisorLog.CredentialsRejected(logger, rejection.Realm);
+                }
+
                 break;
 
             case FatalMessage fatal:
@@ -234,7 +261,12 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                 // explanation with an internal one.
                 if (status.State != VpnConnectionState.Failed)
                 {
-                    Publish(status with { State = VpnConnectionState.Failed, Message = fatal.Text });
+                    Publish(status with
+                    {
+                        State = VpnConnectionState.Failed,
+                        Message = fatal.Text,
+                        Failure = VpnFailureKind.Fatal,
+                    });
                 }
 
                 break;
@@ -262,6 +294,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                     ServerAddress = state.RemoteAddress,
                     ServerPort = state.RemotePort,
                     Message = string.Empty,
+                    Failure = VpnFailureKind.None,
                 });
                 break;
 
@@ -275,7 +308,16 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                 break;
 
             case "EXITING":
-                Publish(status with { State = VpnConnectionState.Disconnected, ConnectedSince = null });
+                // A process that exits while a disconnect is in flight is doing what it was asked.
+                // Any other exit is the tunnel going away on its own.
+                Publish(status with
+                {
+                    State = VpnConnectionState.Disconnected,
+                    ConnectedSince = null,
+                    Failure = status.State == VpnConnectionState.Disconnecting
+                        ? VpnFailureKind.UserRequested
+                        : VpnFailureKind.ConnectionLost,
+                });
                 break;
 
             case "AUTH":
@@ -303,11 +345,14 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
     {
         Publish(status with { State = VpnConnectionState.Authenticating });
 
+        pendingChallenges.Remove(message.Realm, out DynamicChallenge? dynamicChallenge);
+
         CredentialRequest credentialRequest = new(
             request.ProfileId,
             message.Realm,
             message.NeedsUsername,
-            rejectedRealms.Contains(message.Realm));
+            rejectedRealms.Contains(message.Realm),
+            DescribeChallenge(message.Challenge, dynamicChallenge));
 
         VpnCredentials? credentials = await credentialProvider.RequestAsync(credentialRequest, cancellationToken);
 
@@ -320,6 +365,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                 Message = credentialRequest.IsRetry
                     ? $"The credentials for '{message.Realm}' were rejected by the server."
                     : $"No credentials are available for '{message.Realm}'.",
+                Failure = VpnFailureKind.Authentication,
             });
 
             await client!.SignalAsync("SIGTERM", cancellationToken);
@@ -328,9 +374,49 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
 
         await client!.SendCredentialsAsync(
             message.Realm,
-            message.NeedsUsername ? credentials.Username : null,
-            credentials.Password,
+            message.NeedsUsername ? credentials.Username ?? dynamicChallenge?.Username : null,
+            EncodePassword(credentials, message.Challenge, dynamicChallenge),
             cancellationToken);
+    }
+
+    /// <summary>
+    /// Turns the protocol level challenge into the neutral form the credential provider understands.
+    /// </summary>
+    private static CredentialChallenge? DescribeChallenge(
+        StaticChallenge? staticChallenge,
+        DynamicChallenge? dynamicChallenge)
+    {
+        if (dynamicChallenge is not null)
+        {
+            return new CredentialChallenge(dynamicChallenge.Text, dynamicChallenge.Echo, IsDynamic: true);
+        }
+
+        return staticChallenge is null
+            ? null
+            : new CredentialChallenge(staticChallenge.Text, staticChallenge.Echo, IsDynamic: false);
+    }
+
+    /// <summary>
+    /// Packs the answer into the password field, which is where OpenVPN carries a challenge response.
+    /// </summary>
+    private static string EncodePassword(
+        VpnCredentials credentials,
+        StaticChallenge? staticChallenge,
+        DynamicChallenge? dynamicChallenge)
+    {
+        if (dynamicChallenge is not null)
+        {
+            return ChallengeEncoding.ForDynamicChallenge(
+                dynamicChallenge.StateId,
+                credentials.ChallengeResponse ?? string.Empty);
+        }
+
+        if (staticChallenge is not null && credentials.ChallengeResponse is { } response)
+        {
+            return ChallengeEncoding.ForStaticChallenge(credentials.Password, response);
+        }
+
+        return credentials.Password;
     }
 
     private void Publish(VpnConnectionStatus next)

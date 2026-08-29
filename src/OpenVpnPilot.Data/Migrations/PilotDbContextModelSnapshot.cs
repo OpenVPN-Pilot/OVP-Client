@@ -158,6 +158,9 @@ namespace OpenVpnPilot.Data.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool?>("ProtectRoutes")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Protocol")
                         .HasMaxLength(10)
                         .HasColumnType("TEXT");

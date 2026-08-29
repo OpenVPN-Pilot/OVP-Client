@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 
 namespace OpenVpnPilot.OpenVpn.Management;
 
@@ -23,6 +24,8 @@ public static class ManagementMessageParser
 
     private const string PasswordNeedMarker = "Need ";
     private const string PasswordVerificationMarker = "Verification Failed: ";
+    private const string StaticChallengeMarker = "SC:";
+    private const string DynamicChallengeMarker = "CRV1:";
 
     /// <summary>
     /// Parses one line. The line must already have its trailing newline removed.
@@ -226,6 +229,7 @@ public static class ManagementMessageParser
                     RawLine = rawLine,
                     Realm = realm,
                     NeedsUsername = remainder.Contains("username", StringComparison.OrdinalIgnoreCase),
+                    Challenge = ParseStaticChallenge(remainder),
                 };
             }
         }
@@ -240,11 +244,14 @@ public static class ManagementMessageParser
                 int realmEnd = remainder.IndexOf('\'', 1);
                 string reason = realmEnd >= 0 ? remainder[(realmEnd + 1)..].Trim() : string.Empty;
 
+                string detail = reason.Trim('[', ']', '\'', ' ');
+
                 return new PasswordVerificationFailedMessage
                 {
                     RawLine = rawLine,
                     Realm = realm,
-                    Reason = reason.Trim('[', ']', '\'', ' '),
+                    Reason = detail,
+                    Challenge = ParseDynamicChallenge(detail),
                 };
             }
         }
@@ -255,6 +262,81 @@ public static class ManagementMessageParser
             Kind = "PASSWORD",
             Payload = payload,
         };
+    }
+
+    /// <summary>
+    /// Reads the static challenge a server appends as SC:echo,text.
+    /// </summary>
+    /// <remarks>
+    /// The prompt runs to the end of the line and may itself contain commas, so only the echo flag
+    /// is split off.
+    /// </remarks>
+    private static StaticChallenge? ParseStaticChallenge(string remainder)
+    {
+        int marker = remainder.IndexOf(StaticChallengeMarker, StringComparison.Ordinal);
+
+        if (marker < 0)
+        {
+            return null;
+        }
+
+        string body = remainder[(marker + StaticChallengeMarker.Length)..];
+        int comma = body.IndexOf(',', StringComparison.Ordinal);
+
+        if (comma < 0)
+        {
+            // No flag field, so the whole remainder is the prompt and the safe reading is secret.
+            return new StaticChallenge(body.Trim(), Echo: false);
+        }
+
+        return new StaticChallenge(
+            body[(comma + 1)..].Trim(),
+            Echo: body[..comma].Trim() == "1");
+    }
+
+    /// <summary>
+    /// Reads a dynamic challenge, written as CRV1:flags:state:user:text.
+    /// </summary>
+    /// <remarks>
+    /// The user name is base64 encoded because it may contain the field separator. The prompt is
+    /// not, so the split stops after four fields and keeps the rest verbatim.
+    /// </remarks>
+    private static DynamicChallenge? ParseDynamicChallenge(string reason)
+    {
+        if (!reason.StartsWith(DynamicChallengeMarker, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        string[] fields = reason[DynamicChallengeMarker.Length..].Split(':', 4);
+
+        if (fields.Length < 4)
+        {
+            return null;
+        }
+
+        string flags = fields[0];
+
+        return new DynamicChallenge(
+            StateId: fields[1],
+            Username: DecodeBase64(fields[2]),
+            Text: fields[3],
+            Echo: flags.Contains('E', StringComparison.Ordinal),
+            ResponseRequired: flags.Contains('R', StringComparison.Ordinal));
+    }
+
+    private static string? DecodeBase64(string value)
+    {
+        if (value.Length == 0)
+        {
+            return null;
+        }
+
+        byte[] buffer = new byte[value.Length];
+
+        return Convert.TryFromBase64String(value, buffer, out int written)
+            ? Encoding.UTF8.GetString(buffer, 0, written)
+            : null;
     }
 
     private static string? ExtractQuoted(string value)

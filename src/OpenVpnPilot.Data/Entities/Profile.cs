@@ -67,6 +67,17 @@ public sealed class Profile
     /// </summary>
     public bool IsSelfContained { get; set; } = true;
 
+    /// <summary>
+    /// Whether pushed routing and DNS options are ignored for this profile. Null follows the
+    /// application wide setting.
+    /// </summary>
+    /// <remarks>
+    /// A profile that is meant to carry all traffic needs the pushed default route, while one that
+    /// only reaches a single network must not take the host's routing table with it. That is a per
+    /// profile decision, not a global one.
+    /// </remarks>
+    public bool? ProtectRoutes { get; set; }
+
     public string? Notes { get; set; }
 
     /// <summary>

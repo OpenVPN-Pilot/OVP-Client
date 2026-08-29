@@ -54,6 +54,15 @@ public sealed class ConnectionManager : IAsyncDisposable
     public event EventHandler<ConnectionStatusChanged>? StatusChanged;
 
     /// <summary>
+    /// Raised only when a connection's lifecycle state itself changes.
+    /// </summary>
+    /// <remarks>
+    /// Throughput updates arrive every second per tunnel. Anything that reacts to transitions, such
+    /// as notifications or the history, must listen here rather than to every telemetry tick.
+    /// </remarks>
+    public event EventHandler<ConnectionStatusChanged>? StateChanged;
+
+    /// <summary>
     /// Profiles that currently have a process running.
     /// </summary>
     public IReadOnlyCollection<Guid> ActiveProfiles => active.Keys.ToList();
@@ -100,8 +109,17 @@ public sealed class ConnectionManager : IAsyncDisposable
         void Forward(object? sender, VpnConnectionStatus status) =>
             StatusChanged?.Invoke(this, new ConnectionStatusChanged(profileId, status));
 
+        void ForwardState(object? sender, VpnConnectionStatus status) =>
+            StateChanged?.Invoke(this, new ConnectionStatusChanged(profileId, status));
+
         supervisor.StatusChanged += Forward;
-        connection.Unsubscribe = () => supervisor.StatusChanged -= Forward;
+        supervisor.StateChanged += ForwardState;
+
+        connection.Unsubscribe = () =>
+        {
+            supervisor.StatusChanged -= Forward;
+            supervisor.StateChanged -= ForwardState;
+        };
 
         if (!active.TryAdd(profileId, connection))
         {

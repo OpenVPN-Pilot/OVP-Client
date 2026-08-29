@@ -26,6 +26,10 @@ internal sealed class Program
         try
         {
             App.InstanceGuard = guard;
+
+            // Set by the autostart entry, which wants the tunnels available rather than a window.
+            App.StartInBackground = args.Contains("--background", StringComparer.Ordinal);
+
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
             return 0;
         }

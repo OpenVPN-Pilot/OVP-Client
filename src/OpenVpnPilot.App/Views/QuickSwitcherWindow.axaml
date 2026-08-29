@@ -1,0 +1,78 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:OpenVpnPilot.App.ViewModels"
+        xmlns:loc="using:OpenVpnPilot.App.Localization"
+        x:Class="OpenVpnPilot.App.Views.QuickSwitcherWindow"
+        x:DataType="vm:QuickSwitcherViewModel"
+        Width="620" Height="420"
+        WindowStartupLocation="CenterScreen"
+        SystemDecorations="None"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Background="Transparent">
+
+  <Border Background="{DynamicResource SurfaceWindow}"
+          BorderBrush="{DynamicResource BorderStrong}"
+          BorderThickness="1"
+          CornerRadius="{StaticResource RadiusLarge}">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+      <Border Grid.Row="0" Padding="14,12"
+              BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1">
+        <TextBox Name="QueryBox"
+                 Text="{Binding Query}"
+                 PlaceholderText="{Binding Placeholder}"
+                 BorderThickness="0"
+                 Background="Transparent"
+                 FontSize="16" />
+      </Border>
+
+      <ListBox Grid.Row="1" Classes="switcher"
+               ItemsSource="{Binding Results}"
+               SelectedItem="{Binding SelectedResult}"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:QuickSwitcherEntry">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+              <Border Grid.Column="0" Classes="slot" Margin="0,0,10,0"
+                      IsVisible="{Binding HasSlot}">
+                <TextBlock Text="{Binding SlotDisplay}" />
+              </Border>
+
+              <StackPanel Grid.Column="1" Spacing="2">
+                <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextPrimary}"
+                           TextTrimming="CharacterEllipsis" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{Binding Endpoint}" Classes="muted" />
+                  <TextBlock Text="{Binding FolderName}" Classes="muted"
+                             Foreground="{DynamicResource TextTertiary}"
+                             IsVisible="{Binding HasFolder}" />
+                </StackPanel>
+              </StackPanel>
+
+              <Border Grid.Column="2" Classes="pill"
+                      Background="{DynamicResource StateConnectedSoft}"
+                      IsVisible="{Binding IsConnected}">
+                <TextBlock Text="{loc:Translate state.connected}"
+                           Foreground="{DynamicResource StateConnected}" />
+              </Border>
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+
+      <TextBlock Grid.Row="1" Text="{Binding EmptyText}" Classes="muted"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 IsVisible="{Binding !HasResults}" />
+
+      <Border Grid.Row="2" Padding="14,8"
+              BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0">
+        <TextBlock Text="{loc:Translate switcher.hint}" Classes="muted" FontSize="11" />
+      </Border>
+
+    </Grid>
+  </Border>
+</Window>

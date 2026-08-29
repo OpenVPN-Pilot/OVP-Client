@@ -17,6 +17,15 @@ public interface IProfileStore
 
     public Task<IReadOnlyList<Folder>> GetFoldersAsync(CancellationToken cancellationToken = default);
 
+    public Task<IReadOnlyList<TagSummary>> GetTagsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The tag names attached to each profile, so the list can be filtered without a second query
+    /// per row.
+    /// </summary>
+    public Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> GetProfileTagsAsync(
+        CancellationToken cancellationToken = default);
+
     public Task<string?> GetConfigurationAsync(Guid profileId, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -25,7 +34,61 @@ public interface IProfileStore
     public Task RecordConnectionAsync(Guid profileId, CancellationToken cancellationToken = default);
 
     public Task SetFavouriteAsync(Guid profileId, bool isFavourite, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Puts a profile in a numbered favourite slot, or clears its slot when the number is null.
+    /// </summary>
+    /// <remarks>
+    /// Slots are unique, so assigning one that is taken moves it rather than failing: the shortcut
+    /// bound to that number has to lead somewhere unambiguous.
+    /// </remarks>
+    public Task SetFavouriteSlotAsync(Guid profileId, int? slot, CancellationToken cancellationToken = default);
+
+    public Task<Guid?> GetProfileInSlotAsync(int slot, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The profile connected most recently, or null when nothing has been connected yet.
+    /// </summary>
+    public Task<Guid?> GetLastConnectedAsync(CancellationToken cancellationToken = default);
+
+    public Task RenameProfileAsync(Guid profileId, string name, CancellationToken cancellationToken = default);
+
+    public Task MoveProfileAsync(Guid profileId, Guid? folderId, CancellationToken cancellationToken = default);
+
+    public Task SetProfileNotesAsync(Guid profileId, string? notes, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Overrides the route protection for one profile, or returns it to the global setting.
+    /// </summary>
+    public Task SetRouteProtectionAsync(
+        Guid profileId,
+        bool? protectRoutes,
+        CancellationToken cancellationToken = default);
+
+    public Task SetProfileTagsAsync(
+        Guid profileId,
+        IReadOnlyList<string> tagNames,
+        CancellationToken cancellationToken = default);
+
+    public Task DeleteProfileAsync(Guid profileId, CancellationToken cancellationToken = default);
+
+    public Task<Guid> CreateFolderAsync(
+        string name,
+        Guid? parentId,
+        CancellationToken cancellationToken = default);
+
+    public Task RenameFolderAsync(Guid folderId, string name, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes a folder. Profiles filed under it move to the top level rather than being deleted.
+    /// </summary>
+    public Task DeleteFolderAsync(Guid folderId, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// A tag with the number of profiles carrying it.
+/// </summary>
+public sealed record TagSummary(Guid Id, string Name, string? Colour, int ProfileCount);
 
 /// <summary>
 /// Entity Framework backed implementation.
@@ -67,9 +130,11 @@ public sealed class ProfileStore : IProfileStore
                 FavouriteSlot = profile.FavouriteSlot,
                 HasUnsupportedOptions = profile.HasUnsupportedOptions,
                 IsSelfContained = profile.IsSelfContained,
+                ProtectRoutes = profile.ProtectRoutes,
                 LastConnectedAt = profile.LastConnectedAt,
                 ConnectCount = profile.ConnectCount,
                 Colour = profile.Colour,
+                Notes = profile.Notes,
             })
             .ToListAsync(cancellationToken);
     }
@@ -83,6 +148,37 @@ public sealed class ProfileStore : IProfileStore
             .OrderBy(folder => folder.SortOrder)
             .ThenBy(folder => folder.Name)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<TagSummary>> GetTagsAsync(CancellationToken cancellationToken = default)
+    {
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        return await context.Tags
+            .AsNoTracking()
+            .OrderBy(tag => tag.Name)
+            .Select(tag => new TagSummary(tag.Id, tag.Name, tag.Colour, tag.Profiles.Count))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> GetProfileTagsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        List<TagLink> links = await context.ProfileTags
+            .AsNoTracking()
+            .Select(link => new TagLink(link.ProfileId, link.Tag!.Name))
+            .ToListAsync(cancellationToken);
+
+        Dictionary<Guid, IReadOnlyList<string>> result = [];
+
+        foreach (IGrouping<Guid, TagLink> group in links.GroupBy(link => link.ProfileId))
+        {
+            result[group.Key] = group.Select(link => link.Name).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        return result;
     }
 
     public async Task<string?> GetConfigurationAsync(Guid profileId, CancellationToken cancellationToken = default)
@@ -135,4 +231,257 @@ public sealed class ProfileStore : IProfileStore
         profile.UpdatedAt = timeProvider.GetUtcNow();
         await context.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task SetFavouriteSlotAsync(
+        Guid profileId,
+        int? slot,
+        CancellationToken cancellationToken = default)
+    {
+        if (slot is < 1 or > 9)
+        {
+            slot = slot is null ? null : throw new ArgumentOutOfRangeException(
+                nameof(slot),
+                slot,
+                "Favourite slots run from one to nine.");
+        }
+
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
+        if (profile is null)
+        {
+            return;
+        }
+
+        if (slot is { } number)
+        {
+            // The slot is unique, so whoever held it gives it up in the same transaction.
+            Profile? previous = await context.Profiles
+                .FirstOrDefaultAsync(other => other.FavouriteSlot == number, cancellationToken);
+
+            if (previous is not null && previous.Id != profileId)
+            {
+                previous.FavouriteSlot = null;
+            }
+
+            profile.IsFavourite = true;
+        }
+
+        profile.FavouriteSlot = slot;
+        profile.UpdatedAt = timeProvider.GetUtcNow();
+
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<Guid?> GetProfileInSlotAsync(int slot, CancellationToken cancellationToken = default)
+    {
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        return await context.Profiles
+            .AsNoTracking()
+            .Where(profile => profile.FavouriteSlot == slot)
+            .Select(profile => (Guid?)profile.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<Guid?> GetLastConnectedAsync(CancellationToken cancellationToken = default)
+    {
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        return await context.Profiles
+            .AsNoTracking()
+            .Where(profile => profile.LastConnectedAt != null)
+            .OrderByDescending(profile => profile.LastConnectedAt)
+            .Select(profile => (Guid?)profile.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task RenameProfileAsync(
+        Guid profileId,
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
+        if (profile is null)
+        {
+            return;
+        }
+
+        profile.Name = name.Trim();
+        profile.UpdatedAt = timeProvider.GetUtcNow();
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task MoveProfileAsync(
+        Guid profileId,
+        Guid? folderId,
+        CancellationToken cancellationToken = default)
+    {
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
+        if (profile is null)
+        {
+            return;
+        }
+
+        profile.FolderId = folderId;
+        profile.UpdatedAt = timeProvider.GetUtcNow();
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SetProfileNotesAsync(
+        Guid profileId,
+        string? notes,
+        CancellationToken cancellationToken = default)
+    {
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
+        if (profile is null)
+        {
+            return;
+        }
+
+        profile.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes;
+        profile.UpdatedAt = timeProvider.GetUtcNow();
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SetRouteProtectionAsync(
+        Guid profileId,
+        bool? protectRoutes,
+        CancellationToken cancellationToken = default)
+    {
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
+        if (profile is null)
+        {
+            return;
+        }
+
+        profile.ProtectRoutes = protectRoutes;
+        profile.UpdatedAt = timeProvider.GetUtcNow();
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SetProfileTagsAsync(
+        Guid profileId,
+        IReadOnlyList<string> tagNames,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(tagNames);
+
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        List<string> wanted = tagNames
+            .Select(name => name.Trim())
+            .Where(name => name.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        List<ProfileTag> existing = await context.ProfileTags
+            .Where(link => link.ProfileId == profileId)
+            .ToListAsync(cancellationToken);
+
+        context.ProfileTags.RemoveRange(existing);
+
+        foreach (string name in wanted)
+        {
+            Tag? tag = await context.Tags
+                .FirstOrDefaultAsync(candidate => candidate.Name == name, cancellationToken);
+
+            if (tag is null)
+            {
+                tag = new Tag { Name = name };
+                context.Tags.Add(tag);
+            }
+
+            context.ProfileTags.Add(new ProfileTag { ProfileId = profileId, TagId = tag.Id, Tag = tag });
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        // A tag nobody uses is noise in the sidebar, so it goes when its last profile lets it go.
+        await context.Tags
+            .Where(tag => !tag.Profiles.Any())
+            .ExecuteDeleteAsync(cancellationToken);
+    }
+
+    public async Task DeleteProfileAsync(Guid profileId, CancellationToken cancellationToken = default)
+    {
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        await context.Profiles
+            .Where(profile => profile.Id == profileId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await context.Tags
+            .Where(tag => !tag.Profiles.Any())
+            .ExecuteDeleteAsync(cancellationToken);
+    }
+
+    public async Task<Guid> CreateFolderAsync(
+        string name,
+        Guid? parentId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        int order = await context.Folders
+            .Where(folder => folder.ParentId == parentId)
+            .Select(folder => (int?)folder.SortOrder)
+            .MaxAsync(cancellationToken) ?? 0;
+
+        Folder created = new()
+        {
+            Name = name.Trim(),
+            ParentId = parentId,
+            SortOrder = order + 1,
+        };
+
+        context.Folders.Add(created);
+        await context.SaveChangesAsync(cancellationToken);
+
+        return created.Id;
+    }
+
+    public async Task RenameFolderAsync(
+        Guid folderId,
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        Folder? folder = await context.Folders.FindAsync([folderId], cancellationToken);
+        if (folder is null)
+        {
+            return;
+        }
+
+        folder.Name = name.Trim();
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task DeleteFolderAsync(Guid folderId, CancellationToken cancellationToken = default)
+    {
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Profiles are filed, not owned. Deleting the drawer must not destroy what was in it, which
+        // is why the foreign key clears the reference rather than cascading.
+        await context.Folders
+            .Where(folder => folder.Id == folderId)
+            .ExecuteDeleteAsync(cancellationToken);
+    }
+
+    private sealed record TagLink(Guid ProfileId, string Name);
 }
