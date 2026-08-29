@@ -14,6 +14,10 @@ namespace OpenVpnPilot.OpenVpn.Runtime;
 /// <remarks>
 /// Each profile gets its own supervisor, its own process and its own management port, so several
 /// tunnels can be connected at the same time without interfering with one another.
+///
+/// A connection is held only while it is running. One that ends by itself is retired as soon as it
+/// reports it, because an entry that outlives its tunnel makes the profile look busy, makes a
+/// reconnect think it is still up, and makes connecting again fail as a duplicate.
 /// </remarks>
 public sealed class ConnectionManager : IAsyncDisposable
 {
@@ -144,8 +148,17 @@ public sealed class ConnectionManager : IAsyncDisposable
         void Forward(object? sender, VpnConnectionStatus status) =>
             StatusChanged?.Invoke(this, new ConnectionStatusChanged(profileId, status));
 
-        void ForwardState(object? sender, VpnConnectionStatus status) =>
+        void ForwardState(object? sender, VpnConnectionStatus status)
+        {
+            // Retiring before the event is raised means whoever handles it, in particular the retry
+            // logic, already sees a profile that is no longer connected.
+            if (HasEndedByItself(status))
+            {
+                Retire(profileId);
+            }
+
             StateChanged?.Invoke(this, new ConnectionStatusChanged(profileId, status));
+        }
 
         supervisor.StatusChanged += Forward;
         supervisor.StateChanged += ForwardState;
@@ -194,8 +207,16 @@ public sealed class ConnectionManager : IAsyncDisposable
             return;
         }
 
-        await connection.Supervisor.DisconnectAsync(cancellationToken);
-        await RemoveAsync(profileId);
+        try
+        {
+            await connection.Supervisor.DisconnectAsync(cancellationToken);
+        }
+        finally
+        {
+            // The entry goes whatever the supervisor made of the request. Leaving it behind because
+            // stopping went badly is how a tunnel ends up permanently showing as disconnecting.
+            await RemoveAsync(profileId);
+        }
     }
 
     /// <summary>
@@ -215,6 +236,46 @@ public sealed class ConnectionManager : IAsyncDisposable
                 ConnectionManagerLog.DisconnectFailed(logger, profileId, exception);
             }
         }
+    }
+
+    /// <summary>
+    /// True when a status means the tunnel is over without anyone having asked for it.
+    /// </summary>
+    /// <remarks>
+    /// A disconnect the user asked for is removed by the call that asked for it. Removing it here as
+    /// well would dispose the supervisor from underneath that call while it is still finishing.
+    /// </remarks>
+    private static bool HasEndedByItself(VpnConnectionStatus status) =>
+        status.State == VpnConnectionState.Failed
+        || (status.State == VpnConnectionState.Disconnected
+            && status.Failure != VpnFailureKind.UserRequested);
+
+    /// <summary>
+    /// Drops a connection that ended on its own and disposes it away from the pump that reported it.
+    /// </summary>
+    /// <remarks>
+    /// The report arrives on the supervisor's own message pump, and disposing a supervisor waits for
+    /// that pump to finish. Awaiting the disposal here would wait for the thread running this code.
+    /// The entry is therefore removed straight away and the disposal is left to run on its own.
+    /// </remarks>
+    private void Retire(Guid profileId)
+    {
+        if (!active.TryRemove(profileId, out ActiveConnection? connection))
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await connection.DisposeAsync();
+            }
+            catch (Exception exception) when (exception is IOException or InvalidOperationException)
+            {
+                ConnectionManagerLog.DisconnectFailed(logger, profileId, exception);
+            }
+        });
     }
 
     private async Task RemoveAsync(Guid profileId)

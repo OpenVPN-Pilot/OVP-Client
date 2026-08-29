@@ -35,6 +35,18 @@ internal static partial class ConnectionSupervisorLog
     public static partial void ProcessDidNotExit(ILogger logger, int processId);
 
     [LoggerMessage(
+        EventId = 2006,
+        Level = LogLevel.Information,
+        Message = "The stop signal could not be delivered; the management connection was already gone.")]
+    public static partial void SignalNotDelivered(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 2007,
+        Level = LogLevel.Warning,
+        Message = "The stop signal was not answered in time; the process is being torn down anyway.")]
+    public static partial void SignalNotAnswered(ILogger logger);
+
+    [LoggerMessage(
         EventId = 2004,
         Level = LogLevel.Warning,
         Message = "OpenVPN process {ProcessId} could not be inspected or terminated. It may outlive this disconnect.")]

@@ -241,6 +241,45 @@ public sealed class ManagementClientTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => pending);
     }
 
+    /// <summary>
+    /// A command issued after the far end has gone must fail rather than wait forever.
+    /// </summary>
+    /// <remarks>
+    /// Only the read loop completes a command, so one registered after that loop has ended has
+    /// nobody left to answer it. Waiting for that answer is what left a tunnel reporting that it was
+    /// disconnecting: the stop signal never returned, and every later attempt queued behind it.
+    /// </remarks>
+    [Fact]
+    public async Task SendAsync_AfterTheChannelClosed_FailsInsteadOfWaiting()
+    {
+        (FakeManagementStream transport, ManagementClient client) = await ConnectAsync();
+        await using ManagementClient _ = client;
+
+        transport.CloseFromServer();
+
+        // The read loop needs a moment to notice, which is exactly the window this guards.
+        await WaitUntilClosedAsync(client);
+
+        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => client.SendAsync("signal SIGTERM").WaitAsync(TimeSpan.FromSeconds(5)));
+
+        Assert.Contains("closed", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Waits for the read loop to observe the closed channel, which it reports by completing the
+    /// notification stream.
+    /// </summary>
+    private static async Task WaitUntilClosedAsync(ManagementClient client)
+    {
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(5));
+
+        while (await client.Notifications.WaitToReadAsync(cts.Token))
+        {
+            client.Notifications.TryRead(out _);
+        }
+    }
+
     private static async Task<(FakeManagementStream Transport, ManagementClient Client)> ConnectAsync()
     {
         FakeManagementStream transport = new();

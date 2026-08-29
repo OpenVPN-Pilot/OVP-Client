@@ -62,6 +62,35 @@ public sealed class PushReplyParserTests
         Assert.Null(PushReplyParser.Parse(line));
     }
 
+    /// <summary>
+    /// A pushed compression setting is the reason a tunnel can reconnect forever.
+    /// </summary>
+    /// <remarks>
+    /// A current client with data channel offload refuses any of them and then abandons the whole
+    /// reply, reporting only that it could not process the push message. Recognising it here is what
+    /// lets the interface name the cause instead of repeating that.
+    /// </remarks>
+    [Theory]
+    [InlineData("comp-lzo")]
+    [InlineData("comp-lzo no")]
+    [InlineData("compress lzo")]
+    [InlineData("compress")]
+    public void Parse_RecognisesAPushedCompressionSetting(string option)
+    {
+        PushedOptions options = Assert.IsType<PushedOptions>(PushReplyParser.Parse(
+            $"PUSH: Received control message: 'PUSH_REPLY,route-gateway 10.8.0.1,{option},ping 10'"));
+
+        Assert.True(options.RequestsCompression);
+    }
+
+    [Fact]
+    public void Parse_WithoutCompression_DoesNotClaimAny()
+    {
+        PushedOptions options = Assert.IsType<PushedOptions>(PushReplyParser.Parse(Reply));
+
+        Assert.False(options.RequestsCompression);
+    }
+
     [Fact]
     public void IsPushReply_RecognisesTheLineWithoutParsingIt()
     {

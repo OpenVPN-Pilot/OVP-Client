@@ -17,11 +17,18 @@ namespace OpenVpnPilot.OpenVpn.Runtime;
 /// True when the server asked for all traffic. Worth showing, because a pull filter may have
 /// refused it and the user would otherwise not know the server had tried.
 /// </param>
+/// <param name="RequestsCompression">
+/// True when the server pushed a compression setting. A current client with data channel offload
+/// refuses any of them, including one that turns compression off, and then abandons the whole push
+/// reply. The tunnel reconnects forever with a reason nobody can act on, so the cause is recorded
+/// here and said plainly instead.
+/// </param>
 public sealed record PushedOptions(
     IReadOnlyList<string> Routes,
     IReadOnlyList<string> DnsServers,
     string? Gateway,
-    bool RedirectsDefaultRoute)
+    bool RedirectsDefaultRoute,
+    bool RequestsCompression = false)
 {
     public static PushedOptions None { get; } = new([], [], null, false);
 
@@ -84,6 +91,7 @@ public static class PushReplyParser
         List<string> dns = [];
         string? gateway = null;
         bool redirect = false;
+        bool compression = false;
 
         foreach (string option in payload[Prefix.Length..]
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -123,11 +131,18 @@ public static class PushReplyParser
                     redirect = true;
                     break;
 
+                // Both spellings, and both values. A client that cannot apply the setting cannot
+                // apply "off" either, so there is no case here that is harmless.
+                case "comp-lzo":
+                case "compress":
+                    compression = true;
+                    break;
+
                 default:
                     break;
             }
         }
 
-        return new PushedOptions(routes, dns, gateway, redirect);
+        return new PushedOptions(routes, dns, gateway, redirect, compression);
     }
 }

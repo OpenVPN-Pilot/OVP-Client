@@ -361,6 +361,96 @@ public sealed class ConnectionSupervisorTests
         Assert.Equal("username \"Auth\" \"operator\"", await harness.Transport.ReceiveLineAsync());
     }
 
+    /// <summary>
+    /// A tunnel that cannot come up stops trying rather than flickering forever.
+    /// </summary>
+    /// <remarks>
+    /// A client refusing the pushed options refuses them again on every attempt, as fast as it can
+    /// reconnect. What that looks like is a profile flipping between authenticating and failing
+    /// several times a second, which reads as a fault in the client rather than in what the server
+    /// asked for.
+    /// </remarks>
+    [Fact]
+    public async Task PushedCompression_EndsTheAttemptInsteadOfReconnectingForever()
+    {
+        Harness harness = new();
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor);
+
+        harness.Transport.SendLine(
+            ">LOG:1787941299,,PUSH: Received control message: 'PUSH_REPLY,route-gateway 10.8.0.1,compress lzo'");
+        harness.Transport.SendLine(">STATE:1787941300,RECONNECTING,process-push-msg-failed,,,,,");
+
+        VpnConnectionStatus status = await harness.WaitForAsync(
+            supervisor,
+            s => s.State == VpnConnectionState.Failed);
+
+        Assert.Equal(VpnFailureKind.Fatal, status.Failure);
+        Assert.True(status.ServerRequestedCompression);
+        Assert.Contains("compression", status.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Every other restart reason is still a restart, which OpenVPN recovers from on its own.
+    /// </summary>
+    [Fact]
+    public async Task AnOrdinaryRestart_IsStillReportedAsReconnecting()
+    {
+        Harness harness = new();
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor);
+
+        harness.Transport.SendLine(">STATE:1787941300,RECONNECTING,process-push-msg-failed,,,,,");
+
+        VpnConnectionStatus status = await harness.WaitForAsync(
+            supervisor,
+            s => s.State == VpnConnectionState.Reconnecting);
+
+        Assert.Equal("process-push-msg-failed", status.Message);
+    }
+
+    /// <summary>
+    /// A disconnect must finish even when the process has already gone away.
+    /// </summary>
+    /// <remarks>
+    /// The stop signal is answered by the management channel, so a channel that is gone answers
+    /// nothing. Waiting for that answer left the tunnel reporting that it was disconnecting for good
+    /// and blocked every later attempt behind the same wait, which is what stopping several tunnels
+    /// at once produced.
+    /// </remarks>
+    [Fact]
+    public async Task DisconnectAsync_WhenTheChannelIsAlreadyGone_StillReportsDisconnected()
+    {
+        Harness harness = new();
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor);
+
+        harness.Transport.CloseFromServer();
+
+        await supervisor.DisconnectAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(VpnConnectionState.Disconnected, supervisor.Status.State);
+        Assert.Equal(VpnFailureKind.UserRequested, supervisor.Status.Failure);
+    }
+
+    /// <summary>
+    /// A second attempt has to get through, because the first is what the user tried already.
+    /// </summary>
+    [Fact]
+    public async Task DisconnectAsync_Twice_IsNotBlockedByTheFirstAttempt()
+    {
+        Harness harness = new();
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor);
+
+        harness.Transport.CloseFromServer();
+
+        await supervisor.DisconnectAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await supervisor.DisconnectAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(VpnConnectionState.Disconnected, supervisor.Status.State);
+    }
+
     private static ConnectionRequest Request() =>
         new(ProfileId, @"C:\profiles\example.ovpn", @"C:\profiles", 25340, []);
 
@@ -425,52 +515,6 @@ public sealed class ConnectionSupervisorTests
             {
                 supervisor.StatusChanged -= OnChanged;
             }
-        }
-    }
-
-    private sealed class FakeLauncher : IOpenVpnLauncher
-    {
-        public OpenVpnLaunchResult Result { get; set; } = OpenVpnLaunchResult.Started(4242);
-
-        public OpenVpnLaunchRequest? LastRequest { get; private set; }
-
-        public Task<OpenVpnLaunchResult> LaunchAsync(
-            OpenVpnLaunchRequest request,
-            CancellationToken cancellationToken = default)
-        {
-            LastRequest = request;
-            return Task.FromResult(Result);
-        }
-    }
-
-    private sealed class FakeChannelFactory : IManagementChannelFactory
-    {
-        private readonly Stream stream;
-
-        public FakeChannelFactory(Stream stream) => this.stream = stream;
-
-        public Task<Stream> ConnectAsync(int port, CancellationToken cancellationToken) =>
-            Task.FromResult(stream);
-    }
-
-    private sealed class FakeCredentialProvider : ICredentialProvider
-    {
-        /// <summary>
-        /// Answer used when <see cref="Responses"/> is empty.
-        /// </summary>
-        public VpnCredentials? Response { get; set; }
-
-        /// <summary>
-        /// Answers for consecutive requests, so a rejected first attempt can be modelled.
-        /// </summary>
-        public Queue<VpnCredentials?> Responses { get; } = new();
-
-        public List<CredentialRequest> Requests { get; } = [];
-
-        public Task<VpnCredentials?> RequestAsync(CredentialRequest request, CancellationToken cancellationToken)
-        {
-            Requests.Add(request);
-            return Task.FromResult(Responses.Count > 0 ? Responses.Dequeue() : Response);
         }
     }
 }

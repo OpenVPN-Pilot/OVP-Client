@@ -13,11 +13,21 @@ namespace OpenVpnPilot.OpenVpn.Management;
 /// commands must be issued strictly one at a time because OpenVPN silently discards commands that
 /// arrive while it is still answering a previous one, and the initial password prompt arrives
 /// without a trailing newline so it cannot be read with line based reading.
+///
+/// A command is answered by the read loop, so a command registered after that loop has ended would
+/// wait for a reply nobody is left to send. The end of the loop is therefore recorded and a command
+/// issued afterwards fails immediately.
 /// </remarks>
 public sealed class ManagementClient : IAsyncDisposable
 {
     private const string PasswordPrompt = "ENTER PASSWORD:";
     private const string PasswordAccepted = "SUCCESS: password is correct";
+
+    /// <summary>
+    /// Reported whenever the channel is gone, so a caller has one condition to handle rather than
+    /// one per way of finding out.
+    /// </summary>
+    internal const string ClosedMessage = "The management connection closed.";
 
     /// <summary>
     /// OpenVPN reads a management password of at most this length from a single line.
@@ -32,6 +42,17 @@ public sealed class ManagementClient : IAsyncDisposable
 
     private readonly CancellationTokenSource lifetime = new();
     private readonly StringBuilder pending = new();
+
+    /// <summary>
+    /// Guards the handover between registering a command and the read loop ending, so a command can
+    /// never be registered into a client that has nothing left to answer it.
+    /// </summary>
+    private readonly Lock closureGate = new();
+
+    /// <summary>
+    /// Set once the read loop has ended, which is the only sign that the far end has gone.
+    /// </summary>
+    private Exception? closure;
 
     private TaskCompletionSource<CommandResult>? inFlight;
     private List<string>? inFlightLines;
@@ -103,12 +124,33 @@ public sealed class ManagementClient : IAsyncDisposable
         try
         {
             TaskCompletionSource<CommandResult> completionSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            inFlight = completionSource;
-            inFlightLines = [];
-            inFlightCompletion = completion;
+
+            lock (closureGate)
+            {
+                // Registering and closing are ordered against each other here. Either the command is
+                // registered first and the closing read loop fails it, or the closure is recorded
+                // first and the command never waits at all.
+                if (closure is not null)
+                {
+                    throw new InvalidOperationException(ClosedMessage, closure);
+                }
+
+                inFlight = completionSource;
+                inFlightLines = [];
+                inFlightCompletion = completion;
+            }
 
             ManagementClientLog.CommandSent(logger, command);
-            await WriteLineAsync(command, cancellationToken);
+
+            try
+            {
+                await WriteLineAsync(command, cancellationToken);
+            }
+            catch (Exception exception) when (exception is IOException or ObjectDisposedException)
+            {
+                // A socket that refuses the write is the same condition as one that stopped reading.
+                throw new InvalidOperationException(ClosedMessage, exception);
+            }
 
             using CancellationTokenRegistration registration = cancellationToken.Register(
                 static state => ((TaskCompletionSource<CommandResult>)state!).TrySetCanceled(),
@@ -215,7 +257,14 @@ public sealed class ManagementClient : IAsyncDisposable
         }
         finally
         {
-            FailPendingWork(new InvalidOperationException("The management connection closed."));
+            InvalidOperationException ended = new(ClosedMessage);
+
+            lock (closureGate)
+            {
+                closure = ended;
+                FailPendingWork(ended);
+            }
+
             notifications.Writer.TryComplete();
         }
     }

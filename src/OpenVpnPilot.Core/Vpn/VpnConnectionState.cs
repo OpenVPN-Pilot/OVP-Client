@@ -106,6 +106,17 @@ public sealed record VpnConnectionStatus
     public bool ServerRequestedDefaultRoute { get; init; }
 
     /// <summary>
+    /// True when the server pushed a compression setting.
+    /// </summary>
+    /// <remarks>
+    /// A current client refuses any pushed compression when data channel offload is active, and
+    /// refusing one option makes it abandon the whole push reply. What the user sees is a tunnel
+    /// that reconnects forever, reporting a reason that names neither compression nor the server.
+    /// This is what lets the interface say which it was.
+    /// </remarks>
+    public bool ServerRequestedCompression { get; init; }
+
+    /// <summary>
     /// The most recent round trip time, or null when it has not been measured.
     /// </summary>
     /// <remarks>
