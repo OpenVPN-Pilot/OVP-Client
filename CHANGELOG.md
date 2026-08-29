@@ -16,6 +16,12 @@ version heading when one is tagged.
   everything ticked with it, so a set can be tagged in one gesture. The tag is added rather than
   replacing the ones the profile already has.
 - `LICENSE` at the root, MIT, naming the author.
+- Tests for the main view model: what the list shows, how the two sidebar lists hand one selection
+  between them, what is ticked, what an action applies to when nothing is, and what dragging onto a
+  tag does. None of it was covered, and the filter handover is the kind that comes back.
+- A test that every option the command line carries is one the interactive service accepts from a
+  caller it has not authorised. That branch still needs a standard user account to verify; this
+  stops it being broken by an option an administrator would never notice.
 
 - The quick switcher stops tunnels as well. One shortcut lists only what is running, space ticks
   several and return disconnects them, which is the same act as starting one done to a shorter list.
@@ -25,6 +31,9 @@ version heading when one is tagged.
 ### Changed
 
 - The author and copyright are recorded in the built executable, the package and the installer.
+- The README has a table of contents and reads in three parts: using it, how it works, working on it.
+  It now says that issues and merge requests are welcome, what makes one easy to accept, and that
+  every line here was written by a language model in conversation with an author who reads C#.
 - The GitHub Actions workflow is gone. Every release is built by hand, which takes one command, and a
   workflow that has never run is a claim rather than a check.
 - Code signing and a kill switch are off the roadmap rather than pending. A certificate costs money

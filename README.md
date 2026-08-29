@@ -10,6 +10,30 @@ process doing the tunnelling and replaces the interface around it.
 > OpenVPN Community 2.7.6 and against the ten server lab in this repository. Builds are unsigned by
 > choice. See [Roadmap](#roadmap).
 
+## Contents
+
+**Using it**
+[Features](#features) ·
+[Requirements](#requirements) ·
+[Installing](#installing) ·
+[Organising a set](#organising-a-set) ·
+[Working on more than one at a time](#working-on-more-than-one-at-a-time) ·
+[Adding a language](#adding-a-language) ·
+[The `ovp` command](#the-ovp-command) ·
+[Driving it from other software](#driving-it-from-other-software)
+
+**How it works**
+[What reaches OpenVPN](#what-reaches-openvpn) ·
+[Where things are kept](#where-things-are-kept) ·
+[Architecture](#architecture)
+
+**Working on it**
+[Building](#building) ·
+[The test lab](#the-test-lab) ·
+[Contributing](#contributing) ·
+[How this was built](#how-this-was-built) ·
+[Roadmap](#roadmap) ·
+[Licence](#licence)
 ## Features
 
 - Instant search across profile name, tag and remote host
@@ -89,69 +113,36 @@ settings and the credentials belong to whoever runs it.
 
 Uninstall by removing the assignment, or with `msiexec /x` and the product code.
 
-## Building
+## Organising a set
 
-```bash
-dotnet build
-```
+There are no folders. A profile carries as many tags as it needs, the sidebar lists them, and the
+search box matches a tag along with the name and the remote host. One profile can belong to as many
+groupings as make sense, which a tree cannot express, and nothing has to be maintained by hand.
 
-```bash
-dotnet test
-```
+Profiles a watched directory brings in appear under **New** until they are marked as seen, so an
+automatic import never drops them unannounced into the middle of the list.
 
-Requires the .NET 10 SDK. The user interface is built with Avalonia.
+## Working on more than one at a time
 
-To build and run what you just changed, in one step:
+**Select** in the header puts a checkbox on every row. Tick some and connect, disconnect or delete
+them together; deleting asks a second time, because it is the one action here that cannot be undone.
 
-```powershell
-pwsh scripts/dev.ps1
-```
+**Connect everything shown** in the sidebar acts on what the current filter and search leave visible,
+which is how a whole tag is brought up in one go. Profiles are connected one after another rather
+than all at once: each tunnel is a process, an adapter and a port, and twenty starting in the same
+instant is how a machine runs out of all three.
 
-It stops whatever copy is open first, which is the part that is easy to forget: only one copy runs
-per user, so starting a new one while an old one is open hands the request to the old one and nothing
-on screen changes. `-Headless` starts it without a window, `-Connect <name>` connects a profile once
-it is up, and `-NoBuild` skips straight to starting what is already built.
+There is no built in limit on how many tunnels run at once, and ten at a time is what the lab is for.
+The real limits are outside the application: one OpenVPN process and one virtual adapter per tunnel,
+and the adapter pool is what runs out first. A tunnel that cannot come up is given a minute and then
+abandoned, so a saturated machine reports what happened instead of leaving processes behind.
 
-The build output is where `dotnet` puts it:
+## Adding a language
 
-| | |
-| --- | --- |
-| Application | `src/OpenVpnPilot.App/bin/Debug/net10.0/OpenVpnPilot.exe` |
-| Command | `src/OpenVpnPilot.Cli/bin/Debug/net10.0/ovp.exe` |
-| Installer payload | `artifacts/install`, written by `installer/build.ps1` |
-| Installer | `artifacts/release/OpenVpnPilot-<version>-win-x64.msi` |
-
-## Where things are kept
-
-Everything the application writes belongs to the user running it, so an installation for the whole
-machine still keeps each person's profiles apart.
-
-| | |
-| --- | --- |
-| Profiles, tags and history | `%LOCALAPPDATA%\OpenVpnPilot\pilot.db` |
-| Settings | `%LOCALAPPDATA%\OpenVpnPilot\settings.json`, editable by hand |
-| Credentials | `%LOCALAPPDATA%\OpenVpnPilot\secrets\`, one protected file each |
-| Logs | `%LOCALAPPDATA%\OpenVpnPilot\logs\` |
-| Added languages | `%LOCALAPPDATA%\OpenVpnPilot\lang\` |
-| Configurations while connected | `%ProgramData%\OpenVpnPilot\runtime\<user SID>\` |
-
-A materialised configuration carries its private key inline, which is why it lives under
-`%ProgramData%` with an access control list for one user rather than in a temporary directory. It
-exists only for the lifetime of a connection, and anything a crash leaves behind is removed at the
-next start.
-
-The registry holds settings that have nowhere else to go:
-
-| Key | Written by | What for |
-| --- | --- | --- |
-| `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` | the application | The autostart entry, only while "start with Windows" is on. Removing it turns autostart off. |
-| `HKLM\Software\OpenVpnPilot` | the installer | Two markers so the Start menu entry and the PATH entry can be removed again. |
-| `HKLM\...\Uninstall\<product code>` | Windows | The entry under Apps and features. |
-| `HKLM\SOFTWARE\OpenVPN` | nobody, it is only read | Where OpenVPN Community says it is installed, and which group the interactive service authorises. |
-
-Nothing else is written to the registry. Removing the product removes the two keys the installer
-made; the profile store and the credentials are deliberately left alone, because uninstalling an
-application is not the same as asking it to forget everything.
+Language files are JSON. The ones that ship live in `lang` beside the executable, and anything placed
+in `lang` under the application data directory is layered on top of them, key by key. Copy `en.json`,
+translate the values, drop it in and reload from the settings screen: no rebuild, and a key you have
+not translated falls back to English rather than disappearing.
 
 ## The `ovp` command
 
@@ -230,21 +221,6 @@ starts it: `--headless`, `--background`, `--connect`, `--disconnect`, `--disconn
 `--quit`. Only one copy runs per user, so a second launch hands its options to the copy that already
 runs and exits.
 
-## Working on more than one at a time
-
-**Select** in the header puts a checkbox on every row. Tick some and connect, disconnect or delete
-them together; deleting asks a second time, because it is the one action here that cannot be undone.
-
-**Connect everything shown** in the sidebar acts on what the current filter and search leave visible,
-which is how a whole tag is brought up in one go. Profiles are connected one after another rather
-than all at once: each tunnel is a process, an adapter and a port, and twenty starting in the same
-instant is how a machine runs out of all three.
-
-There is no built in limit on how many tunnels run at once, and ten at a time is what the lab is for.
-The real limits are outside the application: one OpenVPN process and one virtual adapter per tunnel,
-and the adapter pool is what runs out first. A tunnel that cannot come up is given a minute and then
-abandoned, so a saturated machine reports what happened instead of leaving processes behind.
-
 ## What reaches OpenVPN
 
 The application never edits a profile to make it work. It writes the configuration out exactly as it
@@ -278,21 +254,92 @@ That server pushes `redirect-gateway def1`, so with protection off the host send
 tunnel for as long as it is up. Nothing else about the machine changes and it is over when the
 command is, which is why a short run from a terminal is the way to look at it.
 
-## Organising a set
+## Where things are kept
 
-There are no folders. A profile carries as many tags as it needs, the sidebar lists them, and the
-search box matches a tag along with the name and the remote host. One profile can belong to as many
-groupings as make sense, which a tree cannot express, and nothing has to be maintained by hand.
+Everything the application writes belongs to the user running it, so an installation for the whole
+machine still keeps each person's profiles apart.
 
-Profiles a watched directory brings in appear under **New** until they are marked as seen, so an
-automatic import never drops them unannounced into the middle of the list.
+| | |
+| --- | --- |
+| Profiles, tags and history | `%LOCALAPPDATA%\OpenVpnPilot\pilot.db` |
+| Settings | `%LOCALAPPDATA%\OpenVpnPilot\settings.json`, editable by hand |
+| Credentials | `%LOCALAPPDATA%\OpenVpnPilot\secrets\`, one protected file each |
+| Logs | `%LOCALAPPDATA%\OpenVpnPilot\logs\` |
+| Added languages | `%LOCALAPPDATA%\OpenVpnPilot\lang\` |
+| Configurations while connected | `%ProgramData%\OpenVpnPilot\runtime\<user SID>\` |
 
-## Adding a language
+A materialised configuration carries its private key inline, which is why it lives under
+`%ProgramData%` with an access control list for one user rather than in a temporary directory. It
+exists only for the lifetime of a connection, and anything a crash leaves behind is removed at the
+next start.
 
-Language files are JSON. The ones that ship live in `lang` beside the executable, and anything placed
-in `lang` under the application data directory is layered on top of them, key by key. Copy `en.json`,
-translate the values, drop it in and reload from the settings screen: no rebuild, and a key you have
-not translated falls back to English rather than disappearing.
+The registry holds settings that have nowhere else to go:
+
+| Key | Written by | What for |
+| --- | --- | --- |
+| `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` | the application | The autostart entry, only while "start with Windows" is on. Removing it turns autostart off. |
+| `HKLM\Software\OpenVpnPilot` | the installer | Two markers so the Start menu entry and the PATH entry can be removed again. |
+| `HKLM\...\Uninstall\<product code>` | Windows | The entry under Apps and features. |
+| `HKLM\SOFTWARE\OpenVPN` | nobody, it is only read | Where OpenVPN Community says it is installed, and which group the interactive service authorises. |
+
+Nothing else is written to the registry. Removing the product removes the two keys the installer
+made; the profile store and the credentials are deliberately left alone, because uninstalling an
+application is not the same as asking it to forget everything.
+
+## Architecture
+
+| Project | Responsibility |
+| --- | --- |
+| `OpenVpnPilot.Core` | Domain model, abstractions, localization, settings, update check |
+| `OpenVpnPilot.OpenVpn` | Management interface protocol, `.ovpn` parsing, connection supervision |
+| `OpenVpnPilot.Data` | SQLite persistence, import, portable packages |
+| `OpenVpnPilot.Platform.Windows` | Interactive service client, secret storage, notification area, shortcuts |
+| `OpenVpnPilot.App` | Avalonia user interface and the services that drive it |
+| `OpenVpnPilot.Cli` | `ovp`, a headless companion command |
+
+One connection, end to end: the profile is written out of SQLite to a private file under
+`%ProgramData%`, the interactive service is asked over its named pipe to start `openvpn` with that
+file and a management port, the client attaches to that port and holds the tunnel until it has
+answered whatever the server asks for, and everything after that (state, throughput, pushed routes,
+credentials, the stop signal) travels over the same management connection. When the tunnel ends the
+file is deleted and the process is confirmed gone.
+
+Each tunnel runs as its own `openvpn` process with its own management interface on a loopback port.
+Credentials are supplied over that interface and are never written to disk. `Core`, `OpenVpn`, `Data`
+and `App` contain no platform specific code, so support for another operating system means adding an
+implementation of the existing interfaces rather than restructuring the application.
+
+## Building
+
+```bash
+dotnet build
+```
+
+```bash
+dotnet test
+```
+
+Requires the .NET 10 SDK. The user interface is built with Avalonia.
+
+To build and run what you just changed, in one step:
+
+```powershell
+pwsh scripts/dev.ps1
+```
+
+It stops whatever copy is open first, which is the part that is easy to forget: only one copy runs
+per user, so starting a new one while an old one is open hands the request to the old one and nothing
+on screen changes. `-Headless` starts it without a window, `-Connect <name>` connects a profile once
+it is up, and `-NoBuild` skips straight to starting what is already built.
+
+The build output is where `dotnet` puts it:
+
+| | |
+| --- | --- |
+| Application | `src/OpenVpnPilot.App/bin/Debug/net10.0/OpenVpnPilot.exe` |
+| Command | `src/OpenVpnPilot.Cli/bin/Debug/net10.0/ovp.exe` |
+| Installer payload | `artifacts/install`, written by `installer/build.ps1` |
+| Installer | `artifacts/release/OpenVpnPilot-<version>-win-x64.msi` |
 
 ## The test lab
 
@@ -326,21 +373,41 @@ docker compose -f lab/docker-compose.yml down -v
 
 That stops it and removes the certificate authority with it.
 
-## Architecture
+## Contributing
 
-| Project | Responsibility |
-| --- | --- |
-| `OpenVpnPilot.Core` | Domain model, abstractions, localization, settings, update check |
-| `OpenVpnPilot.OpenVpn` | Management interface protocol, `.ovpn` parsing, connection supervision |
-| `OpenVpnPilot.Data` | SQLite persistence, import, portable packages |
-| `OpenVpnPilot.Platform.Windows` | Interactive service client, secret storage, notification area, shortcuts |
-| `OpenVpnPilot.App` | Avalonia user interface and the services that drive it |
-| `OpenVpnPilot.Cli` | `ovp`, a headless companion command |
+Issues and merge requests are welcome, including the small ones: a wrong translation, a confusing
+label, a server that behaves in a way the client does not expect. A bug report that names the server
+and what it pushed is worth more than a stack trace.
 
-Each tunnel runs as its own `openvpn` process with its own management interface on a loopback port.
-Credentials are supplied over that interface and are never written to disk. `Core`, `OpenVpn`, `Data`
-and `App` contain no platform specific code, so support for another operating system means adding an
-implementation of the existing interfaces rather than restructuring the application.
+Two things make a change easy to accept.
+
+**Say why in the code.** Comments here explain the reason, never the mechanism: what was tried, what
+the alternative was, what breaks if it is changed back. `CLAUDE.md` holds the house rules and, more
+importantly, the OpenVPN facts that were established by measurement rather than assumption. Read it
+before changing anything that talks to OpenVPN, and correct it if a measurement ever contradicts it.
+
+**Prove it against a server.** `lab/` runs ten of them, covering the paths a single server never
+does. A change to the connection lifecycle without a test is a change nobody can check.
+
+`dotnet build` treats warnings as errors and `dotnet test` has to stay green. Everything in the
+repository is English, including commit messages, which are short, imperative and prefixed with a
+gitmoji code.
+
+## How this was built
+
+Every line of this repository was written by Claude Opus 5, run at maximum reasoning effort, in a
+conversation with the author. No part of it was typed by hand.
+
+That is worth stating plainly rather than leaving to be discovered, and it is worth qualifying. The
+author writes C# and read what was produced: the architecture, the layering, the platform boundary
+and the decisions recorded in `CLAUDE.md` were reviewed and pushed back on, and the model was
+corrected where it was wrong. Several of the hardest findings in this repository came from measuring
+against real servers and disagreeing with what had been assumed, including one case where the
+documented workaround for a pushed compression setting turned out to produce a tunnel that connects
+and silently carries nothing.
+
+So: generated, but not unexamined. Judge it by the code, the comments and the tests rather than by
+how it was produced.
 
 ## Roadmap
 
@@ -364,3 +431,7 @@ the warning Windows shows for anything unsigned.
 
 There is no kill switch and none is planned. This is a client for reaching another network, not for
 being an exit node, so a tunnel that drops leaks nothing that was not already going out the same way.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
