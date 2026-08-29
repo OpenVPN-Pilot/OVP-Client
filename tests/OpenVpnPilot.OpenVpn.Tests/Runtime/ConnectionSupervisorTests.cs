@@ -1,7 +1,7 @@
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Vpn;
 using OpenVpnPilot.OpenVpn.Runtime;
-using OpenVpnPilot.OpenVpn.Tests.Management;
+using OpenVpnPilot.Testing;
 
 namespace OpenVpnPilot.OpenVpn.Tests.Runtime;
 

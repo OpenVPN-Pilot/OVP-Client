@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using OpenVpnPilot.Core.Vpn;
 using OpenVpnPilot.Data.Entities;
@@ -14,17 +15,27 @@ namespace OpenVpnPilot.App.Services;
 /// attempt. A history of attempts that never established anything would bury the sessions that
 /// matter, and the failure is already reported in the interface while it happens.
 ///
-/// The byte counters arrive continuously and the final values are the ones worth keeping, so the
-/// latest are held in memory and written once when the session closes. Writing every tick would put
-/// a database round trip on a one second timer for each tunnel.
+/// The byte counters arrive continuously and only the final values are worth storing, so the latest
+/// are held in memory and written once when the session closes. Writing every tick would put a
+/// database round trip on a one second timer for each tunnel.
+///
+/// Statuses are handled strictly in the order they arrived. Handling them concurrently would let the
+/// status that closes a session overtake the last counter update, and the session would be recorded
+/// as having carried less than it did.
 /// </remarks>
-public sealed class SessionRecorder : IDisposable
+public sealed class SessionRecorder : IAsyncDisposable
 {
     private readonly ConnectionManager connections;
     private readonly ISessionStore sessions;
     private readonly ILogger<SessionRecorder> logger;
 
     private readonly ConcurrentDictionary<Guid, OpenSession> open = new();
+
+    private readonly Channel<QueueItem> pending =
+        Channel.CreateUnbounded<QueueItem>(new UnboundedChannelOptions { SingleReader = true });
+
+    private readonly CancellationTokenSource lifetime = new();
+    private Task? pump;
     private bool disposed;
 
     public SessionRecorder(
@@ -41,7 +52,11 @@ public sealed class SessionRecorder : IDisposable
         this.logger = logger;
     }
 
-    public void Attach() => connections.StatusChanged += OnStatusChanged;
+    public void Attach()
+    {
+        pump ??= Task.Run(() => PumpAsync(lifetime.Token), CancellationToken.None);
+        connections.StatusChanged += OnStatusChanged;
+    }
 
     /// <summary>
     /// Closes anything still open, which is what the application does on its way out.
@@ -50,6 +65,10 @@ public sealed class SessionRecorder : IDisposable
         SessionEndReason reason,
         CancellationToken cancellationToken = default)
     {
+        // Everything already queued is applied first, so the counters written here are the last ones
+        // the tunnels reported rather than whatever happened to have been processed so far.
+        await DrainAsync(cancellationToken);
+
         foreach (Guid profileId in open.Keys.ToList())
         {
             if (open.TryRemove(profileId, out OpenSession? session))
@@ -59,11 +78,47 @@ public sealed class SessionRecorder : IDisposable
         }
     }
 
-    private void OnStatusChanged(object? sender, ConnectionStatusChanged change)
+    /// <summary>
+    /// Waits until everything queued so far has been handled.
+    /// </summary>
+    private async Task DrainAsync(CancellationToken cancellationToken)
     {
-        // The supervisor raises this from its own pump. Recording is fire and forget on purpose:
-        // a slow database write must never hold up the connection state machine.
-        _ = RecordAsync(change);
+        TaskCompletionSource marker = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // A marker travels through the same queue, so it arrives after everything ahead of it.
+        if (!pending.Writer.TryWrite(new QueueItem(null, marker)))
+        {
+            return;
+        }
+
+        await marker.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+    }
+
+    private void OnStatusChanged(object? sender, ConnectionStatusChanged change) =>
+        pending.Writer.TryWrite(new QueueItem(change, null));
+
+    private async Task PumpAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await foreach (QueueItem item in pending.Reader.ReadAllAsync(cancellationToken))
+            {
+                if (item.Marker is { } marker)
+                {
+                    marker.TrySetResult();
+                    continue;
+                }
+
+                if (item.Change is { } change)
+                {
+                    await RecordAsync(change);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutting down.
+        }
     }
 
     private async Task RecordAsync(ConnectionStatusChanged change)
@@ -72,7 +127,12 @@ public sealed class SessionRecorder : IDisposable
         {
             VpnConnectionStatus status = change.Status;
 
-            if (open.TryGetValue(change.ProfileId, out OpenSession? existing))
+            open.TryGetValue(change.ProfileId, out OpenSession? existing);
+
+            // The status that reports the end of a connection carries no counters, because nothing
+            // is flowing any more. Copying it would record every session as having moved nothing,
+            // so the last values seen while the tunnel was up are the ones kept.
+            if (existing is not null && !IsTerminal(status.State))
             {
                 existing.BytesReceived = status.BytesReceived;
                 existing.BytesSent = status.BytesSent;
@@ -84,8 +144,8 @@ public sealed class SessionRecorder : IDisposable
                     await BeginAsync(change.ProfileId, status);
                     break;
 
-                case VpnConnectionState.Disconnected or VpnConnectionState.Failed
-                    when open.TryRemove(change.ProfileId, out OpenSession? finished):
+                case VpnConnectionState state when IsTerminal(state)
+                    && open.TryRemove(change.ProfileId, out OpenSession? finished):
                     await CloseAsync(finished, MapReason(status), status.Message, CancellationToken.None);
                     break;
 
@@ -108,18 +168,11 @@ public sealed class SessionRecorder : IDisposable
             status.ServerAddress,
             status.ServerPort);
 
-        OpenSession session = new(sessionId)
+        open[profileId] = new OpenSession(sessionId)
         {
             BytesReceived = status.BytesReceived,
             BytesSent = status.BytesSent,
         };
-
-        if (!open.TryAdd(profileId, session))
-        {
-            // Two Connected notifications raced. The second row would never be closed, so it is
-            // closed here instead of being left running forever.
-            await sessions.EndAsync(sessionId, SessionEndReason.Error, 0, 0, "Duplicate session record.");
-        }
     }
 
     private async Task CloseAsync(
@@ -137,6 +190,9 @@ public sealed class SessionRecorder : IDisposable
             cancellationToken);
     }
 
+    private static bool IsTerminal(VpnConnectionState state) =>
+        state is VpnConnectionState.Disconnected or VpnConnectionState.Failed;
+
     private static SessionEndReason MapReason(VpnConnectionStatus status) => status.Failure switch
     {
         VpnFailureKind.UserRequested => SessionEndReason.UserRequested,
@@ -150,7 +206,7 @@ public sealed class SessionRecorder : IDisposable
             : SessionEndReason.Error,
     };
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         if (disposed)
         {
@@ -159,7 +215,33 @@ public sealed class SessionRecorder : IDisposable
 
         disposed = true;
         connections.StatusChanged -= OnStatusChanged;
+        pending.Writer.TryComplete();
+
+        await lifetime.CancelAsync();
+
+        if (pump is not null)
+        {
+            try
+            {
+                await pump;
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected while shutting down.
+            }
+        }
+
+        lifetime.Dispose();
     }
+
+    /// <summary>
+    /// One entry of the ordered queue: either a status to apply, or a marker to complete.
+    /// </summary>
+    /// <remarks>
+    /// The marker exists so a caller can wait for everything queued ahead of it without the queue
+    /// having to expose its own progress.
+    /// </remarks>
+    private readonly record struct QueueItem(ConnectionStatusChanged? Change, TaskCompletionSource? Marker);
 
     /// <summary>
     /// A session that has been opened in the database and not yet closed.

@@ -113,6 +113,11 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(LocalAddressDisplay))]
     [NotifyPropertyChangedFor(nameof(ServerDisplay))]
     [NotifyPropertyChangedFor(nameof(UptimeDisplay))]
+    [NotifyPropertyChangedFor(nameof(PingDisplay))]
+    [NotifyPropertyChangedFor(nameof(RoutesDisplay))]
+    [NotifyPropertyChangedFor(nameof(DnsDisplay))]
+    [NotifyPropertyChangedFor(nameof(HasPushedOptions))]
+    [NotifyPropertyChangedFor(nameof(HasRefusedDefaultRoute))]
     public partial VpnConnectionStatus Status { get; set; } = VpnConnectionStatus.Disconnected;
 
     public bool IsConnected => Status.State == VpnConnectionState.Connected;
@@ -158,6 +163,34 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     public string UptimeDisplay => Status.ConnectedSince is { } since
         ? FormatDuration(DateTimeOffset.UtcNow - since)
         : "-";
+
+    /// <summary>
+    /// The round trip, or an honest statement that nothing answered.
+    /// </summary>
+    public string PingDisplay => Status.PingMilliseconds is { } milliseconds
+        ? string.Create(CultureInfo.InvariantCulture, $"{milliseconds:0} ms")
+        : Status.PingFailed ? localizer["profile.noReply"] : "-";
+
+    public bool HasPushedOptions =>
+        Status.PushedRoutes.Count > 0 || Status.PushedDnsServers.Count > 0;
+
+    public string RoutesDisplay => Status.PushedRoutes.Count > 0
+        ? string.Join(Environment.NewLine, Status.PushedRoutes)
+        : "-";
+
+    public string DnsDisplay => Status.PushedDnsServers.Count > 0
+        ? string.Join(", ", Status.PushedDnsServers)
+        : "-";
+
+    /// <summary>
+    /// True when the server asked to carry all traffic and this profile does not allow it.
+    /// </summary>
+    /// <remarks>
+    /// Worth saying plainly: the tunnel is up and looks normal, but it is not carrying what the
+    /// server intended, and nothing else in the interface would reveal that.
+    /// </remarks>
+    public bool HasRefusedDefaultRoute =>
+        Status.ServerRequestedDefaultRoute && ProtectRoutes != false;
 
     public string AuthenticationDisplay => RequiresCredentials
         ? localizer["profile.authPassword"]

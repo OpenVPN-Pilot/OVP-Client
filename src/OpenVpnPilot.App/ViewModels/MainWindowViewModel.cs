@@ -129,6 +129,19 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool HasActiveConnections => ActiveCount > 0;
 
     /// <summary>
+    /// Total received across every active tunnel, for the status bar.
+    /// </summary>
+    /// <remarks>
+    /// Someone running several tunnels wants one figure for the machine, not a sum they compute by
+    /// clicking through each connection in turn.
+    /// </remarks>
+    [ObservableProperty]
+    public partial long TotalBytesReceived { get; set; }
+
+    [ObservableProperty]
+    public partial long TotalBytesSent { get; set; }
+
+    /// <summary>
     /// Heading of the placeholder shown when the list is empty. The wording distinguishes an empty
     /// library from a search that matched nothing, because the two need different actions.
     /// </summary>
@@ -658,6 +671,27 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>
+    /// Recomputes the aggregate throughput across the tunnels that are up.
+    /// </summary>
+    private void UpdateTotals()
+    {
+        long received = 0;
+        long sent = 0;
+
+        foreach (ProfileItemViewModel profile in allProfiles)
+        {
+            if (profile.IsConnected)
+            {
+                received += profile.Status.BytesReceived;
+                sent += profile.Status.BytesSent;
+            }
+        }
+
+        TotalBytesReceived = received;
+        TotalBytesSent = sent;
+    }
+
     private void TickUptime()
     {
         foreach (ProfileItemViewModel profile in allProfiles)
@@ -713,6 +747,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
 
             ActiveCount = connections.ActiveCount;
+            UpdateTotals();
 
             UpdateFilterCounts();
 

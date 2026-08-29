@@ -77,6 +77,41 @@ public sealed class ConnectionManager : IAsyncDisposable
     public bool IsActive(Guid profileId) => active.ContainsKey(profileId);
 
     /// <summary>
+    /// Records a round trip measurement against one connection.
+    /// </summary>
+    /// <remarks>
+    /// Measuring is not the supervisor's job: it owns the process and the management session, and a
+    /// network probe has nothing to do with either. Whoever measures reports the result here so it
+    /// travels with the rest of the connection's telemetry.
+    /// </remarks>
+    public void ReportPing(Guid profileId, double? milliseconds)
+    {
+        if (active.TryGetValue(profileId, out ActiveConnection? connection))
+        {
+            connection.Supervisor.ReportPing(milliseconds);
+        }
+    }
+
+    /// <summary>
+    /// The address worth measuring for one connection, or null when there is nothing to measure.
+    /// </summary>
+    public string? GetPingTarget(Guid profileId)
+    {
+        if (!active.TryGetValue(profileId, out ActiveConnection? connection))
+        {
+            return null;
+        }
+
+        VpnConnectionStatus status = connection.Supervisor.Status;
+
+        // The far end of the tunnel is the meaningful target. The server's public address would be
+        // measured over the ordinary route and would say nothing about the tunnel.
+        return status.State == VpnConnectionState.Connected
+            ? status.Gateway ?? status.LocalAddress
+            : null;
+    }
+
+    /// <summary>
     /// Starts a tunnel for the given profile. The configuration is written to a private file for the
     /// lifetime of the connection and removed afterwards.
     /// </summary>

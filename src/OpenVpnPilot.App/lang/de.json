@@ -60,7 +60,12 @@
       "authCertificate": "Zertifikat",
       "unsupportedTooltip": "Verwendet Skriptdirektiven, die der interaktive Dienst für nicht autorisierte Aufrufer ablehnt",
       "unsupportedNotice": "Dieses Profil verwendet Skriptdirektiven. Der interaktive Dienst lehnt diese für nicht autorisierte Aufrufer ab.",
-      "edit": "Bearbeiten"
+      "edit": "Bearbeiten",
+      "ping": "ANTWORTZEIT",
+      "noReply": "Keine Antwort",
+      "routes": "ÜBERMITTELTE ROUTEN",
+      "dns": "ÜBERMITTELTES DNS",
+      "defaultRouteRefused": "Der Server wollte den gesamten Verkehr übernehmen. Dieses Profil ignoriert das, daher behält der Host seine eigene Standardroute. Ändern Sie es im Profil, wenn der Tunnel alles tragen soll."
     },
     "state": {
       "connected": "Verbunden",

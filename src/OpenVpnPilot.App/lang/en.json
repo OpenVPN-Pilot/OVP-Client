@@ -60,7 +60,12 @@
       "authCertificate": "Certificate",
       "unsupportedTooltip": "Uses script directives the interactive service refuses for unauthorised callers",
       "unsupportedNotice": "This profile uses script directives. The interactive service refuses those for callers that are not authorised.",
-      "edit": "Edit"
+      "edit": "Edit",
+      "ping": "ROUND TRIP",
+      "noReply": "No reply",
+      "routes": "PUSHED ROUTES",
+      "dns": "PUSHED DNS",
+      "defaultRouteRefused": "The server asked to carry all traffic. This profile ignores that, so the host keeps its own default route. Change it in the profile if the tunnel is meant to carry everything."
     },
     "state": {
       "connected": "Connected",

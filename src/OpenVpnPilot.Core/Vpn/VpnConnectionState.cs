@@ -82,6 +82,44 @@ public sealed record VpnConnectionStatus
     public string Message { get; init; } = string.Empty;
 
     /// <summary>
+    /// Routes the server pushed, as network and mask. Empty until a server sends any.
+    /// </summary>
+    /// <remarks>
+    /// Shown because a pushed route is what decides which traffic the tunnel actually carries, and
+    /// because a route the client refused is otherwise invisible.
+    /// </remarks>
+    public IReadOnlyList<string> PushedRoutes { get; init; } = [];
+
+    /// <summary>
+    /// Name servers the server pushed.
+    /// </summary>
+    public IReadOnlyList<string> PushedDnsServers { get; init; } = [];
+
+    /// <summary>
+    /// The tunnel gateway the server named, which is the address a round trip is measured against.
+    /// </summary>
+    public string? Gateway { get; init; }
+
+    /// <summary>
+    /// True when the server asked to carry all traffic, whether or not the client accepted it.
+    /// </summary>
+    public bool ServerRequestedDefaultRoute { get; init; }
+
+    /// <summary>
+    /// The most recent round trip time, or null when it has not been measured.
+    /// </summary>
+    /// <remarks>
+    /// A measurement that got no reply is reported as <see cref="PingFailed"/> rather than as zero,
+    /// because zero would read as an unusually good result.
+    /// </remarks>
+    public double? PingMilliseconds { get; init; }
+
+    /// <summary>
+    /// True when the last measurement got no reply. Many servers do not answer, which is not a fault.
+    /// </summary>
+    public bool PingFailed { get; init; }
+
+    /// <summary>
     /// Why the connection ended, when it ended for a reason worth acting on.
     /// </summary>
     /// <remarks>

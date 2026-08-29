@@ -15,6 +15,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The management transport stand in is shared, so both suites drive the same fake. -->
+    <Compile Include="..\Shared\FakeManagementStream.cs" Link="Shared\FakeManagementStream.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 

@@ -98,6 +98,8 @@ public partial class App : Application
         services.GetRequiredService<SessionRecorder>().Attach();
         services.GetRequiredService<NotificationService>().Attach();
 
+        services.GetRequiredService<PingMonitor>().Start();
+
         ReconnectSupervisor reconnects = services.GetRequiredService<ReconnectSupervisor>();
         reconnects.Attach();
         reconnects.Reported += (_, message) =>
@@ -188,13 +190,18 @@ public partial class App : Application
         IServiceProvider services = host.Services;
 
         // Shutdown cannot await, so the tunnels are stopped before the process exits.
-        RunOffUiThread(() => services.GetRequiredService<SessionRecorder>()
-            .CloseOpenSessionsAsync(SessionEndReason.ApplicationClosed));
+        RunOffUiThread(async () =>
+        {
+            SessionRecorder recorder = services.GetRequiredService<SessionRecorder>();
+            await recorder.CloseOpenSessionsAsync(SessionEndReason.ApplicationClosed);
+            await recorder.DisposeAsync();
+        });
 
         RunOffUiThread(() => services.GetRequiredService<ConnectionManager>().DisconnectAllAsync());
 
         services.GetRequiredService<HotkeyCoordinator>().Dispose();
         services.GetRequiredService<ReconnectSupervisor>().Dispose();
+        RunOffUiThread(async () => await services.GetRequiredService<PingMonitor>().DisposeAsync());
         services.GetRequiredService<TrayIconController>().Dispose();
 
         host.Dispose();

@@ -106,6 +106,12 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                 State = VpnConnectionState.Launching,
                 Message = string.Empty,
                 Failure = VpnFailureKind.None,
+                PushedRoutes = [],
+                PushedDnsServers = [],
+                Gateway = null,
+                ServerRequestedDefaultRoute = false,
+                PingMilliseconds = null,
+                PingFailed = false,
             });
 
             string managementPassword = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
@@ -272,6 +278,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                 break;
 
             case LogMessage log:
+                ApplyPushedOptions(log);
                 LogReceived?.Invoke(this, log);
                 break;
 
@@ -377,6 +384,41 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
             message.NeedsUsername ? credentials.Username ?? dynamicChallenge?.Username : null,
             EncodePassword(credentials, message.Challenge, dynamicChallenge),
             cancellationToken);
+    }
+
+    /// <summary>
+    /// Records what the server asked the client to apply.
+    /// </summary>
+    /// <remarks>
+    /// The management interface has no command that reports pushed options, so the log stream is the
+    /// only place they appear.
+    /// </remarks>
+    private void ApplyPushedOptions(LogMessage log)
+    {
+        if (PushReplyParser.Parse(log.Text) is not { } pushed)
+        {
+            return;
+        }
+
+        Publish(status with
+        {
+            PushedRoutes = pushed.Routes,
+            PushedDnsServers = pushed.DnsServers,
+            Gateway = pushed.Gateway,
+            ServerRequestedDefaultRoute = pushed.RedirectsDefaultRoute,
+        });
+    }
+
+    /// <summary>
+    /// Records a round trip measurement taken by whatever is monitoring this connection.
+    /// </summary>
+    public void ReportPing(double? milliseconds)
+    {
+        Publish(status with
+        {
+            PingMilliseconds = milliseconds,
+            PingFailed = milliseconds is null,
+        });
     }
 
     /// <summary>

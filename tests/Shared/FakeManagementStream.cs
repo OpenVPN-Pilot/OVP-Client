@@ -1,7 +1,7 @@
 using System.Text;
 using System.Threading.Channels;
 
-namespace OpenVpnPilot.OpenVpn.Tests.Management;
+namespace OpenVpnPilot.Testing;
 
 /// <summary>
 /// An in memory stand in for the management socket. The test drives the OpenVPN side of the

@@ -278,6 +278,34 @@
                              Text="{Binding SelectedProfile.UptimeDisplay}" />
                 </StackPanel>
               </Grid>
+
+              <Grid ColumnDefinitions="*,2*">
+                <StackPanel Grid.Column="0" Spacing="3">
+                  <TextBlock Text="{loc:Translate profile.ping}" Classes="overline" />
+                  <TextBlock Classes="body" Text="{Binding SelectedProfile.PingDisplay}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="3"
+                            IsVisible="{Binding SelectedProfile.HasPushedOptions}">
+                  <TextBlock Text="{loc:Translate profile.dns}" Classes="overline" />
+                  <TextBlock Classes="body" TextWrapping="Wrap"
+                             Text="{Binding SelectedProfile.DnsDisplay}" />
+                </StackPanel>
+              </Grid>
+
+              <StackPanel Spacing="3" IsVisible="{Binding SelectedProfile.HasPushedOptions}">
+                <TextBlock Text="{loc:Translate profile.routes}" Classes="overline" />
+                <TextBlock Classes="body" FontFamily="Consolas,Menlo,monospace" FontSize="11.5"
+                           TextWrapping="Wrap" Text="{Binding SelectedProfile.RoutesDisplay}" />
+              </StackPanel>
+
+              <Border CornerRadius="7" Padding="12,10"
+                      Background="{DynamicResource StatePendingSoft}"
+                      IsVisible="{Binding SelectedProfile.HasRefusedDefaultRoute}">
+                <TextBlock TextWrapping="Wrap" FontSize="12"
+                           Foreground="{DynamicResource StatePending}"
+                           Text="{loc:Translate profile.defaultRouteRefused}" />
+              </Border>
+
               <Border Classes="divider" />
             </StackPanel>
 
@@ -337,11 +365,25 @@
       <Grid ColumnDefinitions="*,Auto">
         <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Classes="muted"
                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7" VerticalAlignment="Center"
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"
                     IsVisible="{Binding HasActiveConnections}">
-          <Border Width="7" Height="7" CornerRadius="4" VerticalAlignment="Center"
-                  Background="{DynamicResource StateConnected}" />
-          <TextBlock Text="{Binding ActiveSummary}" Classes="muted" />
+          <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <TextBlock Text="{loc:Translate profile.received}" Classes="overline"
+                       VerticalAlignment="Center" />
+            <TextBlock Classes="muted" VerticalAlignment="Center"
+                       Text="{Binding TotalBytesReceived, Converter={x:Static conv:AppConverters.ByteSize}}" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <TextBlock Text="{loc:Translate profile.sent}" Classes="overline"
+                       VerticalAlignment="Center" />
+            <TextBlock Classes="muted" VerticalAlignment="Center"
+                       Text="{Binding TotalBytesSent, Converter={x:Static conv:AppConverters.ByteSize}}" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+            <Border Width="7" Height="7" CornerRadius="4" VerticalAlignment="Center"
+                    Background="{DynamicResource StateConnected}" />
+            <TextBlock Text="{Binding ActiveSummary}" Classes="muted" />
+          </StackPanel>
         </StackPanel>
       </Grid>
     </Border>
