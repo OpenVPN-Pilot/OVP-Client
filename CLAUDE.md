@@ -88,6 +88,14 @@ The reply is UTF-16, LF separated: `0x00000000` (status), `0x` + eight hex digit
 The management password is passed in the `stdin` field with a trailing LF, paired with
 `--management <host> <port> stdin` on the command line. It never touches disk.
 
+**The startup pipe is not the channel that outlives it.** Closing it as soon as the reply is read
+does not end the tunnel: the service appends `--msg-channel <n>` to the options it passes, and that
+is the channel the OpenVPN process keeps open to the service for the rest of its life. Measured by
+reading the command line of a running process, which carries the option, and by the tunnels that
+survive the client disconnecting. Ending a process is therefore the client's own job, and it works:
+a process the service created was terminated from an ordinary, UAC filtered administrator token
+without being refused.
+
 Working option set:
 
 ```

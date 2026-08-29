@@ -22,4 +22,13 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!--
+      The command line handed to the interactive service is checked against the option whitelist the
+      service applies to callers it does not authorise. That check needs to see how the line is
+      built, and the line is an implementation detail everywhere else.
+    -->
+    <InternalsVisibleTo Include="OpenVpnPilot.App.Tests" />
+  </ItemGroup>
+
 </Project>

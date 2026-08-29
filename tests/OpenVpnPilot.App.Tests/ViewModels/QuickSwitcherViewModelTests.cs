@@ -284,29 +284,4 @@ public sealed class QuickSwitcherViewModelTests
     /// <summary>
     /// Returns the key itself, so a test asserts on behaviour rather than on wording.
     /// </summary>
-    private sealed class StubLocalizer : ILocalizer
-    {
-        public string CurrentLanguage => "en";
-
-        public IReadOnlyList<LanguageDescriptor> AvailableLanguages { get; } =
-            [new LanguageDescriptor("en", "English", "English")];
-
-        public IReadOnlyCollection<string> Keys { get; } = [];
-
-        public event EventHandler? LanguageChanged
-        {
-            add { }
-            remove { }
-        }
-
-        public string this[string key] => key;
-
-        public string Translate(string key, params object?[] arguments) => key;
-
-        public bool TrySetLanguage(string languageCode) => languageCode == "en";
-
-        public void Reload()
-        {
-        }
-    }
 }
