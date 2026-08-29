@@ -1,7 +1,10 @@
+using System.Runtime.Versioning;
 using Microsoft.EntityFrameworkCore;
+using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.Data.Packaging;
+using OpenVpnPilot.Platform.Windows.Security;
 
 namespace OpenVpnPilot.Cli;
 
@@ -11,7 +14,12 @@ namespace OpenVpnPilot.Cli;
 /// <remarks>
 /// The file carries every private key in the selection, so a passphrase is required rather than
 /// offered. A package is made to be moved, which means it will sit somewhere unattended.
+///
+/// The saved sign ins can travel with it, which is what makes handing a whole set to someone else
+/// useful rather than half a job. They are read out of the keystore, where they are protected for
+/// one user on one machine, and re-protected by the package's passphrase.
 /// </remarks>
+[SupportedOSPlatform("windows")]
 internal static class PackCommand
 {
     public static async Task<int> RunAsync(string[] args)
@@ -50,15 +58,64 @@ internal static class PackCommand
             return 1;
         }
 
+        IReadOnlyList<PackagedCredential> credentials =
+            args.Contains("--with-credentials", StringComparer.Ordinal)
+                ? await ReadCredentialsAsync(selected ?? await AllProfileIdsAsync(context))
+                : [];
+
         ProfilePackageService service = new(context);
-        ProfilePackageContent content = await service.CreateAsync(selected);
+        ProfilePackageContent content = await service.CreateAsync(selected, credentials);
 
         await ProfilePackageFile.WriteAsync(path, content, passphrase);
 
         Console.WriteLine($"Wrote {content.Profiles.Count} profile(s) and "
             + $"{content.Hotkeys.Count} shortcut(s) to {path}.");
 
+        if (credentials.Count > 0)
+        {
+            Console.WriteLine($"It also carries {credentials.Count} saved sign in(s). Anyone with "
+                + "this file and its passphrase can connect as you.");
+        }
+
         return 0;
+    }
+
+    private static async Task<IReadOnlyCollection<Guid>> AllProfileIdsAsync(PilotDbContext context) =>
+        await context.Profiles.AsNoTracking().Select(profile => profile.Id).ToListAsync();
+
+    /// <summary>
+    /// Reads the stored sign ins belonging to the profiles being written.
+    /// </summary>
+    private static async Task<IReadOnlyList<PackagedCredential>> ReadCredentialsAsync(
+        IReadOnlyCollection<Guid> profileIds)
+    {
+        DpapiSecretStore secrets = new(StoreFactory.Paths.SecretsDirectory);
+
+        if (!secrets.IsAvailable)
+        {
+            return [];
+        }
+
+        HashSet<Guid> wanted = [.. profileIds];
+        List<PackagedCredential> credentials = [];
+
+        foreach (string reference in await secrets.ListAsync())
+        {
+            if (!SecretReference.TryParse(reference, out Guid profileId, out string realm)
+                || !wanted.Contains(profileId))
+            {
+                continue;
+            }
+
+            StoredSecret? secret = await secrets.TryReadAsync(reference);
+
+            if (secret is not null)
+            {
+                credentials.Add(new PackagedCredential(profileId, realm, secret.Username, secret.Password));
+            }
+        }
+
+        return credentials;
     }
 
     /// <summary>
@@ -96,6 +153,7 @@ internal static class PackCommand
 /// <summary>
 /// Reads a portable package back into the store.
 /// </summary>
+[SupportedOSPlatform("windows")]
 internal static class UnpackCommand
 {
     public static async Task<int> RunAsync(string[] args)
@@ -146,6 +204,12 @@ internal static class UnpackCommand
         Console.WriteLine($"Package written {content.CreatedAt:yyyy-MM-dd HH:mm} by version {content.WrittenBy}.");
         Console.WriteLine($"It holds {content.Profiles.Count} profile(s).");
 
+        if (content.Credentials.Count > 0)
+        {
+            Console.WriteLine($"It also carries {content.Credentials.Count} saved sign in(s), which "
+                + "will be written into this machine's protected storage.");
+        }
+
         if (!args.Contains("--commit", StringComparer.Ordinal))
         {
             Console.WriteLine();
@@ -157,11 +221,47 @@ internal static class UnpackCommand
         ProfilePackageService service = new(context);
 
         PackageApplyResult result = await service.ApplyAsync(content);
+        int restored = await RestoreCredentialsAsync(result.Credentials);
 
         Console.WriteLine();
         Console.WriteLine($"Added {result.Added} profile(s), skipped {result.Skipped} already stored, "
             + $"added {result.Hotkeys} shortcut(s).");
 
+        if (result.Credentials.Count > 0)
+        {
+            Console.WriteLine(restored > 0
+                ? $"Restored {restored} saved sign in(s)."
+                : "The saved sign ins could not be stored, because this machine offers no protected "
+                    + "storage. They were discarded rather than written anywhere readable.");
+        }
+
         return 0;
+    }
+
+    /// <summary>
+    /// Puts the sign ins a package carried into protected storage.
+    /// </summary>
+    private static async Task<int> RestoreCredentialsAsync(IReadOnlyList<PackagedCredential> credentials)
+    {
+        if (credentials.Count == 0)
+        {
+            return 0;
+        }
+
+        DpapiSecretStore secrets = new(StoreFactory.Paths.SecretsDirectory);
+
+        if (!secrets.IsAvailable)
+        {
+            return 0;
+        }
+
+        foreach (PackagedCredential credential in credentials)
+        {
+            await secrets.WriteAsync(
+                SecretReference.ForProfile(credential.ProfileId, credential.Realm),
+                new StoredSecret(credential.Username, credential.Password));
+        }
+
+        return credentials.Count;
     }
 }

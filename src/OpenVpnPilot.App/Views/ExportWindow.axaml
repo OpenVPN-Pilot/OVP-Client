@@ -57,6 +57,20 @@
           <TextBlock Text="{Binding SelectionSummary}" Classes="muted" VerticalAlignment="Center" />
         </StackPanel>
 
+        <StackPanel Spacing="6" IsVisible="{Binding CanIncludeCredentials}">
+          <CheckBox Content="{loc:Translate export.includeCredentials}"
+                    IsChecked="{Binding IncludeCredentials}"
+                    IsEnabled="{Binding HasCredentials}" />
+          <TextBlock Text="{Binding CredentialSummary}" Classes="muted" TextWrapping="Wrap" />
+          <Border CornerRadius="7" Padding="12,10"
+                  Background="{DynamicResource StatePendingSoft}"
+                  IsVisible="{Binding IncludeCredentials}">
+            <TextBlock TextWrapping="Wrap" FontSize="12"
+                       Foreground="{DynamicResource StatePending}"
+                       Text="{loc:Translate export.credentialsWarning}" />
+          </Border>
+        </StackPanel>
+
         <StackPanel Spacing="6" IsVisible="{Binding IsPackage}">
           <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
             <StackPanel Grid.Column="0" Spacing="4">

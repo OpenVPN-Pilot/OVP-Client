@@ -1,6 +1,4 @@
-using System.Reflection;
-
-namespace OpenVpnPilot.App.Services;
+namespace OpenVpnPilot.Core.Storage;
 
 /// <summary>
 /// Resolves the locations the application stores data in.
@@ -8,6 +6,10 @@ namespace OpenVpnPilot.App.Services;
 /// <remarks>
 /// Kept behind an interface so that a portable mode, which keeps everything beside the executable,
 /// can be added without touching the components that use these paths.
+///
+/// It lives here rather than in the application because the companion command reads and writes the
+/// same store, the same settings and the same protected credentials. Two copies of these paths would
+/// be two places to change, and one of them would eventually be missed.
 /// </remarks>
 public interface IApplicationPaths
 {
@@ -52,9 +54,7 @@ public sealed class UserApplicationPaths : IApplicationPaths
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "OpenVpnPilot");
 
-        InstalledLanguageDirectory = Path.Combine(
-            Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? AppContext.BaseDirectory,
-            "lang");
+        InstalledLanguageDirectory = Path.Combine(AppContext.BaseDirectory, "lang");
 
         Directory.CreateDirectory(DataDirectory);
         Directory.CreateDirectory(LogDirectory);

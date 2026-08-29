@@ -54,12 +54,29 @@
       <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
                   MaxWidth="360" IsVisible="{Binding !HasRows}">
         <TextBlock Text="{Binding DropHint}" Classes="muted"
+                   TextWrapping="Wrap" TextAlignment="Center"
+                   IsVisible="{Binding !IsPackage}" />
+      </StackPanel>
+
+      <!--
+        A package is encrypted, so there is nothing to preview: the screen asks for the passphrase
+        and reports what came out of it afterwards.
+      -->
+      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10"
+                  MaxWidth="420" IsVisible="{Binding IsPackage}">
+        <TextBlock Text="{loc:Translate import.packageTitle}" Classes="title"
+                   HorizontalAlignment="Center" />
+        <TextBlock Text="{Binding PackageName}" Classes="body" HorizontalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" />
+        <TextBlock Text="{loc:Translate import.packageHint}" Classes="muted"
                    TextWrapping="Wrap" TextAlignment="Center" />
+        <TextBox Text="{Binding Passphrase}" PasswordChar="&#x2022;"
+                 PlaceholderText="{loc:Translate export.passphrase}" />
       </StackPanel>
     </Grid>
 
     <Border Grid.Row="2" BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
-            Padding="16,12">
+            Padding="16,12" IsVisible="{Binding !IsPackage}">
       <Grid ColumnDefinitions="Auto,Auto,*">
         <TextBlock Grid.Column="0" Classes="muted" VerticalAlignment="Center"
                    Text="{loc:Translate import.tags}" Margin="0,0,6,0" />

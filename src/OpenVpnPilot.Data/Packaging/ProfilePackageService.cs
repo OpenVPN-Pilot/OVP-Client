@@ -86,15 +86,25 @@ public sealed class ProfilePackageService
     /// <summary>
     /// Writes a package into the store, skipping anything already present.
     /// </summary>
+    /// <remarks>
+    /// Credentials the package carries come back in the result rather than being written here. They
+    /// belong in protected storage, which is a platform facility, and the store deliberately holds
+    /// no passwords at all. They are addressed to the profiles they now belong to, which are new
+    /// profiles for anything added and the existing ones for anything the store already held: a
+    /// package sent to fill in credentials for a set that is already imported has to work.
+    /// </remarks>
     public async Task<PackageApplyResult> ApplyAsync(
         ProfilePackageContent content,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(content);
 
-        HashSet<string> existingHashes = await context.Profiles
-            .Select(profile => profile.ContentHash)
-            .ToHashSetAsync(cancellationToken);
+        Dictionary<string, Guid> existingByHash = await context.Profiles
+            .Select(profile => new { profile.ContentHash, profile.Id })
+            .ToDictionaryAsync(row => row.ContentHash, row => row.Id, StringComparer.Ordinal, cancellationToken);
+
+        // What each packaged profile turned into, so the credentials can follow it.
+        Dictionary<Guid, Guid> resolved = [];
 
         DateTimeOffset now = timeProvider.GetUtcNow();
         int added = 0;
@@ -104,8 +114,9 @@ public sealed class ProfilePackageService
         {
             string hash = HashOf(packaged.Configuration);
 
-            if (!existingHashes.Add(hash))
+            if (existingByHash.TryGetValue(hash, out Guid existing))
             {
+                resolved[packaged.Id] = existing;
                 skipped++;
                 continue;
             }
@@ -131,6 +142,8 @@ public sealed class ProfilePackageService
             context.Profiles.Add(profile);
             await ApplyTagsAsync(profile, packaged.Tags, cancellationToken);
 
+            existingByHash[hash] = profile.Id;
+            resolved[packaged.Id] = profile.Id;
             added++;
         }
 
@@ -138,8 +151,22 @@ public sealed class ProfilePackageService
 
         int hotkeys = await ApplyHotkeysAsync(content.Hotkeys, cancellationToken);
 
-        return new PackageApplyResult(added, skipped, hotkeys);
+        return new PackageApplyResult(added, skipped, hotkeys)
+        {
+            Credentials = Readdress(content.Credentials, resolved),
+        };
     }
+
+    /// <summary>
+    /// Points each credential at the profile it belongs to in this store.
+    /// </summary>
+    private static List<PackagedCredential> Readdress(
+        IReadOnlyList<PackagedCredential> credentials,
+        Dictionary<Guid, Guid> resolved) =>
+        credentials
+            .Where(credential => resolved.ContainsKey(credential.ProfileId))
+            .Select(credential => credential with { ProfileId = resolved[credential.ProfileId] })
+            .ToList();
 
     private async Task<Dictionary<Guid, List<string>>> ReadTagsAsync(
         HashSet<Guid> profileIds,
@@ -278,4 +305,14 @@ public sealed class ProfilePackageService
 /// <param name="Added">Profiles created.</param>
 /// <param name="Skipped">Profiles the store already held, recognised by their contents.</param>
 /// <param name="Hotkeys">Shortcut bindings created.</param>
-public sealed record PackageApplyResult(int Added, int Skipped, int Hotkeys);
+public sealed record PackageApplyResult(int Added, int Skipped, int Hotkeys)
+{
+    /// <summary>
+    /// Credentials the package carried, already addressed to the profiles in this store.
+    /// </summary>
+    /// <remarks>
+    /// Handed back rather than stored, because passwords belong in the protected storage the
+    /// platform offers and never in the profile database.
+    /// </remarks>
+    public IReadOnlyList<PackagedCredential> Credentials { get; init; } = [];
+}

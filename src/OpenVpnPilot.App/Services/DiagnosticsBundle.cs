@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Settings;
+using OpenVpnPilot.Core.Storage;
 using OpenVpnPilot.Data;
 
 namespace OpenVpnPilot.App.Services;

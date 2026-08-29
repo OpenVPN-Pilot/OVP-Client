@@ -9,6 +9,7 @@ using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.Core.Settings;
+using OpenVpnPilot.Core.Storage;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.OpenVpn.Configuration;
 using OpenVpnPilot.OpenVpn.Runtime;

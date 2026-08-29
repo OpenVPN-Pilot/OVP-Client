@@ -46,6 +46,120 @@ public sealed class ProfilePackageTests : IDisposable
             link => link.ProfileId == restored.Id && link.Tag!.Name == "production");
     }
 
+    /// <summary>
+    /// A package that carries sign ins has to say which profile each one now belongs to.
+    /// </summary>
+    /// <remarks>
+    /// Applying a package creates new profiles with new identifiers, so a credential addressed to the
+    /// identifier it had on the machine that wrote it would belong to nothing. Handing fifty profiles
+    /// to someone who then has to type fifty passwords is most of the work left undone.
+    /// </remarks>
+    [Fact]
+    public async Task Credentials_AreReaddressedToTheProfilesTheyWereImportedAs()
+    {
+        await using PilotDbContext source = CreateContext("source.db");
+        await Seed(source);
+
+        Guid alpha = await source.Profiles
+            .Where(profile => profile.Name == "site-alpha")
+            .Select(profile => profile.Id)
+            .SingleAsync();
+
+        ProfilePackageContent content = await new ProfilePackageService(source).CreateAsync(
+            profileIds: null,
+            credentials: [new PackagedCredential(alpha, "Auth", "operator", "secret")]);
+
+        await using PilotDbContext target = CreateContext("target.db");
+        PackageApplyResult result = await new ProfilePackageService(target).ApplyAsync(content);
+
+        Guid imported = await target.Profiles
+            .Where(profile => profile.Name == "site-alpha")
+            .Select(profile => profile.Id)
+            .SingleAsync();
+
+        PackagedCredential carried = Assert.Single(result.Credentials);
+
+        Assert.NotEqual(alpha, imported);
+        Assert.Equal(imported, carried.ProfileId);
+        Assert.Equal("Auth", carried.Realm);
+        Assert.Equal("operator", carried.Username);
+        Assert.Equal("secret", carried.Password);
+    }
+
+    /// <summary>
+    /// A package sent only to fill in the sign ins for a set that is already imported has to work.
+    /// </summary>
+    [Fact]
+    public async Task Credentials_ForAProfileTheStoreAlreadyHas_AreAddressedToTheStoredOne()
+    {
+        await using PilotDbContext source = CreateContext("source.db");
+        await Seed(source);
+
+        Guid alpha = await source.Profiles
+            .Where(profile => profile.Name == "site-alpha")
+            .Select(profile => profile.Id)
+            .SingleAsync();
+
+        ProfilePackageContent content = await new ProfilePackageService(source).CreateAsync(
+            profileIds: null,
+            credentials: [new PackagedCredential(alpha, "Auth", "operator", "secret")]);
+
+        await using PilotDbContext target = CreateContext("target.db");
+        ProfilePackageService service = new(target);
+
+        await service.ApplyAsync(content);
+
+        Guid imported = await target.Profiles
+            .Where(profile => profile.Name == "site-alpha")
+            .Select(profile => profile.Id)
+            .SingleAsync();
+
+        PackageApplyResult second = await service.ApplyAsync(content);
+
+        Assert.Equal(0, second.Added);
+        Assert.Equal(imported, Assert.Single(second.Credentials).ProfileId);
+    }
+
+    [Fact]
+    public async Task APackageWrittenWithoutCredentials_CarriesNone()
+    {
+        await using PilotDbContext source = CreateContext("source.db");
+        await Seed(source);
+
+        ProfilePackageContent content = await new ProfilePackageService(source).CreateAsync();
+
+        await ProfilePackageFile.WriteAsync(PackagePath, content, "round trip");
+        ProfilePackageContent read = await ProfilePackageFile.ReadAsync(PackagePath, "round trip");
+
+        Assert.Empty(read.Credentials);
+    }
+
+    /// <summary>
+    /// A package is the only place a stored password is ever written outside the keystore, so the
+    /// encryption has to actually cover it.
+    /// </summary>
+    [Fact]
+    public async Task ACredentialIsNotReadableInTheWrittenFile()
+    {
+        await using PilotDbContext source = CreateContext("source.db");
+        await Seed(source);
+
+        Guid alpha = await source.Profiles
+            .Where(profile => profile.Name == "site-alpha")
+            .Select(profile => profile.Id)
+            .SingleAsync();
+
+        ProfilePackageContent content = await new ProfilePackageService(source).CreateAsync(
+            profileIds: null,
+            credentials: [new PackagedCredential(alpha, "Auth", "operator", "correct-horse")]);
+
+        await ProfilePackageFile.WriteAsync(PackagePath, content, "round trip");
+
+        byte[] raw = await File.ReadAllBytesAsync(PackagePath);
+
+        Assert.DoesNotContain("correct-horse", System.Text.Encoding.UTF8.GetString(raw), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task ApplyingTheSamePackageTwice_ChangesNothingTheSecondTime()
     {

@@ -71,4 +71,35 @@ public static class SecretReference
         ArgumentNullException.ThrowIfNull(reference);
         return reference.StartsWith($"profile/{profileId:N}/", StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Reads a reference back into the profile and realm it was built from.
+    /// </summary>
+    /// <remarks>
+    /// Needed by anything that walks the whole store rather than looking one entry up, such as
+    /// collecting the credentials that belong to a set of profiles for an export.
+    /// </remarks>
+    /// <returns>False for a reference this scheme did not produce.</returns>
+    public static bool TryParse(string reference, out Guid profileId, out string realm)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+
+        profileId = Guid.Empty;
+        realm = string.Empty;
+
+        // profile / <32 hex digits> / <realm>, and a realm may contain slashes of its own.
+        string[] parts = reference.Split('/', 3);
+
+        if (parts.Length != 3
+            || !string.Equals(parts[0], "profile", StringComparison.Ordinal)
+            || parts[2].Length == 0
+            || !Guid.TryParseExact(parts[1], "N", out profileId))
+        {
+            profileId = Guid.Empty;
+            return false;
+        }
+
+        realm = parts[2];
+        return true;
+    }
 }

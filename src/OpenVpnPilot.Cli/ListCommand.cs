@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using OpenVpnPilot.Core.Storage;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
 
@@ -130,16 +131,15 @@ internal static class ListCommand
 /// </summary>
 internal static class StoreFactory
 {
+    /// <summary>
+    /// The same locations the application uses, so both act on one store.
+    /// </summary>
+    public static IApplicationPaths Paths { get; } = new UserApplicationPaths();
+
     public static async Task<PilotDbContext> OpenAsync()
     {
-        string directory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "OpenVpnPilot");
-
-        Directory.CreateDirectory(directory);
-
         DbContextOptions<PilotDbContext> options = new DbContextOptionsBuilder<PilotDbContext>()
-            .UseSqlite($"Data Source={Path.Combine(directory, "pilot.db")}")
+            .UseSqlite($"Data Source={Paths.DatabasePath}")
             .Options;
 
         PilotDbContext context = new(options);

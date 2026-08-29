@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Security.Cryptography;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenVpnPilot.App.Services;
@@ -14,25 +15,42 @@ namespace OpenVpnPilot.App.ViewModels;
 /// Nothing is written until the user has seen the outcome for every file. Duplicates and rejects are
 /// listed rather than hidden, because a silent skip is indistinguishable from a successful import
 /// when the profile does not appear afterwards.
+///
+/// A package is the other thing that can be imported, and it arrives the same way: picked or dropped
+/// on the window. It cannot be previewed file by file because it is encrypted, so the screen changes
+/// shape and asks for the passphrase instead. Handing someone a set of profiles is worth little if
+/// opening it needs a terminal.
 /// </remarks>
 public sealed partial class ImportViewModel : ViewModelBase, IDisposable
 {
     private readonly IProfileImportService importer;
     private readonly IProfileStore store;
+    private readonly IProfilePackageWriter packages;
     private readonly ILocalizer localizer;
+
+    /// <summary>
+    /// The extension that marks a portable package rather than a configuration.
+    /// </summary>
+    public const string PackageExtension = ".ovppkg";
 
     private ImportSelection? selection;
     private IReadOnlyList<ImportCandidate> candidates = [];
     private bool disposed;
 
-    public ImportViewModel(IProfileImportService importer, IProfileStore store, ILocalizer localizer)
+    public ImportViewModel(
+        IProfileImportService importer,
+        IProfileStore store,
+        IProfilePackageWriter packages,
+        ILocalizer localizer)
     {
         ArgumentNullException.ThrowIfNull(importer);
         ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(packages);
         ArgumentNullException.ThrowIfNull(localizer);
 
         this.importer = importer;
         this.store = store;
+        this.packages = packages;
         this.localizer = localizer;
     }
 
@@ -73,9 +91,29 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     public partial int RejectedCount { get; set; }
 
-    public bool CanCommit => ImportableCount > 0 && !IsBusy;
+    /// <summary>
+    /// The package waiting to be opened, or null while ordinary configurations are being examined.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPackage))]
+    [NotifyPropertyChangedFor(nameof(PackageName))]
+    [NotifyPropertyChangedFor(nameof(CanCommit))]
+    [NotifyPropertyChangedFor(nameof(HasRows))]
+    public partial string? PackagePath { get; set; }
 
-    public bool HasRows => Rows.Count > 0;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCommit))]
+    public partial string Passphrase { get; set; } = string.Empty;
+
+    public bool IsPackage => PackagePath is not null;
+
+    public string PackageName => PackagePath is { } path ? Path.GetFileName(path) : string.Empty;
+
+    public bool CanCommit => IsPackage
+        ? !IsBusy && Passphrase.Length > 0
+        : ImportableCount > 0 && !IsBusy;
+
+    public bool HasRows => !IsPackage && Rows.Count > 0;
 
     public string DropHint => localizer["import.dropHint"];
 
@@ -88,10 +126,18 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
     {
         ArgumentNullException.ThrowIfNull(paths);
 
+        if (paths.FirstOrDefault(IsPackagePath) is { } package)
+        {
+            OfferPackage(package);
+            return;
+        }
+
         IsBusy = true;
 
         try
         {
+            PackagePath = null;
+
             // A previous run may have unpacked archives that are no longer part of the selection.
             selection?.Dispose();
 
@@ -139,11 +185,46 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>
+    /// True for a file that is a package rather than something the parser can read.
+    /// </summary>
+    private static bool IsPackagePath(string path) =>
+        path.EndsWith(PackageExtension, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Switches the screen to opening a package.
+    /// </summary>
+    /// <remarks>
+    /// The contents cannot be previewed the way configurations are: the file is encrypted, and
+    /// decrypting it to show a list would mean asking for the passphrase first anyway.
+    /// </remarks>
+    private void OfferPackage(string path)
+    {
+        selection?.Dispose();
+        selection = null;
+        candidates = [];
+        Rows.Clear();
+
+        ImportableCount = 0;
+        DuplicateCount = 0;
+        RejectedCount = 0;
+
+        PackagePath = path;
+        Passphrase = string.Empty;
+        StatusMessage = localizer.Translate("import.packageChosen", Path.GetFileName(path));
+    }
+
     [RelayCommand]
     private async Task CommitAsync()
     {
         if (!CanCommit)
         {
+            return;
+        }
+
+        if (IsPackage)
+        {
+            await ApplyPackageAsync();
             return;
         }
 
@@ -166,6 +247,46 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Opens the package and writes what it holds into the store.
+    /// </summary>
+    private async Task ApplyPackageAsync()
+    {
+        IsBusy = true;
+
+        try
+        {
+            PackageImportResult result = await packages.ApplyAsync(PackagePath!, Passphrase);
+
+            StatusMessage = result.Credentials > 0
+                ? localizer.Translate(
+                    "import.packageAppliedWithCredentials",
+                    result.Added,
+                    result.Skipped,
+                    result.Credentials)
+                : localizer.Translate("import.packageApplied", result.Added, result.Skipped);
+
+            // The passphrase has done its job and has no reason to stay in memory.
+            Passphrase = string.Empty;
+
+            Closed?.Invoke(this, true);
+        }
+        catch (CryptographicException)
+        {
+            // The mode is authenticated, so this is a wrong passphrase or a file that was altered.
+            StatusMessage = localizer["import.packageRefused"];
+        }
+        catch (InvalidOperationException exception)
+        {
+            StatusMessage = exception.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+            OnPropertyChanged(nameof(CanCommit));
         }
     }
 
