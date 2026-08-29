@@ -94,6 +94,9 @@ public sealed class NotificationService : IDisposable
     private static Notice? Describe(VpnConnectionStatus status, NotificationSettings preferences) =>
         status.State switch
         {
+            VpnConnectionState.Launching when preferences.OnConnecting =>
+                new Notice("notify.connectingTitle", "notify.connectingMessage", NotificationSeverity.Information),
+
             VpnConnectionState.Connected when preferences.OnConnected =>
                 new Notice("notify.connectedTitle", "notify.connectedMessage", NotificationSeverity.Information),
 

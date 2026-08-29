@@ -47,9 +47,9 @@
                            TextTrimming="CharacterEllipsis" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                   <TextBlock Text="{Binding Endpoint}" Classes="muted" />
-                  <TextBlock Text="{Binding FolderName}" Classes="muted"
+                  <TextBlock Text="{Binding Tags}" Classes="muted"
                              Foreground="{DynamicResource TextTertiary}"
-                             IsVisible="{Binding HasFolder}" />
+                             IsVisible="{Binding HasTags}" />
                 </StackPanel>
               </StackPanel>
 

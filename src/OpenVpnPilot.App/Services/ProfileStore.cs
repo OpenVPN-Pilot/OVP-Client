@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
 
@@ -14,8 +15,6 @@ namespace OpenVpnPilot.App.Services;
 public interface IProfileStore
 {
     public Task<IReadOnlyList<Profile>> GetProfilesAsync(CancellationToken cancellationToken = default);
-
-    public Task<IReadOnlyList<Folder>> GetFoldersAsync(CancellationToken cancellationToken = default);
 
     public Task<IReadOnlyList<TagSummary>> GetTagsAsync(CancellationToken cancellationToken = default);
 
@@ -53,8 +52,6 @@ public interface IProfileStore
 
     public Task RenameProfileAsync(Guid profileId, string name, CancellationToken cancellationToken = default);
 
-    public Task MoveProfileAsync(Guid profileId, Guid? folderId, CancellationToken cancellationToken = default);
-
     public Task SetProfileNotesAsync(Guid profileId, string? notes, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -72,17 +69,12 @@ public interface IProfileStore
 
     public Task DeleteProfileAsync(Guid profileId, CancellationToken cancellationToken = default);
 
-    public Task<Guid> CreateFolderAsync(
-        string name,
-        Guid? parentId,
-        CancellationToken cancellationToken = default);
-
-    public Task RenameFolderAsync(Guid folderId, string name, CancellationToken cancellationToken = default);
-
     /// <summary>
-    /// Removes a folder. Profiles filed under it move to the top level rather than being deleted.
+    /// Clears the discovery marks, which is how the user says they have seen what a watched
+    /// directory brought in.
     /// </summary>
-    public Task DeleteFolderAsync(Guid folderId, CancellationToken cancellationToken = default);
+    /// <returns>How many profiles were marked as seen.</returns>
+    public Task<int> ClearDiscoveriesAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -121,7 +113,7 @@ public sealed class ProfileStore : IProfileStore
                 Name = profile.Name,
                 Configuration = string.Empty,
                 ContentHash = profile.ContentHash,
-                FolderId = profile.FolderId,
+                DiscoveredAt = profile.DiscoveredAt,
                 RemoteHost = profile.RemoteHost,
                 RemotePort = profile.RemotePort,
                 Protocol = profile.Protocol,
@@ -136,17 +128,6 @@ public sealed class ProfileStore : IProfileStore
                 Colour = profile.Colour,
                 Notes = profile.Notes,
             })
-            .ToListAsync(cancellationToken);
-    }
-
-    public async Task<IReadOnlyList<Folder>> GetFoldersAsync(CancellationToken cancellationToken = default)
-    {
-        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
-
-        return await context.Folders
-            .AsNoTracking()
-            .OrderBy(folder => folder.SortOrder)
-            .ThenBy(folder => folder.Name)
             .ToListAsync(cancellationToken);
     }
 
@@ -237,12 +218,12 @@ public sealed class ProfileStore : IProfileStore
         int? slot,
         CancellationToken cancellationToken = default)
     {
-        if (slot is < 1 or > 9)
+        if (slot is < 1 or > HotkeyActions.MaximumFavouriteSlot)
         {
             slot = slot is null ? null : throw new ArgumentOutOfRangeException(
                 nameof(slot),
                 slot,
-                "Favourite slots run from one to nine.");
+                $"Favourite slots run from one to {HotkeyActions.MaximumFavouriteSlot}.");
         }
 
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -312,24 +293,6 @@ public sealed class ProfileStore : IProfileStore
         }
 
         profile.Name = name.Trim();
-        profile.UpdatedAt = timeProvider.GetUtcNow();
-        await context.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task MoveProfileAsync(
-        Guid profileId,
-        Guid? folderId,
-        CancellationToken cancellationToken = default)
-    {
-        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
-
-        Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
-        if (profile is null)
-        {
-            return;
-        }
-
-        profile.FolderId = folderId;
         profile.UpdatedAt = timeProvider.GetUtcNow();
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -426,61 +389,15 @@ public sealed class ProfileStore : IProfileStore
             .ExecuteDeleteAsync(cancellationToken);
     }
 
-    public async Task<Guid> CreateFolderAsync(
-        string name,
-        Guid? parentId,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-
-        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
-
-        int order = await context.Folders
-            .Where(folder => folder.ParentId == parentId)
-            .Select(folder => (int?)folder.SortOrder)
-            .MaxAsync(cancellationToken) ?? 0;
-
-        Folder created = new()
-        {
-            Name = name.Trim(),
-            ParentId = parentId,
-            SortOrder = order + 1,
-        };
-
-        context.Folders.Add(created);
-        await context.SaveChangesAsync(cancellationToken);
-
-        return created.Id;
-    }
-
-    public async Task RenameFolderAsync(
-        Guid folderId,
-        string name,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-
-        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
-
-        Folder? folder = await context.Folders.FindAsync([folderId], cancellationToken);
-        if (folder is null)
-        {
-            return;
-        }
-
-        folder.Name = name.Trim();
-        await context.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task DeleteFolderAsync(Guid folderId, CancellationToken cancellationToken = default)
+    public async Task<int> ClearDiscoveriesAsync(CancellationToken cancellationToken = default)
     {
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Profiles are filed, not owned. Deleting the drawer must not destroy what was in it, which
-        // is why the foreign key clears the reference rather than cascading.
-        await context.Folders
-            .Where(folder => folder.Id == folderId)
-            .ExecuteDeleteAsync(cancellationToken);
+        return await context.Profiles
+            .Where(profile => profile.DiscoveredAt != null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(profile => profile.DiscoveredAt, (DateTimeOffset?)null),
+                cancellationToken);
     }
 
     private sealed record TagLink(Guid ProfileId, string Name);

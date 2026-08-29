@@ -58,9 +58,13 @@ public sealed class ProfileImporter
     /// Stores the candidates that were accepted.
     /// </summary>
     /// <returns>The profiles that were created.</returns>
+    /// <param name="discoveredAt">
+    /// Set when a watched directory brought these in, so the library can mark them as new until the
+    /// user has looked at them. Null for an import the user asked for.
+    /// </param>
     public async Task<IReadOnlyList<Profile>> CommitAsync(
         IEnumerable<ImportCandidate> candidates,
-        Guid? targetFolderId = null,
+        DateTimeOffset? discoveredAt = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(candidates);
@@ -80,7 +84,7 @@ public sealed class ProfileImporter
                 Name = candidate.SuggestedName,
                 Configuration = candidate.Configuration,
                 ContentHash = candidate.ContentHash!,
-                FolderId = targetFolderId,
+                DiscoveredAt = discoveredAt,
                 Source = ProfileSource.Imported,
                 SourcePath = candidate.SourcePath,
                 RemoteHost = candidate.RemoteHost,

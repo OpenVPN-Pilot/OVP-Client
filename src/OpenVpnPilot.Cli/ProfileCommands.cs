@@ -154,10 +154,10 @@ internal static class ExportCommand
             query = query.Where(profile => EF.Functions.Like(profile.Name, $"%{name}%"));
         }
 
-        if (ArgumentReader.Value(args, "--folder") is { } folder)
+        if (ArgumentReader.Value(args, "--tag") is { } tag)
         {
-            query = query.Where(profile => profile.Folder != null
-                && EF.Functions.Like(profile.Folder.Name, $"%{folder}%"));
+            query = query.Where(profile => profile.Tags.Any(link =>
+                link.Tag != null && EF.Functions.Like(link.Tag.Name, $"%{tag}%")));
         }
 
         List<Profile> profiles = await query.OrderBy(profile => profile.Name).ToListAsync();
@@ -328,7 +328,7 @@ internal static class ArgumentReader
     }
 
     private static bool TakesValue(string flag) => flag
-        is "--profile" or "--folder" or "--tag" or "--slot" or "--seconds"
+        is "--profile" or "--tag" or "--slot" or "--seconds"
         or "--username" or "--password" or "--passphrase";
 }
 

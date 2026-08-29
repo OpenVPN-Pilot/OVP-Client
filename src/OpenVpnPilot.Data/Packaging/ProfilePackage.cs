@@ -7,9 +7,8 @@ namespace OpenVpnPilot.Data.Packaging;
 /// </summary>
 /// <remarks>
 /// The package is a single file so a profile set can be moved without anyone having to know where
-/// the database lives. It carries the configurations, the way they were filed and the shortcuts, and
-/// deliberately nothing about how they were used: the session history belongs to the machine it
-/// happened on.
+/// the database lives. It carries the configurations, their tags and the shortcuts, and deliberately
+/// nothing about how they were used: the session history belongs to the machine it happened on.
 ///
 /// Credentials are not included unless the caller asks for them and supplies a passphrase. A stored
 /// secret is protected by the operating system for one user on one machine, so moving it means
@@ -33,9 +32,6 @@ public sealed record ProfilePackageContent
     [JsonPropertyName("writtenBy")]
     public string WrittenBy { get; init; } = string.Empty;
 
-    [JsonPropertyName("folders")]
-    public IReadOnlyList<PackagedFolder> Folders { get; init; } = [];
-
     [JsonPropertyName("profiles")]
     public IReadOnlyList<PackagedProfile> Profiles { get; init; } = [];
 
@@ -50,15 +46,6 @@ public sealed record ProfilePackageContent
 }
 
 /// <summary>
-/// A folder as it travels. Identifiers are kept so the nesting can be rebuilt.
-/// </summary>
-public sealed record PackagedFolder(
-    [property: JsonPropertyName("id")] Guid Id,
-    [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("parentId")] Guid? ParentId,
-    [property: JsonPropertyName("sortOrder")] int SortOrder);
-
-/// <summary>
 /// A profile with its configuration inline, which is what makes it usable elsewhere.
 /// </summary>
 public sealed record PackagedProfile
@@ -71,9 +58,6 @@ public sealed record PackagedProfile
 
     [JsonPropertyName("configuration")]
     public string Configuration { get; init; } = string.Empty;
-
-    [JsonPropertyName("folderId")]
-    public Guid? FolderId { get; init; }
 
     [JsonPropertyName("remoteHost")]
     public string? RemoteHost { get; init; }

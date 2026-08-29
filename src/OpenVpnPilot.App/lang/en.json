@@ -32,17 +32,19 @@
       "refresh": "Refresh",
       "disconnectAll": "Disconnect all",
       "settings": "Settings",
-      "import": "Import"
+      "import": "Import",
+      "export": "Export"
     },
     "nav": {
       "library": "LIBRARY",
-      "folders": "FOLDERS",
       "tags": "TAGS",
       "all": "All profiles",
       "active": "Active",
       "favourites": "Favourites",
       "recent": "Recent",
-      "history": "History"
+      "history": "History",
+      "new": "New",
+      "markSeen": "Mark these as seen"
     },
     "profile": {
       "connect": "Connect",
@@ -65,7 +67,9 @@
       "noReply": "No reply",
       "routes": "PUSHED ROUTES",
       "dns": "PUSHED DNS",
-      "defaultRouteRefused": "The server asked to carry all traffic. This profile ignores that, so the host keeps its own default route. Change it in the profile if the tunnel is meant to carry everything."
+      "defaultRouteRefused": "The server asked to carry all traffic. This profile ignores that, so the host keeps its own default route. Change it in the profile if the tunnel is meant to carry everything.",
+      "signInAgain": "Sign in again",
+      "signInAgainHint": "Forgets the credentials stored for this profile so the next connection asks for them. Use it when the password changed on the server."
     },
     "state": {
       "connected": "Connected",
@@ -98,7 +102,10 @@
       "profileDisconnected": "{0} is disconnected.",
       "profileBusy": "{0}: {1}",
       "reconnectScheduled": "{0} dropped. Reconnecting in {1} s, attempt {2}.",
-      "reconnectGaveUp": "{0} could not be reconnected after {1} attempt(s)."
+      "reconnectGaveUp": "{0} could not be reconnected after {1} attempt(s).",
+      "discoveriesCleared": "{0} profile(s) marked as seen.",
+      "credentialsForgotten": "The stored credentials for {0} were forgotten.",
+      "noStoredCredentials": "Nothing was stored for {0}."
     },
     "credentials": {
       "signInTitle": "Sign in to {0}",
@@ -178,7 +185,7 @@
       "notificationsHint": "With many tunnels open, one message per event becomes noise. Turn off the ones you do not act on.",
       "useStoredSecrets": "Use stored credentials",
       "rememberByDefault": "Tick remember by default in the prompt",
-      "credentialsHint": "Credentials are protected by the operating system and are readable only by this account on this machine. They never enter the profile database or an export.",
+      "credentialsHint": "Credentials are protected by the operating system and are readable only by this account on this machine. They never enter the profile database or an export.\n\nStored credentials are used without asking, so a profile connected daily never prompts. A connection the server refuses forgets what was stored and asks again, saying that the previous attempt was rejected. To change them before that happens, use Sign in again on the profile.",
       "forgetCredentials": "Forget all stored credentials",
       "credentialsCleared": "{0} stored credential(s) removed.",
       "openVpnPath": "Path to the openvpn executable",
@@ -191,7 +198,9 @@
       "tabWatch": "Watched folders",
       "diagnostics": "Write a diagnostics bundle",
       "diagnosticsHint": "Collects the environment report, the logs and a profile listing into one archive for a support request. Configurations and credentials are never included.",
-      "diagnosticsWritten": "{0} item(s) written to {1}."
+      "diagnosticsWritten": "{0} item(s) written to {1}.",
+      "notifyConnecting": "Connecting",
+      "diagnosticsPrivacy": "A bundle is not anonymous. It contains profile names, remote host names and ports, file paths that include your Windows user name, and log lines that mention the same. It never contains configurations, private keys or credentials. Read it before sending it on."
     },
     "hotkey": {
       "unbound": "Not set",
@@ -211,7 +220,8 @@
       "ConnectFavourite6": "Connect favourite 6",
       "ConnectFavourite7": "Connect favourite 7",
       "ConnectFavourite8": "Connect favourite 8",
-      "ConnectFavourite9": "Connect favourite 9"
+      "ConnectFavourite9": "Connect favourite 9",
+      "ConnectFavourite10": "Connect favourite 10"
     },
     "history": {
       "allProfiles": "All profiles",
@@ -241,11 +251,8 @@
     "import": {
       "pickFiles": "Add files",
       "pickFolder": "Add a folder",
-      "pickArchive": "Add an archive",
       "dropHint": "Drop .ovpn files, a folder or a ZIP archive here, or use the buttons above.",
       "nothingFound": "No .ovpn files were found in that selection.",
-      "targetFolder": "Folder",
-      "noFolder": "No folder",
       "tags": "Tags",
       "tagsHint": "Separate with commas",
       "commit": "Import",
@@ -259,13 +266,12 @@
         "DuplicateInStore": "Already stored",
         "Rejected": "Rejected",
         "Unreadable": "Unreadable"
-      }
+      },
+      "includeSubfolders": "Include subfolders"
     },
     "editor": {
       "title": "Profile",
       "name": "Name",
-      "folder": "Folder",
-      "noFolder": "No folder",
       "tags": "Tags",
       "favourite": "Favourite",
       "slot": "Shortcut slot",
@@ -279,13 +285,6 @@
       "deleteConfirm": "This removes the profile and its history. It cannot be undone.",
       "nameRequired": "A profile needs a name."
     },
-    "folders": {
-      "create": "New folder",
-      "namePlaceholder": "Folder name",
-      "connectAll": "Connect everything here",
-      "fileSelected": "Move the selected profile here",
-      "delete": "Delete this folder"
-    },
     "watch": {
       "hint": "A watched directory is scanned when the application starts and again whenever a file appears in it. A configuration that is already stored is recognised by its contents, so nothing is imported twice.",
       "empty": "No directories are being watched.",
@@ -296,7 +295,30 @@
       "added": "Watching {0}.",
       "removed": "No longer watching {0}.",
       "scanned": "{0} profile(s) imported.",
-      "imported": "{0} profile(s) imported from {1}."
+      "imported": "{0} profile(s) imported from {1}.",
+      "interval": "Re-read every, in minutes",
+      "intervalHint": "Zero re-reads only at startup and when the directory reports a change, which is enough for a local folder. Set an interval for a network share, where those reports cannot be relied on. Profiles that arrive this way appear under New in the library until you mark them as seen."
+    },
+    "tags": {
+      "help": "Tags are how a profile set is organised. A profile can carry as many as it needs, the sidebar lists them, and the search box matches them along with the name and the host. Separate several with commas."
+    },
+    "export": {
+      "title": "Export",
+      "asPackage": "One portable package",
+      "asConfigurations": "One .ovpn file per profile",
+      "packageHint": "A package carries the selected profiles, their tags and the shortcut bindings in a single encrypted file. It is the way to move a set to another machine.",
+      "configurationsHint": "Plain configurations carry their private keys inline and cannot be encrypted, because OpenVPN has to read them. Treat the result as credentials.",
+      "selectAll": "Select all",
+      "selectNone": "Select none",
+      "selected": "{0} selected",
+      "passphrase": "Passphrase",
+      "passphraseAgain": "Repeat the passphrase",
+      "passphraseRequired": "A package is always encrypted, so a passphrase is required.",
+      "passphraseTooShort": "Use at least {0} characters.",
+      "passphraseMismatch": "The two entries do not match.",
+      "write": "Export",
+      "packageWritten": "{0} profile(s) written to {1}.",
+      "configurationsWritten": "{0} configuration(s) written to {1}."
     }
   }
 }

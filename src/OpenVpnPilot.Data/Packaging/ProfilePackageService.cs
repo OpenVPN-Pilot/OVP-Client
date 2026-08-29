@@ -10,9 +10,9 @@ namespace OpenVpnPilot.Data.Packaging;
 /// </summary>
 /// <remarks>
 /// Applying a package never overwrites what is already there. A configuration that is already stored
-/// is recognised by its content and skipped, and a folder that already exists by that name is reused
-/// rather than duplicated. Importing the same package twice therefore changes nothing the second
-/// time, which is what makes it safe to hand around.
+/// is recognised by its content and skipped, and a name that is taken gets a suffix. Importing the
+/// same package twice therefore changes nothing the second time, which is what makes it safe to hand
+/// around.
 /// </remarks>
 public sealed class ProfilePackageService
 {
@@ -48,19 +48,6 @@ public sealed class ProfilePackageService
 
         List<Profile> profiles = await query.OrderBy(profile => profile.Name).ToListAsync(cancellationToken);
 
-        HashSet<Guid> includedFolders = profiles
-            .Where(profile => profile.FolderId is not null)
-            .Select(profile => profile.FolderId!.Value)
-            .ToHashSet();
-
-        List<Folder> folders = await context.Folders
-            .AsNoTracking()
-            .Where(folder => includedFolders.Contains(folder.Id))
-            .ToListAsync(cancellationToken);
-
-        // A folder's parents come along, otherwise the nesting could not be rebuilt.
-        await IncludeAncestorsAsync(folders, cancellationToken);
-
         Dictionary<Guid, List<string>> tags = await ReadTagsAsync(
             profiles.Select(profile => profile.Id).ToHashSet(),
             cancellationToken);
@@ -73,15 +60,11 @@ public sealed class ProfilePackageService
         {
             CreatedAt = timeProvider.GetUtcNow(),
             WrittenBy = typeof(ProfilePackageService).Assembly.GetName().Version?.ToString(3) ?? "unknown",
-            Folders = folders
-                .Select(folder => new PackagedFolder(folder.Id, folder.Name, folder.ParentId, folder.SortOrder))
-                .ToList(),
             Profiles = profiles.Select(profile => new PackagedProfile
             {
                 Id = profile.Id,
                 Name = profile.Name,
                 Configuration = profile.Configuration,
-                FolderId = profile.FolderId,
                 RemoteHost = profile.RemoteHost,
                 RemotePort = profile.RemotePort,
                 Protocol = profile.Protocol,
@@ -109,8 +92,6 @@ public sealed class ProfilePackageService
     {
         ArgumentNullException.ThrowIfNull(content);
 
-        Dictionary<Guid, Guid> folderMap = await ApplyFoldersAsync(content.Folders, cancellationToken);
-
         HashSet<string> existingHashes = await context.Profiles
             .Select(profile => profile.ContentHash)
             .ToHashSetAsync(cancellationToken);
@@ -134,9 +115,6 @@ public sealed class ProfilePackageService
                 Name = await UniqueNameAsync(packaged.Name, cancellationToken),
                 Configuration = packaged.Configuration,
                 ContentHash = hash,
-                FolderId = packaged.FolderId is { } id && folderMap.TryGetValue(id, out Guid mapped)
-                    ? mapped
-                    : null,
                 Source = ProfileSource.Imported,
                 RemoteHost = packaged.RemoteHost,
                 RemotePort = packaged.RemotePort,
@@ -163,41 +141,6 @@ public sealed class ProfilePackageService
         return new PackageApplyResult(added, skipped, hotkeys);
     }
 
-    private async Task IncludeAncestorsAsync(List<Folder> folders, CancellationToken cancellationToken)
-    {
-        HashSet<Guid> known = folders.Select(folder => folder.Id).ToHashSet();
-
-        Queue<Guid> pending = new(folders
-            .Where(folder => folder.ParentId is not null)
-            .Select(folder => folder.ParentId!.Value));
-
-        while (pending.Count > 0)
-        {
-            Guid parentId = pending.Dequeue();
-
-            if (!known.Add(parentId))
-            {
-                continue;
-            }
-
-            Folder? parent = await context.Folders
-                .AsNoTracking()
-                .FirstOrDefaultAsync(folder => folder.Id == parentId, cancellationToken);
-
-            if (parent is null)
-            {
-                continue;
-            }
-
-            folders.Add(parent);
-
-            if (parent.ParentId is { } grandparent)
-            {
-                pending.Enqueue(grandparent);
-            }
-        }
-    }
-
     private async Task<Dictionary<Guid, List<string>>> ReadTagsAsync(
         HashSet<Guid> profileIds,
         CancellationToken cancellationToken)
@@ -222,61 +165,6 @@ public sealed class ProfilePackageService
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Recreates the folder tree, reusing a folder that already exists by name under the same parent.
-    /// </summary>
-    private async Task<Dictionary<Guid, Guid>> ApplyFoldersAsync(
-        IReadOnlyList<PackagedFolder> packaged,
-        CancellationToken cancellationToken)
-    {
-        Dictionary<Guid, Guid> map = [];
-        List<PackagedFolder> pending = [.. packaged];
-
-        // Parents are created before their children, however the package happened to order them.
-        while (pending.Count > 0)
-        {
-            List<PackagedFolder> ready = pending
-                .Where(folder => folder.ParentId is null || map.ContainsKey(folder.ParentId.Value))
-                .ToList();
-
-            if (ready.Count == 0)
-            {
-                // A parent that is not in the package cannot be rebuilt, so the rest go to the top.
-                ready = pending;
-            }
-
-            foreach (PackagedFolder folder in ready)
-            {
-                Guid? parentId = folder.ParentId is { } original && map.TryGetValue(original, out Guid mapped)
-                    ? mapped
-                    : null;
-
-                Folder? existing = await context.Folders
-                    .FirstOrDefaultAsync(
-                        candidate => candidate.Name == folder.Name && candidate.ParentId == parentId,
-                        cancellationToken);
-
-                if (existing is null)
-                {
-                    existing = new Folder
-                    {
-                        Name = folder.Name,
-                        ParentId = parentId,
-                        SortOrder = folder.SortOrder,
-                    };
-
-                    context.Folders.Add(existing);
-                    await context.SaveChangesAsync(cancellationToken);
-                }
-
-                map[folder.Id] = existing.Id;
-                pending.Remove(folder);
-            }
-        }
-
-        return map;
     }
 
     private async Task ApplyTagsAsync(

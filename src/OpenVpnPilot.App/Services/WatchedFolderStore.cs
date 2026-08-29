@@ -18,7 +18,6 @@ public interface IWatchedFolderStore
         string path,
         bool recursive,
         bool autoImport,
-        Guid? targetFolderId,
         CancellationToken cancellationToken = default);
 
     public Task RemoveAsync(Guid id, CancellationToken cancellationToken = default);
@@ -37,7 +36,6 @@ public sealed record WatchedFolderRecord(
     string Path,
     bool IsRecursive,
     bool AutoImport,
-    Guid? TargetFolderId,
     DateTimeOffset? LastScanAt);
 
 /// <summary>
@@ -70,7 +68,6 @@ public sealed class WatchedFolderStore : IWatchedFolderStore
                 folder.Path,
                 folder.IsRecursive,
                 folder.AutoImport,
-                folder.TargetFolderId,
                 folder.LastScanAt))
             .ToListAsync(cancellationToken);
     }
@@ -79,7 +76,6 @@ public sealed class WatchedFolderStore : IWatchedFolderStore
         string path,
         bool recursive,
         bool autoImport,
-        Guid? targetFolderId,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -101,7 +97,6 @@ public sealed class WatchedFolderStore : IWatchedFolderStore
             Path = full,
             IsRecursive = recursive,
             AutoImport = autoImport,
-            TargetFolderId = targetFolderId,
         };
 
         context.WatchedFolders.Add(created);

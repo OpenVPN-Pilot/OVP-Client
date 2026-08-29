@@ -9,8 +9,8 @@ namespace OpenVpnPilot.Cli;
 /// Writes a portable package of the profile set.
 /// </summary>
 /// <remarks>
-/// The file carries the configurations, which carry private keys, so the passphrase option exists
-/// and the command says plainly what it has written when there is none.
+/// The file carries every private key in the selection, so a passphrase is required rather than
+/// offered. A package is made to be moved, which means it will sit somewhere unattended.
 /// </remarks>
 internal static class PackCommand
 {
@@ -41,21 +41,22 @@ internal static class PackCommand
             return 1;
         }
 
-        ProfilePackageService service = new(context);
-        ProfilePackageContent content = await service.CreateAsync(selected);
-
         string? passphrase = ArgumentReader.Value(args, "--passphrase");
-
-        await ProfilePackageFile.WriteAsync(path, content, passphrase);
-
-        Console.WriteLine($"Wrote {content.Profiles.Count} profile(s), "
-            + $"{content.Folders.Count} folder(s) and {content.Hotkeys.Count} shortcut(s) to {path}.");
 
         if (string.IsNullOrEmpty(passphrase))
         {
-            Console.WriteLine("The package is not encrypted and contains private keys. "
-                + "Pass --passphrase to protect it.");
+            Console.Error.WriteLine("A package carries private keys and is always encrypted. "
+                + "Pass --passphrase <value>.");
+            return 1;
         }
+
+        ProfilePackageService service = new(context);
+        ProfilePackageContent content = await service.CreateAsync(selected);
+
+        await ProfilePackageFile.WriteAsync(path, content, passphrase);
+
+        Console.WriteLine($"Wrote {content.Profiles.Count} profile(s) and "
+            + $"{content.Hotkeys.Count} shortcut(s) to {path}.");
 
         return 0;
     }
@@ -68,9 +69,9 @@ internal static class PackCommand
         string[] args)
     {
         string? name = ArgumentReader.Value(args, "--profile");
-        string? folder = ArgumentReader.Value(args, "--folder");
+        string? tag = ArgumentReader.Value(args, "--tag");
 
-        if (name is null && folder is null)
+        if (name is null && tag is null)
         {
             return null;
         }
@@ -82,10 +83,10 @@ internal static class PackCommand
             query = query.Where(profile => EF.Functions.Like(profile.Name, $"%{name}%"));
         }
 
-        if (folder is not null)
+        if (tag is not null)
         {
-            query = query.Where(profile => profile.Folder != null
-                && EF.Functions.Like(profile.Folder.Name, $"%{folder}%"));
+            query = query.Where(profile => profile.Tags.Any(link =>
+                link.Tag != null && EF.Functions.Like(link.Tag.Name, $"%{tag}%")));
         }
 
         return await query.Select(profile => profile.Id).ToListAsync();
@@ -143,7 +144,7 @@ internal static class UnpackCommand
         }
 
         Console.WriteLine($"Package written {content.CreatedAt:yyyy-MM-dd HH:mm} by version {content.WrittenBy}.");
-        Console.WriteLine($"It holds {content.Profiles.Count} profile(s) and {content.Folders.Count} folder(s).");
+        Console.WriteLine($"It holds {content.Profiles.Count} profile(s).");
 
         if (!args.Contains("--commit", StringComparer.Ordinal))
         {

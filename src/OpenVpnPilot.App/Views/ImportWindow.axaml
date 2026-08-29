@@ -16,10 +16,12 @@
     <Border Grid.Row="0" Background="{DynamicResource SurfaceSidebar}"
             BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1"
             Padding="16,12">
-      <StackPanel Orientation="Horizontal" Spacing="8">
+      <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
         <Button Name="PickFilesButton" Content="{loc:Translate import.pickFiles}" />
         <Button Name="PickFolderButton" Content="{loc:Translate import.pickFolder}" />
-        <Button Name="PickArchiveButton" Content="{loc:Translate import.pickArchive}" />
+        <CheckBox Content="{loc:Translate import.includeSubfolders}"
+                  IsChecked="{Binding IncludeSubfolders}"
+                  VerticalAlignment="Center" Margin="8,0,0,0" />
       </StackPanel>
     </Border>
 
@@ -58,21 +60,14 @@
 
     <Border Grid.Row="2" BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
             Padding="16,12">
-      <Grid ColumnDefinitions="Auto,*,Auto,*">
+      <Grid ColumnDefinitions="Auto,Auto,*">
         <TextBlock Grid.Column="0" Classes="muted" VerticalAlignment="Center"
-                   Text="{loc:Translate import.targetFolder}" Margin="0,0,10,0" />
-        <ComboBox Grid.Column="1" ItemsSource="{Binding Folders}"
-                  SelectedItem="{Binding SelectedFolder}">
-          <ComboBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:ImportFolderChoice">
-              <TextBlock Text="{Binding Name}" />
-            </DataTemplate>
-          </ComboBox.ItemTemplate>
-        </ComboBox>
-
-        <TextBlock Grid.Column="2" Classes="muted" VerticalAlignment="Center"
-                   Text="{loc:Translate import.tags}" Margin="16,0,10,0" />
-        <TextBox Grid.Column="3" Text="{Binding TagsInput}"
+                   Text="{loc:Translate import.tags}" Margin="0,0,6,0" />
+        <Border Grid.Column="1" Classes="hint" Margin="0,0,10,0"
+                ToolTip.Tip="{loc:Translate tags.help}">
+          <TextBlock Text="i" />
+        </Border>
+        <TextBox Grid.Column="2" Text="{Binding TagsInput}"
                  PlaceholderText="{loc:Translate import.tagsHint}" />
       </Grid>
     </Border>

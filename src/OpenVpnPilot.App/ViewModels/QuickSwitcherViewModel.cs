@@ -63,7 +63,7 @@ public sealed partial class QuickSwitcherViewModel : ViewModelBase
                 profile.Id,
                 profile.Name,
                 profile.Endpoint,
-                profile.FolderName,
+                profile.TagsDisplay,
                 profile.IsConnected,
                 profile.FavouriteSlot,
                 profile.LastConnectedAt));
@@ -157,11 +157,7 @@ public sealed partial class QuickSwitcherViewModel : ViewModelBase
             return 700 + bonus;
         }
 
-        string haystack = string.Join(
-            ' ',
-            name,
-            entry.Endpoint,
-            entry.FolderName ?? string.Empty);
+        string haystack = string.Join(' ', name, entry.Endpoint, entry.Tags);
 
         if (haystack.Contains(term, StringComparison.OrdinalIgnoreCase))
         {
@@ -232,12 +228,12 @@ public sealed record QuickSwitcherEntry(
     Guid ProfileId,
     string Name,
     string Endpoint,
-    string? FolderName,
+    string Tags,
     bool IsConnected,
     int? FavouriteSlot,
     DateTimeOffset? LastConnectedAt)
 {
-    public bool HasFolder => FolderName is { Length: > 0 };
+    public bool HasTags => Tags is { Length: > 0 };
 
     public string SlotDisplay => FavouriteSlot?.ToString(System.Globalization.CultureInfo.InvariantCulture)
         ?? string.Empty;

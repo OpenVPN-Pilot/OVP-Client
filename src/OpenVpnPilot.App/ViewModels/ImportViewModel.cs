@@ -3,7 +3,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenVpnPilot.App.Services;
 using OpenVpnPilot.Core.Localization;
-using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.Data.Import;
 
 namespace OpenVpnPilot.App.ViewModels;
@@ -44,13 +43,19 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
 
     public ObservableCollection<ImportRowViewModel> Rows { get; } = [];
 
-    public ObservableCollection<ImportFolderChoice> Folders { get; } = [];
-
-    [ObservableProperty]
-    public partial ImportFolderChoice? SelectedFolder { get; set; }
-
     [ObservableProperty]
     public partial string TagsInput { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether a chosen directory contributes what is beneath it as well.
+    /// </summary>
+    public bool IncludeSubfolders
+    {
+        get => includeSubfolders;
+        set => SetProperty(ref includeSubfolders, value);
+    }
+
+    private bool includeSubfolders = true;
 
     [ObservableProperty]
     public partial string StatusMessage { get; set; } = string.Empty;
@@ -74,18 +79,7 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
 
     public string DropHint => localizer["import.dropHint"];
 
-    public async Task LoadFoldersAsync(CancellationToken cancellationToken = default)
-    {
-        Folders.Clear();
-        Folders.Add(new ImportFolderChoice(null, localizer["import.noFolder"]));
-
-        foreach (Folder folder in await store.GetFoldersAsync(cancellationToken))
-        {
-            Folders.Add(new ImportFolderChoice(folder.Id, folder.Name));
-        }
-
-        SelectedFolder ??= Folders[0];
-    }
+    public string TagsHelp => localizer["tags.help"];
 
     /// <summary>
     /// Examines the given files, directories or archives without writing anything.
@@ -101,7 +95,7 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
             // A previous run may have unpacked archives that are no longer part of the selection.
             selection?.Dispose();
 
-            selection = await importer.ExpandAsync(paths, cancellationToken);
+            selection = await importer.ExpandAsync(paths, IncludeSubfolders, cancellationToken);
 
             if (selection.Files.Count == 0)
             {
@@ -160,7 +154,7 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
             IReadOnlyList<string> tags = TagsInput
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-            int created = await importer.CommitAsync(candidates, SelectedFolder?.FolderId, tags);
+            int created = await importer.CommitAsync(candidates, tags);
 
             StatusMessage = localizer.Translate("import.stored", created);
 
@@ -262,7 +256,3 @@ public sealed class ImportRowViewModel
     }
 }
 
-/// <summary>
-/// One entry in the target folder picker. A null identifier files the profiles at the top level.
-/// </summary>
-public sealed record ImportFolderChoice(Guid? FolderId, string Name);

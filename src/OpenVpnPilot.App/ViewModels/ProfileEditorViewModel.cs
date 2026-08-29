@@ -2,8 +2,8 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
-using OpenVpnPilot.Data.Entities;
 
 namespace OpenVpnPilot.App.ViewModels;
 
@@ -64,14 +64,13 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
 
     public string Endpoint { get; }
 
-    public ObservableCollection<ProfileFolderChoice> Folders { get; } = [];
-
     public ObservableCollection<RouteProtectionChoice> RouteProtectionChoices { get; }
 
     /// <summary>
-    /// Zero means no slot, one to nine bind the profile to the matching shortcut.
+    /// Zero means no slot. The rest bind the profile to the matching connect shortcut.
     /// </summary>
-    public IReadOnlyList<int> Slots { get; } = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    public IReadOnlyList<int> Slots { get; } =
+        [0, .. Enumerable.Range(1, HotkeyActions.MaximumFavouriteSlot)];
 
     [ObservableProperty]
     public partial string Name { get; set; }
@@ -81,9 +80,6 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
 
     [ObservableProperty]
     public partial string TagsInput { get; set; }
-
-    [ObservableProperty]
-    public partial ProfileFolderChoice? SelectedFolder { get; set; }
 
     [ObservableProperty]
     public partial RouteProtectionChoice? SelectedRouteProtection { get; set; }
@@ -105,19 +101,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
 
     public string SlotLabel(int slot) => slot == 0 ? localizer["common.none"] : slot.ToString();
 
-    public async Task LoadAsync(Guid? currentFolderId, CancellationToken cancellationToken = default)
-    {
-        Folders.Clear();
-        Folders.Add(new ProfileFolderChoice(null, localizer["editor.noFolder"]));
-
-        foreach (Folder folder in await store.GetFoldersAsync(cancellationToken))
-        {
-            Folders.Add(new ProfileFolderChoice(folder.Id, folder.Name));
-        }
-
-        SelectedFolder = Folders.FirstOrDefault(folder => folder.FolderId == currentFolderId)
-            ?? Folders[0];
-    }
+    public string TagsHelp => localizer["tags.help"];
 
     [RelayCommand]
     private async Task SaveAsync()
@@ -129,7 +113,6 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
         }
 
         await store.RenameProfileAsync(profileId, Name);
-        await store.MoveProfileAsync(profileId, SelectedFolder?.FolderId);
         await store.SetProfileNotesAsync(profileId, Notes);
         await store.SetRouteProtectionAsync(profileId, SelectedRouteProtection?.Value);
         await store.SetFavouriteAsync(profileId, IsFavourite || SelectedSlot > 0);
@@ -162,11 +145,6 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
         Closed?.Invoke(this, true);
     }
 }
-
-/// <summary>
-/// One entry in the folder picker. A null identifier files the profile at the top level.
-/// </summary>
-public sealed record ProfileFolderChoice(Guid? FolderId, string Name);
 
 /// <summary>
 /// One entry in the route protection picker. A null value follows the application wide setting.

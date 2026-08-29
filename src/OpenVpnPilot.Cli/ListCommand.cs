@@ -24,12 +24,6 @@ internal static class ListCommand
 
         IQueryable<Profile> query = context.Profiles.AsNoTracking();
 
-        if (ArgumentReader.Value(args, "--folder") is { } folder)
-        {
-            query = query.Where(profile => profile.Folder != null
-                && EF.Functions.Like(profile.Folder.Name, $"%{folder}%"));
-        }
-
         if (ArgumentReader.Value(args, "--tag") is { } tag)
         {
             query = query.Where(profile => profile.Tags.Any(link =>
@@ -47,7 +41,6 @@ internal static class ListCommand
                 profile.HasUnsupportedOptions,
                 profile.IsFavourite,
                 profile.FavouriteSlot,
-                profile.Folder == null ? null : profile.Folder.Name,
                 profile.Tags.Select(link => link.Tag!.Name).ToList(),
                 profile.LastConnectedAt,
                 profile.ConnectCount))
@@ -86,7 +79,7 @@ internal static class ListCommand
 
             // Markers keep the listing scannable without a second column of prose.
             string markers = string.Concat(
-                profile.FavouriteSlot?.ToString(CultureInfo.InvariantCulture) ?? (profile.IsFavourite ? "*" : " "),
+                SlotMarker(profile),
                 profile.RequiresCredentials ? "P" : " ",
                 profile.HasUnsupportedOptions ? "!" : " ");
 
@@ -96,18 +89,27 @@ internal static class ListCommand
 
             Console.WriteLine($"  {markers} {profile.Name,-44} {endpoint,-28} {lastUsed}");
 
-            if (profile.Folder is { Length: > 0 } || profile.Tags.Count > 0)
+            if (profile.Tags.Count > 0)
             {
-                string folderPart = profile.Folder is { Length: > 0 } ? profile.Folder : "-";
-                string tagPart = profile.Tags.Count > 0 ? string.Join(", ", profile.Tags) : "-";
-                Console.WriteLine($"      folder {folderPart}   tags {tagPart}");
+                Console.WriteLine($"      tags {string.Join(", ", profile.Tags)}");
             }
         }
 
         Console.WriteLine();
-        Console.WriteLine("  * favourite   1-9 favourite slot   P needs a password   ! uses script directives");
+        Console.WriteLine("  * favourite   1-9,0 favourite slot   P needs a password   ! uses script directives");
         return 0;
     }
+
+    /// <summary>
+    /// One character for the slot, so the listing stays aligned. Slot ten shows as zero, which is
+    /// the key it sits under on the number row.
+    /// </summary>
+    private static string SlotMarker(ProfileSummary profile) => profile.FavouriteSlot switch
+    {
+        null => profile.IsFavourite ? "*" : " ",
+        10 => "0",
+        int slot => slot.ToString(CultureInfo.InvariantCulture),
+    };
 
     private sealed record ProfileSummary(
         string Name,
@@ -118,7 +120,6 @@ internal static class ListCommand
         bool HasUnsupportedOptions,
         bool IsFavourite,
         int? FavouriteSlot,
-        string? Folder,
         IReadOnlyList<string> Tags,
         DateTimeOffset? LastConnectedAt,
         int ConnectCount);

@@ -21,8 +21,6 @@ public sealed class PilotDbContext : DbContext
 
     public DbSet<Profile> Profiles => Set<Profile>();
 
-    public DbSet<Folder> Folders => Set<Folder>();
-
     public DbSet<Tag> Tags => Set<Tag>();
 
     public DbSet<ProfileTag> ProfileTags => Set<ProfileTag>();
@@ -79,25 +77,10 @@ public sealed class PilotDbContext : DbContext
             entity.Property(profile => profile.ContentHash).HasMaxLength(64);
             entity.Property(profile => profile.Colour).HasMaxLength(9);
 
-            entity.HasOne(profile => profile.Folder)
-                .WithMany(folder => folder.Profiles)
-                .HasForeignKey(profile => profile.FolderId)
-                .OnDelete(DeleteBehavior.SetNull);
-
             entity.HasOne(profile => profile.CredentialSet)
                 .WithMany(set => set.Profiles)
                 .HasForeignKey(profile => profile.CredentialSetId)
                 .OnDelete(DeleteBehavior.SetNull);
-        });
-
-        modelBuilder.Entity<Folder>(entity =>
-        {
-            entity.Property(folder => folder.Name).HasMaxLength(200);
-
-            entity.HasOne(folder => folder.Parent)
-                .WithMany(folder => folder.Children)
-                .HasForeignKey(folder => folder.ParentId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Tag>(entity =>

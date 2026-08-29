@@ -59,6 +59,21 @@
     <Setter Property="Foreground" Value="#FFFFFF" />
   </Style>
 
+  <!--
+    A button that cannot be pressed has to look that way. The accented style paints its own
+    background, so without this a disabled primary button is indistinguishable from a live one.
+  -->
+  <Style Selector="Button:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceCardHover}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextTertiary}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+  </Style>
+
+  <Style Selector="Button.primary:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SurfaceCardHover}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextTertiary}" />
+  </Style>
+
   <Style Selector="Button.quiet">
     <Setter Property="BorderBrush" Value="Transparent" />
     <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
@@ -204,6 +219,23 @@
     <Setter Property="CornerRadius" Value="{StaticResource RadiusMedium}" />
     <Setter Property="FontSize" Value="13" />
     <Setter Property="MinHeight" Value="34" />
+  </Style>
+
+  <!-- A small round marker that carries an explanation in its tooltip. -->
+  <Style Selector="Border.hint">
+    <Setter Property="Width" Value="14" />
+    <Setter Property="Height" Value="14" />
+    <Setter Property="CornerRadius" Value="7" />
+    <Setter Property="Background" Value="{DynamicResource SurfaceCardHover}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="Border.hint > TextBlock">
+    <Setter Property="FontSize" Value="9.5" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
 
   <!-- Separator used between grouped detail rows. -->

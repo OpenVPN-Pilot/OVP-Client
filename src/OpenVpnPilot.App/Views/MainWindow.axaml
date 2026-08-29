@@ -26,9 +26,13 @@
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
           <Border Width="22" Height="22" CornerRadius="11"
                   Background="{DynamicResource Accent}" VerticalAlignment="Center">
-            <Border Width="8" Height="8" CornerRadius="4"
+            <Border Width="14" Height="14" CornerRadius="7"
                     Background="{DynamicResource SurfaceSidebar}"
-                    HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+              <Border Width="8" Height="8" CornerRadius="4"
+                      Background="{DynamicResource Accent}"
+                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
           </Border>
           <TextBlock Text="{loc:Translate app.name}" FontSize="14.5" FontWeight="SemiBold"
                      Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" />
@@ -36,12 +40,15 @@
 
         <TextBox Grid.Column="1" Name="SearchBox"
                  PlaceholderText="{loc:Translate header.search}"
-                 MaxWidth="440" HorizontalAlignment="Center"
+                 Margin="24,0" MinWidth="320"
+                 HorizontalAlignment="Stretch"
                  Text="{Binding SearchTerm}" />
 
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
           <Button Content="{loc:Translate header.import}" Classes="quiet"
                   Command="{Binding OpenImportCommand}" />
+          <Button Content="{loc:Translate header.export}" Classes="quiet"
+                  Command="{Binding OpenExportCommand}" />
           <Button Content="{loc:Translate nav.history}" Classes="quiet"
                   Command="{Binding OpenHistoryCommand}" />
           <Button Content="{loc:Translate header.settings}" Classes="quiet"
@@ -82,60 +89,19 @@
               </ListBox>
             </StackPanel>
 
-            <StackPanel Spacing="6">
-              <Grid ColumnDefinitions="*,Auto" Margin="10,0,0,2">
-                <TextBlock Grid.Column="0" Text="{loc:Translate nav.folders}" Classes="overline"
-                           VerticalAlignment="Center" />
-                <Button Grid.Column="1" Classes="quiet" Padding="6,1" FontSize="14"
-                        Content="+" ToolTip.Tip="{loc:Translate folders.create}"
-                        Command="{Binding BeginCreateFolderCommand}" />
-              </Grid>
-
-              <StackPanel Spacing="6" IsVisible="{Binding IsCreatingFolder}" Margin="0,0,0,4">
-                <TextBox Text="{Binding NewFolderName}"
-                         PlaceholderText="{loc:Translate folders.namePlaceholder}" />
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                  <Button Content="{loc:Translate common.add}" Classes="primary" Padding="10,4"
-                          Command="{Binding CreateFolderCommand}" />
-                  <Button Content="{loc:Translate common.cancel}" Classes="quiet" Padding="10,4"
-                          Command="{Binding CancelCreateFolderCommand}" />
-                </StackPanel>
-              </StackPanel>
-
-              <ListBox Classes="nav" ItemsSource="{Binding FolderFilters}"
-                       IsVisible="{Binding HasFolders}"
-                       SelectedItem="{Binding SelectedFilter}">
-                <ListBox.ItemTemplate>
-                  <DataTemplate x:DataType="vm:SidebarFilterViewModel">
-                    <Grid ColumnDefinitions="*,Auto">
-                      <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13"
-                                 TextTrimming="CharacterEllipsis"
-                                 Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" />
-                      <TextBlock Grid.Column="1" VerticalAlignment="Center"
-                                 Text="{Binding Count, Converter={x:Static conv:AppConverters.CountBadge}}"
-                                 FontSize="11" Foreground="{DynamicResource TextTertiary}" />
-                    </Grid>
-                  </DataTemplate>
-                </ListBox.ItemTemplate>
-              </ListBox>
-            </StackPanel>
-
-            <StackPanel Spacing="6" IsVisible="{Binding IsFolderSelected}" Margin="0,2,0,0">
-              <Button Content="{loc:Translate folders.connectAll}" Classes="quiet"
+            <StackPanel Spacing="6" IsVisible="{Binding IsNewSelected}">
+              <Button Content="{loc:Translate nav.markSeen}" Classes="quiet"
                       HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                      Command="{Binding ConnectFolderCommand}" />
-              <Button Content="{loc:Translate folders.fileSelected}" Classes="quiet"
-                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                      IsEnabled="{Binding HasSelection}"
-                      Command="{Binding FileSelectedProfileCommand}" />
-              <Button Content="{loc:Translate folders.delete}" Classes="quiet"
-                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                      Foreground="{DynamicResource StateFailed}"
-                      Command="{Binding DeleteFolderCommand}" />
+                      Command="{Binding MarkDiscoveriesSeenCommand}" />
             </StackPanel>
 
             <StackPanel Spacing="6" IsVisible="{Binding HasTags}">
-              <TextBlock Text="{loc:Translate nav.tags}" Classes="overline" Margin="10,0,0,2" />
+              <StackPanel Orientation="Horizontal" Spacing="6" Margin="10,0,0,2">
+                <TextBlock Text="{loc:Translate nav.tags}" Classes="overline" VerticalAlignment="Center" />
+                <Border Classes="hint" ToolTip.Tip="{loc:Translate tags.help}">
+                  <TextBlock Text="i" />
+                </Border>
+              </StackPanel>
               <ListBox Classes="nav" ItemsSource="{Binding TagFilters}"
                        SelectedItem="{Binding SelectedFilter}">
                 <ListBox.ItemTemplate>
@@ -182,6 +148,11 @@
                       <TextBlock Text="*" FontSize="14" VerticalAlignment="Center"
                                  Foreground="{DynamicResource StatePending}"
                                  IsVisible="{Binding IsFavourite}" />
+                      <Border Classes="pill" IsVisible="{Binding IsNew}"
+                              Background="{DynamicResource AccentSoft}">
+                        <TextBlock Text="{loc:Translate nav.new}"
+                                   Foreground="{DynamicResource Accent}" />
+                      </Border>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                       <TextBlock Text="{Binding Endpoint}" Classes="muted" />
@@ -256,6 +227,11 @@
                       CommandParameter="{Binding SelectedProfile}" />
               <Button Content="{loc:Translate profile.edit}" Classes="quiet"
                       Command="{Binding OpenProfileEditorCommand}" />
+              <Button Content="{loc:Translate profile.signInAgain}" Classes="quiet"
+                      ToolTip.Tip="{loc:Translate profile.signInAgainHint}"
+                      IsVisible="{Binding SelectedProfile.RequiresCredentials}"
+                      Command="{Binding SignInAgainCommand}"
+                      CommandParameter="{Binding SelectedProfile}" />
             </StackPanel>
 
             <Border Classes="divider" />
@@ -310,28 +286,33 @@
             </StackPanel>
 
             <StackPanel Spacing="11">
-              <Grid ColumnDefinitions="104,*">
-                <TextBlock Grid.Column="0" Text="{loc:Translate profile.localAddress}" Classes="muted" />
+              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                <TextBlock Grid.Column="0" Text="{loc:Translate profile.localAddress}" Classes="muted"
+                           MinWidth="104" />
                 <TextBlock Grid.Column="1" Classes="body"
                            Text="{Binding SelectedProfile.LocalAddressDisplay}" />
               </Grid>
-              <Grid ColumnDefinitions="104,*">
-                <TextBlock Grid.Column="0" Text="{loc:Translate profile.server}" Classes="muted" />
+              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                <TextBlock Grid.Column="0" Text="{loc:Translate profile.server}" Classes="muted"
+                           MinWidth="104" />
                 <TextBlock Grid.Column="1" Classes="body"
                            Text="{Binding SelectedProfile.ServerDisplay}" />
               </Grid>
-              <Grid ColumnDefinitions="104,*">
-                <TextBlock Grid.Column="0" Text="{loc:Translate profile.signIn}" Classes="muted" />
+              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                <TextBlock Grid.Column="0" Text="{loc:Translate profile.signIn}" Classes="muted"
+                           MinWidth="104" />
                 <TextBlock Grid.Column="1" Classes="body"
                            Text="{Binding SelectedProfile.AuthenticationDisplay}" />
               </Grid>
-              <Grid ColumnDefinitions="104,*">
-                <TextBlock Grid.Column="0" Text="{loc:Translate profile.lastUsed}" Classes="muted" />
+              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                <TextBlock Grid.Column="0" Text="{loc:Translate profile.lastUsed}" Classes="muted"
+                           MinWidth="104" />
                 <TextBlock Grid.Column="1" Classes="body"
                            Text="{Binding SelectedProfile.LastConnectedDisplay}" />
               </Grid>
               <Grid ColumnDefinitions="104,*" IsVisible="{Binding SelectedProfile.HasTags}">
-                <TextBlock Grid.Column="0" Text="{loc:Translate nav.tags}" Classes="muted" />
+                <TextBlock Grid.Column="0" Text="{loc:Translate nav.tags}" Classes="muted"
+                           MinWidth="104" />
                 <TextBlock Grid.Column="1" Classes="body" TextWrapping="Wrap"
                            Text="{Binding SelectedProfile.TagsDisplay}" />
               </Grid>

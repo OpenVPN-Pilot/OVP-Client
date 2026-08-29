@@ -32,17 +32,19 @@
       "refresh": "Aktualisieren",
       "disconnectAll": "Alle trennen",
       "settings": "Einstellungen",
-      "import": "Importieren"
+      "import": "Importieren",
+      "export": "Exportieren"
     },
     "nav": {
       "library": "BIBLIOTHEK",
-      "folders": "ORDNER",
-      "tags": "SCHLAGWÖRTER",
+      "tags": "TAGS",
       "all": "Alle Profile",
       "active": "Aktiv",
       "favourites": "Favoriten",
       "recent": "Zuletzt verwendet",
-      "history": "Verlauf"
+      "history": "Verlauf",
+      "new": "Neu",
+      "markSeen": "Als gesehen markieren"
     },
     "profile": {
       "connect": "Verbinden",
@@ -65,7 +67,9 @@
       "noReply": "Keine Antwort",
       "routes": "ÜBERMITTELTE ROUTEN",
       "dns": "ÜBERMITTELTES DNS",
-      "defaultRouteRefused": "Der Server wollte den gesamten Verkehr übernehmen. Dieses Profil ignoriert das, daher behält der Host seine eigene Standardroute. Ändern Sie es im Profil, wenn der Tunnel alles tragen soll."
+      "defaultRouteRefused": "Der Server wollte den gesamten Verkehr übernehmen. Dieses Profil ignoriert das, daher behält der Host seine eigene Standardroute. Ändern Sie es im Profil, wenn der Tunnel alles tragen soll.",
+      "signInAgain": "Neu anmelden",
+      "signInAgainHint": "Vergisst die für dieses Profil gespeicherten Anmeldedaten, sodass die nächste Verbindung danach fragt. Nützlich, wenn sich das Passwort auf dem Server geändert hat."
     },
     "state": {
       "connected": "Verbunden",
@@ -98,7 +102,10 @@
       "profileDisconnected": "{0} ist getrennt.",
       "profileBusy": "{0}: {1}",
       "reconnectScheduled": "{0} wurde getrennt. Neuer Versuch in {1} s, Versuch {2}.",
-      "reconnectGaveUp": "{0} konnte nach {1} Versuch(en) nicht wieder verbunden werden."
+      "reconnectGaveUp": "{0} konnte nach {1} Versuch(en) nicht wieder verbunden werden.",
+      "discoveriesCleared": "{0} Profil(e) als gesehen markiert.",
+      "credentialsForgotten": "Die gespeicherten Anmeldedaten für {0} wurden vergessen.",
+      "noStoredCredentials": "Für {0} war nichts gespeichert."
     },
     "credentials": {
       "signInTitle": "Bei {0} anmelden",
@@ -178,7 +185,7 @@
       "notificationsHint": "Bei vielen offenen Tunneln wird eine Meldung je Ereignis zu Lärm. Schalten Sie ab, worauf Sie nicht reagieren.",
       "useStoredSecrets": "Gespeicherte Anmeldedaten verwenden",
       "rememberByDefault": "Im Dialog standardmäßig merken",
-      "credentialsHint": "Anmeldedaten werden vom Betriebssystem geschützt und sind nur für dieses Konto auf diesem Rechner lesbar. Sie gelangen weder in die Profildatenbank noch in einen Export.",
+      "credentialsHint": "Anmeldedaten werden vom Betriebssystem geschützt und sind nur für dieses Konto auf diesem Rechner lesbar. Sie gelangen weder in die Profildatenbank noch in einen Export.\n\nGespeicherte Anmeldedaten werden ohne Nachfrage verwendet, ein täglich genutztes Profil fragt also nie. Lehnt der Server eine Verbindung ab, wird das Gespeicherte vergessen und erneut gefragt, mit dem Hinweis auf die Ablehnung. Um sie vorher zu ändern, verwenden Sie am Profil „Neu anmelden“.",
       "forgetCredentials": "Alle gespeicherten Anmeldedaten vergessen",
       "credentialsCleared": "{0} gespeicherte Anmeldedaten entfernt.",
       "openVpnPath": "Pfad zur openvpn-Programmdatei",
@@ -191,7 +198,9 @@
       "tabWatch": "Überwachte Ordner",
       "diagnostics": "Diagnosepaket schreiben",
       "diagnosticsHint": "Fasst den Umgebungsbericht, die Protokolle und eine Profilliste in einem Archiv für eine Supportanfrage zusammen. Konfigurationen und Anmeldedaten sind nie enthalten.",
-      "diagnosticsWritten": "{0} Einträge nach {1} geschrieben."
+      "diagnosticsWritten": "{0} Einträge nach {1} geschrieben.",
+      "notifyConnecting": "Verbindung wird aufgebaut",
+      "diagnosticsPrivacy": "Ein Paket ist nicht anonym. Es enthält Profilnamen, Hostnamen und Ports der Gegenstellen, Dateipfade mit Ihrem Windows-Benutzernamen sowie Protokollzeilen, die dasselbe nennen. Es enthält nie Konfigurationen, private Schlüssel oder Anmeldedaten. Sehen Sie es durch, bevor Sie es weitergeben."
     },
     "hotkey": {
       "unbound": "Nicht gesetzt",
@@ -211,7 +220,8 @@
       "ConnectFavourite6": "Favorit 6 verbinden",
       "ConnectFavourite7": "Favorit 7 verbinden",
       "ConnectFavourite8": "Favorit 8 verbinden",
-      "ConnectFavourite9": "Favorit 9 verbinden"
+      "ConnectFavourite9": "Favorit 9 verbinden",
+      "ConnectFavourite10": "Favorit 10 verbinden"
     },
     "history": {
       "allProfiles": "Alle Profile",
@@ -241,12 +251,9 @@
     "import": {
       "pickFiles": "Dateien hinzufügen",
       "pickFolder": "Ordner hinzufügen",
-      "pickArchive": "Archiv hinzufügen",
       "dropHint": "Legen Sie .ovpn-Dateien, einen Ordner oder ein ZIP-Archiv hier ab, oder verwenden Sie die Schaltflächen oben.",
       "nothingFound": "In dieser Auswahl wurden keine .ovpn-Dateien gefunden.",
-      "targetFolder": "Ordner",
-      "noFolder": "Kein Ordner",
-      "tags": "Schlagwörter",
+      "tags": "Tags",
       "tagsHint": "Mit Kommas trennen",
       "commit": "Importieren",
       "summary": "{0} Datei(en) geprüft: {1} importierbar, {2} doppelt, {3} abgelehnt.",
@@ -259,14 +266,13 @@
         "DuplicateInStore": "Bereits gespeichert",
         "Rejected": "Abgelehnt",
         "Unreadable": "Nicht lesbar"
-      }
+      },
+      "includeSubfolders": "Unterordner einbeziehen"
     },
     "editor": {
       "title": "Profil",
       "name": "Name",
-      "folder": "Ordner",
-      "noFolder": "Kein Ordner",
-      "tags": "Schlagwörter",
+      "tags": "Tags",
       "favourite": "Favorit",
       "slot": "Kürzelplatz",
       "slotHint": "Ein Platz bindet dieses Profil an das passende Verbinden-Tastenkürzel.",
@@ -279,13 +285,6 @@
       "deleteConfirm": "Damit werden das Profil und sein Verlauf entfernt. Das lässt sich nicht rückgängig machen.",
       "nameRequired": "Ein Profil braucht einen Namen."
     },
-    "folders": {
-      "create": "Neuer Ordner",
-      "namePlaceholder": "Ordnername",
-      "connectAll": "Alles hier verbinden",
-      "fileSelected": "Ausgewähltes Profil hierher verschieben",
-      "delete": "Diesen Ordner löschen"
-    },
     "watch": {
       "hint": "Ein überwachter Ordner wird beim Start der Anwendung geprüft und erneut, sobald dort eine Datei erscheint. Eine bereits gespeicherte Konfiguration wird an ihrem Inhalt erkannt, es wird also nichts doppelt importiert.",
       "empty": "Es werden keine Ordner überwacht.",
@@ -296,7 +295,30 @@
       "added": "{0} wird überwacht.",
       "removed": "{0} wird nicht mehr überwacht.",
       "scanned": "{0} Profil(e) importiert.",
-      "imported": "{0} Profil(e) aus {1} importiert."
+      "imported": "{0} Profil(e) aus {1} importiert.",
+      "interval": "Erneut prüfen alle, in Minuten",
+      "intervalHint": "Null prüft nur beim Start und wenn der Ordner eine Änderung meldet, was für einen lokalen Ordner genügt. Setzen Sie ein Intervall für eine Netzwerkfreigabe, wo auf diese Meldungen kein Verlass ist. So gefundene Profile erscheinen in der Bibliothek unter Neu, bis Sie sie als gesehen markieren."
+    },
+    "tags": {
+      "help": "Tags sind die Art, wie eine Profilsammlung geordnet wird. Ein Profil kann beliebig viele tragen, die Seitenleiste listet sie auf, und das Suchfeld findet sie zusammen mit Name und Host. Mehrere mit Kommas trennen."
+    },
+    "export": {
+      "title": "Exportieren",
+      "asPackage": "Ein portables Paket",
+      "asConfigurations": "Eine .ovpn-Datei je Profil",
+      "packageHint": "Ein Paket enthält die gewählten Profile, ihre Tags und die Tastenkürzel in einer einzigen verschlüsselten Datei. So wird eine Sammlung auf einen anderen Rechner gebracht.",
+      "configurationsHint": "Einfache Konfigurationen tragen ihre privaten Schlüssel im Klartext und lassen sich nicht verschlüsseln, weil OpenVPN sie lesen muss. Behandeln Sie das Ergebnis wie Anmeldedaten.",
+      "selectAll": "Alle auswählen",
+      "selectNone": "Auswahl aufheben",
+      "selected": "{0} ausgewählt",
+      "passphrase": "Passphrase",
+      "passphraseAgain": "Passphrase wiederholen",
+      "passphraseRequired": "Ein Paket ist immer verschlüsselt, daher ist eine Passphrase erforderlich.",
+      "passphraseTooShort": "Mindestens {0} Zeichen verwenden.",
+      "passphraseMismatch": "Die beiden Eingaben stimmen nicht überein.",
+      "write": "Exportieren",
+      "packageWritten": "{0} Profil(e) nach {1} geschrieben.",
+      "configurationsWritten": "{0} Konfiguration(en) nach {1} geschrieben."
     }
   }
 }

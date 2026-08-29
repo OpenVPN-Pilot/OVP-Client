@@ -22,7 +22,7 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
 
         Id = profile.Id;
         Name = profile.Name;
-        FolderId = profile.FolderId;
+        DiscoveredAt = profile.DiscoveredAt;
         Endpoint = FormatEndpoint(profile);
         RequiresCredentials = profile.RequiresCredentials;
         HasUnsupportedOptions = profile.HasUnsupportedOptions;
@@ -48,7 +48,12 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
 
     public string Name { get; }
 
-    public Guid? FolderId { get; }
+    /// <summary>
+    /// Set while a profile a watched directory brought in has not been looked at yet.
+    /// </summary>
+    public DateTimeOffset? DiscoveredAt { get; }
+
+    public bool IsNew => DiscoveredAt is not null;
 
     public string Endpoint { get; }
 
@@ -76,12 +81,6 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     public bool HasTags => Tags.Count > 0;
 
     public string TagsDisplay => string.Join(", ", Tags);
-
-    /// <summary>
-    /// Name of the folder this profile is filed under, filled in by the list that knows the tree.
-    /// </summary>
-    [ObservableProperty]
-    public partial string? FolderName { get; set; }
 
     internal string SearchText { get; }
 

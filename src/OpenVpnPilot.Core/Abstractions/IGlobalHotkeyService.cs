@@ -184,9 +184,17 @@ public static class HotkeyActions
     /// Identifier for the shortcut that connects the profile in the given favourite slot.
     /// </summary>
     public static string ConnectFavourite(int slot) =>
-        slot is < 1 or > 9
-            ? throw new ArgumentOutOfRangeException(nameof(slot), slot, "Favourite slots run from one to nine.")
+        slot is < 1 or > MaximumFavouriteSlot
+            ? throw new ArgumentOutOfRangeException(
+                nameof(slot),
+                slot,
+                $"Favourite slots run from one to {MaximumFavouriteSlot}.")
             : $"ConnectFavourite{slot}";
+
+    /// <summary>
+    /// The highest favourite slot. Ten covers the number row, whose last key is zero.
+    /// </summary>
+    public const int MaximumFavouriteSlot = 10;
 
     /// <summary>
     /// The favourite slot an identifier refers to, or null when it is not a favourite shortcut.
@@ -199,7 +207,7 @@ public static class HotkeyActions
 
         return actionId.StartsWith(prefix, StringComparison.Ordinal)
             && int.TryParse(actionId.AsSpan(prefix.Length), out int slot)
-            && slot is >= 1 and <= 9
+            && slot is >= 1 and <= MaximumFavouriteSlot
                 ? slot
                 : null;
     }
@@ -224,6 +232,7 @@ public static class HotkeyActions
         ConnectFavourite(7),
         ConnectFavourite(8),
         ConnectFavourite(9),
+        ConnectFavourite(10),
     ];
 
     /// <summary>

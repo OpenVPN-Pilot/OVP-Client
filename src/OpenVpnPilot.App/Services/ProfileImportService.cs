@@ -23,8 +23,13 @@ public interface IProfileImportService
     /// <summary>
     /// Turns files, directories and archives into the configuration files they contain.
     /// </summary>
+    /// <param name="includeSubfolders">
+    /// Whether a chosen directory contributes what is beneath it. An archive is always unpacked
+    /// whole, because its own layout is not something the user arranged.
+    /// </param>
     public Task<ImportSelection> ExpandAsync(
         IEnumerable<string> paths,
+        bool includeSubfolders = true,
         CancellationToken cancellationToken = default);
 
     public Task<IReadOnlyList<ImportCandidate>> PrepareAsync(
@@ -32,13 +37,16 @@ public interface IProfileImportService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Stores the accepted candidates, optionally filing them and tagging them.
+    /// Stores the accepted candidates, optionally tagging them.
     /// </summary>
+    /// <param name="discoveredAt">
+    /// Set when a watched directory brought these in, so the library can mark them as new.
+    /// </param>
     /// <returns>How many profiles were created.</returns>
     public Task<int> CommitAsync(
         IReadOnlyList<ImportCandidate> candidates,
-        Guid? targetFolderId,
         IReadOnlyList<string> tagNames,
+        DateTimeOffset? discoveredAt = null,
         CancellationToken cancellationToken = default);
 }
 
@@ -103,9 +111,14 @@ public sealed class ProfileImportService : IProfileImportService
 
     public Task<ImportSelection> ExpandAsync(
         IEnumerable<string> paths,
+        bool includeSubfolders = true,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(paths);
+
+        SearchOption depth = includeSubfolders
+            ? SearchOption.AllDirectories
+            : SearchOption.TopDirectoryOnly;
 
         List<string> files = [];
         List<string> temporary = [];
@@ -116,7 +129,7 @@ public sealed class ProfileImportService : IProfileImportService
 
             if (Directory.Exists(path))
             {
-                files.AddRange(Directory.EnumerateFiles(path, "*.ovpn", SearchOption.AllDirectories));
+                files.AddRange(Directory.EnumerateFiles(path, "*.ovpn", depth));
                 continue;
             }
 
@@ -155,8 +168,8 @@ public sealed class ProfileImportService : IProfileImportService
 
     public async Task<int> CommitAsync(
         IReadOnlyList<ImportCandidate> candidates,
-        Guid? targetFolderId,
         IReadOnlyList<string> tagNames,
+        DateTimeOffset? discoveredAt = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(candidates);
@@ -167,7 +180,7 @@ public sealed class ProfileImportService : IProfileImportService
 
         IReadOnlyList<Profile> created = await importer.CommitAsync(
             candidates,
-            targetFolderId,
+            discoveredAt,
             cancellationToken);
 
         if (created.Count > 0 && tagNames.Count > 0)

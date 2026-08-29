@@ -109,9 +109,7 @@ internal static class ImportCommand
             return 0;
         }
 
-        Guid? folderId = await ResolveFolderAsync(context, ArgumentReader.Value(args, "--folder"));
-
-        IReadOnlyList<Profile> created = await importer.CommitAsync(candidates, folderId);
+        IReadOnlyList<Profile> created = await importer.CommitAsync(candidates);
 
         IReadOnlyList<string> tags = ArgumentReader.Values(args, "--tag");
 
@@ -125,30 +123,6 @@ internal static class ImportCommand
             + $"{await context.Profiles.CountAsync()}.");
 
         return 0;
-    }
-
-    /// <summary>
-    /// Finds the named folder, creating it when it does not exist yet.
-    /// </summary>
-    private static async Task<Guid?> ResolveFolderAsync(PilotDbContext context, string? name)
-    {
-        if (name is null or { Length: 0 })
-        {
-            return null;
-        }
-
-        Folder? folder = await context.Folders.FirstOrDefaultAsync(candidate => candidate.Name == name);
-
-        if (folder is null)
-        {
-            folder = new Folder { Name = name };
-            context.Folders.Add(folder);
-            await context.SaveChangesAsync();
-
-            Console.WriteLine($"Created the folder '{name}'.");
-        }
-
-        return folder.Id;
     }
 
     private static async Task ApplyTagsAsync(

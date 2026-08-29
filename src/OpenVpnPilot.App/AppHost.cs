@@ -44,6 +44,7 @@ internal static class AppHost
         builder.Services.AddSingleton<ISessionStore, SessionStore>();
         builder.Services.AddSingleton<IHotkeyStore, HotkeyStore>();
         builder.Services.AddSingleton<IProfileImportService, ProfileImportService>();
+        builder.Services.AddSingleton<IProfilePackageWriter, ProfilePackageWriter>();
         builder.Services.AddSingleton<IWatchedFolderStore, WatchedFolderStore>();
         builder.Services.AddSingleton<WatchedFolderMonitor>();
         builder.Services.AddSingleton<DiagnosticsBundle>();
@@ -90,6 +91,7 @@ internal static class AppHost
         builder.Services.AddTransient<SettingsViewModel>();
         builder.Services.AddTransient<HistoryViewModel>();
         builder.Services.AddTransient<ImportViewModel>();
+        builder.Services.AddTransient<ExportViewModel>();
 
         return builder.Build();
     }

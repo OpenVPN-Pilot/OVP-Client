@@ -123,12 +123,29 @@ public sealed class ConnectionSettings
     /// </summary>
     public bool RestoreOnStart { get; set; }
 
+    /// <summary>
+    /// How often a watched directory is re-read, in minutes. Zero rescans only at startup and when
+    /// the directory reports a change.
+    /// </summary>
+    /// <remarks>
+    /// A periodic scan is a backstop, not the mechanism: the watcher already reports what happens
+    /// while the application runs. It matters for directories the watcher cannot follow reliably,
+    /// such as a network share.
+    /// </remarks>
+    public int WatchIntervalMinutes { get; set; }
+
     public ConnectionSettings Clone() => (ConnectionSettings)MemberwiseClone();
 }
 
 public sealed class NotificationSettings
 {
     public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Announce that a connection has started. Useful when the tunnel was asked for from the quick
+    /// switcher or a shortcut, where there is no window to watch.
+    /// </summary>
+    public bool OnConnecting { get; set; } = true;
 
     public bool OnConnected { get; set; } = true;
 

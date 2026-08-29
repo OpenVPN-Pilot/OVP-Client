@@ -8,13 +8,18 @@ namespace OpenVpnPilot.Data.Packaging;
 /// Reads and writes the package file itself.
 /// </summary>
 /// <remarks>
-/// The file is a small binary container rather than an archive, because there is exactly one payload
-/// and it may be encrypted. A ZIP would invite people to open it and edit the contents by hand,
-/// which is precisely what must not happen to a file that carries private keys.
+/// The file is a small binary container rather than an archive, because there is exactly one payload.
+/// A ZIP would invite people to open it and edit the contents by hand, which is precisely what must
+/// not happen to a file that carries private keys.
 ///
-/// When a passphrase is given the payload is encrypted with AES in Galois counter mode, under a key
-/// derived from the passphrase with a random salt. The mode is authenticated, so a package that was
-/// altered fails to open rather than opening with quietly different contents.
+/// A package is always encrypted. It exists to be moved between machines, which means it will sit in
+/// a download folder or an inbox at some point, and a single file carrying every private key in the
+/// set is not something to leave readable. The payload is encrypted with AES in Galois counter mode
+/// under a key derived from the passphrase with a random salt. The mode is authenticated, so a
+/// package that was altered fails to open rather than opening with quietly different contents.
+///
+/// Reading still accepts an unencrypted payload, so a package written before this was required can
+/// still be opened.
 /// </remarks>
 public static class ProfilePackageFile
 {
@@ -43,35 +48,23 @@ public static class ProfilePackageFile
     };
 
     /// <summary>
-    /// Writes a package, encrypting it when a passphrase is supplied.
+    /// Writes a package, encrypted with the given passphrase.
     /// </summary>
+    /// <exception cref="ArgumentException">The passphrase is missing or empty.</exception>
     public static async Task WriteAsync(
         string path,
         ProfilePackageContent content,
-        string? passphrase = null,
+        string passphrase,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(content);
-
-        if (content.Credentials.Count > 0 && string.IsNullOrEmpty(passphrase))
-        {
-            throw new InvalidOperationException(
-                "Credentials can only be written into a package that is protected by a passphrase.");
-        }
+        ArgumentException.ThrowIfNullOrEmpty(passphrase);
 
         byte[] payload = JsonSerializer.SerializeToUtf8Bytes(content, SerializerOptions);
 
         await using FileStream stream = File.Create(path);
         await stream.WriteAsync(Magic, cancellationToken);
-
-        if (string.IsNullOrEmpty(passphrase))
-        {
-            stream.WriteByte(PlainPayload);
-            await stream.WriteAsync(payload, cancellationToken);
-            return;
-        }
-
         stream.WriteByte(EncryptedPayload);
 
         byte[] salt = RandomNumberGenerator.GetBytes(SaltLength);

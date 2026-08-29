@@ -158,6 +158,9 @@
             <CheckBox Content="{loc:Translate settings.notificationsEnabled}"
                       IsChecked="{Binding NotificationsEnabled}" />
             <Border Classes="divider" />
+            <CheckBox Content="{loc:Translate settings.notifyConnecting}"
+                      IsChecked="{Binding NotifyOnConnecting}"
+                      IsEnabled="{Binding NotificationsEnabled}" />
             <CheckBox Content="{loc:Translate settings.notifyConnected}"
                       IsChecked="{Binding NotifyOnConnected}"
                       IsEnabled="{Binding NotificationsEnabled}" />
@@ -234,6 +237,13 @@
               <CheckBox Content="{loc:Translate watch.autoImport}" IsChecked="{Binding WatchAutoImports}" />
               <CheckBox Content="{loc:Translate watch.recursive}" IsChecked="{Binding WatchRecursively}" />
             </StackPanel>
+            <Grid ColumnDefinitions="260,120">
+              <TextBlock Grid.Column="0" Classes="muted" VerticalAlignment="Center"
+                         Text="{loc:Translate watch.interval}" />
+              <NumericUpDown Grid.Column="1" Minimum="0" Maximum="1440" Increment="5"
+                             FormatString="0" Value="{Binding WatchIntervalMinutes}" />
+            </Grid>
+            <TextBlock Text="{loc:Translate watch.intervalHint}" Classes="muted" TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" Spacing="8">
               <Button Name="AddWatchButton" Content="{loc:Translate watch.add}" />
               <Button Content="{loc:Translate common.remove}"
@@ -276,6 +286,12 @@
             </StackPanel>
             <TextBlock Text="{loc:Translate settings.diagnosticsHint}" Classes="muted"
                        TextWrapping="Wrap" />
+            <Border CornerRadius="7" Padding="12,10"
+                    Background="{DynamicResource StatePendingSoft}">
+              <TextBlock TextWrapping="Wrap" FontSize="12"
+                         Foreground="{DynamicResource StatePending}"
+                         Text="{loc:Translate settings.diagnosticsPrivacy}" />
+            </Border>
 
           </StackPanel>
         </ScrollViewer>

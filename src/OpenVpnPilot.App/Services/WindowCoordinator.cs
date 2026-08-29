@@ -144,6 +144,7 @@ public sealed class WindowCoordinator
         AppScreen.Settings => CreateSettings(),
         AppScreen.History => CreateHistory(),
         AppScreen.Import => CreateImport(),
+        AppScreen.Export => CreateExport(),
         AppScreen.ProfileEditor => CreateProfileEditor(),
         _ => null,
     };
@@ -220,8 +221,18 @@ public sealed class WindowCoordinator
             }
         };
 
-        window.Opened += async (_, _) => await model.LoadFoldersAsync();
         window.Closed += (_, _) => model.Dispose();
+
+        return window;
+    }
+
+    private ExportWindow CreateExport()
+    {
+        ExportViewModel model = services.GetRequiredService<ExportViewModel>();
+        ExportWindow window = new() { DataContext = model };
+
+        model.Closed += (_, _) => window.Close();
+        window.Opened += async (_, _) => await model.LoadAsync();
 
         return window;
     }
@@ -249,8 +260,6 @@ public sealed class WindowCoordinator
                 await viewModel.LoadAsync();
             }
         };
-
-        window.Opened += async (_, _) => await model.LoadAsync(profile.FolderId);
 
         return window;
     }

@@ -173,13 +173,12 @@ internal static class CommandRunner
                 return 0;
 
             case "list":
-                Console.WriteLine("ovp list [--json] [--folder <name>] [--tag <name>]");
+                Console.WriteLine("ovp list [--json] [--names] [--tag <name>]");
                 Console.WriteLine("Alias: ls");
                 Console.WriteLine();
                 Console.WriteLine("Lists the stored profiles with their endpoint and last use.");
                 Console.WriteLine();
                 Console.WriteLine("  --json                 Emit machine readable output.");
-                Console.WriteLine("  --folder <name>        Only profiles filed under that folder.");
                 Console.WriteLine("  --tag <name>           Only profiles carrying that tag.");
                 Console.WriteLine("  --names                Print names only, one per line.");
                 return 0;
@@ -196,7 +195,7 @@ internal static class CommandRunner
                 return 0;
 
             case "import":
-                Console.WriteLine("ovp import <file, directory or archive> [--commit] [--folder <name>] [--tag <name>]");
+                Console.WriteLine("ovp import <file, directory or archive> [--commit] [--tag <name>]");
                 Console.WriteLine("Alias: add");
                 Console.WriteLine();
                 Console.WriteLine("Examines .ovpn files, pulls referenced certificates and keys inline, and");
@@ -205,19 +204,18 @@ internal static class CommandRunner
                 Console.WriteLine("--commit.");
                 Console.WriteLine();
                 Console.WriteLine("  --commit               Store the importable profiles.");
-                Console.WriteLine("  --folder <name>        File them under that folder, creating it if needed.");
                 Console.WriteLine("  --tag <name>           Tag them. May be given more than once.");
                 return 0;
 
             case "export":
-                Console.WriteLine("ovp export <directory> [--profile <name>] [--folder <name>]");
+                Console.WriteLine("ovp export <directory> [--profile <name>] [--tag <name>]");
                 Console.WriteLine();
                 Console.WriteLine("Writes stored profiles back out as self contained .ovpn files, one per");
                 Console.WriteLine("profile. The files carry their private keys inline, so the directory is");
                 Console.WriteLine("created with permissions for the current user only.");
                 Console.WriteLine();
                 Console.WriteLine("  --profile <name>       Export one profile matched by name.");
-                Console.WriteLine("  --folder <name>        Export everything filed under that folder.");
+                Console.WriteLine("  --tag <name>           Export everything carrying that tag.");
                 return 0;
 
             case "connect":
@@ -253,19 +251,19 @@ internal static class CommandRunner
                 return 0;
 
             case "pack":
-                Console.WriteLine("ovp pack <file> [--profile <name>] [--folder <name>] [--passphrase <value>]");
+                Console.WriteLine("ovp pack <file> --passphrase <value> [--profile <name>] [--tag <name>]");
                 Console.WriteLine();
-                Console.WriteLine("Writes profiles, the folders they are filed under and the shortcut");
-                Console.WriteLine("bindings into one .ovppkg file that can be moved to another machine.");
+                Console.WriteLine("Writes profiles, their tags and the shortcut bindings into one .ovppkg");
+                Console.WriteLine("file that can be moved to another machine.");
                 Console.WriteLine("The session history stays behind: it belongs to the machine it happened on.");
                 Console.WriteLine();
-                Console.WriteLine("A package carries private keys. Without a passphrase it is written in the");
-                Console.WriteLine("clear and the command says so. With one it is encrypted and authenticated,");
-                Console.WriteLine("so a package that was altered fails to open rather than opening changed.");
+                Console.WriteLine("A package carries private keys and is always encrypted, so the passphrase is");
+                Console.WriteLine("required. The mode is authenticated, so a package that was altered fails to");
+                Console.WriteLine("open rather than opening with quietly different contents.");
                 Console.WriteLine();
                 Console.WriteLine("  --profile <name>       Only profiles matching that name.");
-                Console.WriteLine("  --folder <name>        Only profiles filed under that folder.");
-                Console.WriteLine("  --passphrase <value>   Encrypt the package.");
+                Console.WriteLine("  --tag <name>           Only profiles carrying that tag.");
+                Console.WriteLine("  --passphrase <value>   Required. The key that protects the package.");
                 return 0;
 
             case "unpack":

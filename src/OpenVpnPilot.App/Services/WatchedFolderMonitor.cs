@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using OpenVpnPilot.Core.Settings;
 using OpenVpnPilot.Data.Import;
 
 namespace OpenVpnPilot.App.Services;
@@ -28,6 +29,7 @@ public sealed class WatchedFolderMonitor : IAsyncDisposable
 
     private readonly IWatchedFolderStore store;
     private readonly IProfileImportService importer;
+    private readonly ISettingsService settings;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<WatchedFolderMonitor> logger;
 
@@ -35,21 +37,25 @@ public sealed class WatchedFolderMonitor : IAsyncDisposable
     private readonly SemaphoreSlim scanGate = new(1, 1);
     private readonly CancellationTokenSource lifetime = new();
 
+    private Task? periodic;
     private bool disposed;
 
     public WatchedFolderMonitor(
         IWatchedFolderStore store,
         IProfileImportService importer,
+        ISettingsService settings,
         TimeProvider timeProvider,
         ILogger<WatchedFolderMonitor> logger)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(importer);
+        ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.store = store;
         this.importer = importer;
+        this.settings = settings;
         this.timeProvider = timeProvider;
         this.logger = logger;
     }
@@ -64,6 +70,22 @@ public sealed class WatchedFolderMonitor : IAsyncDisposable
     /// </summary>
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
+        await ScanAllAsync(cancellationToken);
+
+        periodic ??= Task.Run(() => RunPeriodicAsync(lifetime.Token), CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Re-reads the configured directories, which a settings screen calls after a change.
+    /// </summary>
+    public Task ReloadAsync(CancellationToken cancellationToken = default)
+    {
+        StopWatching();
+        return ScanAllAsync(cancellationToken);
+    }
+
+    private async Task ScanAllAsync(CancellationToken cancellationToken)
+    {
         foreach (WatchedFolderRecord folder in await store.GetAllAsync(cancellationToken))
         {
             await ScanAsync(folder, cancellationToken);
@@ -72,12 +94,42 @@ public sealed class WatchedFolderMonitor : IAsyncDisposable
     }
 
     /// <summary>
-    /// Re-reads the configured directories, which a settings screen calls after a change.
+    /// Re-reads every watched directory on the interval the settings name.
     /// </summary>
-    public async Task ReloadAsync(CancellationToken cancellationToken = default)
+    /// <remarks>
+    /// A backstop rather than the mechanism. The watcher reports what happens while the application
+    /// runs, but it cannot be relied on for a network share, and a directory that changed while the
+    /// machine was asleep produces no event at all.
+    /// </remarks>
+    private async Task RunPeriodicAsync(CancellationToken cancellationToken)
     {
-        StopWatching();
-        await StartAsync(cancellationToken);
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            int minutes = settings.Current.Connections.WatchIntervalMinutes;
+
+            // Zero means the watcher and the startup scan are enough. The loop still ticks, so a
+            // change to the setting is picked up without restarting the application.
+            TimeSpan wait = minutes > 0 ? TimeSpan.FromMinutes(minutes) : TimeSpan.FromMinutes(5);
+
+            try
+            {
+                await Task.Delay(wait, timeProvider, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            if (settings.Current.Connections.WatchIntervalMinutes <= 0)
+            {
+                continue;
+            }
+
+            foreach (WatchedFolderRecord folder in await store.GetAllAsync(cancellationToken))
+            {
+                await ScanAsync(folder, cancellationToken);
+            }
+        }
     }
 
     /// <summary>
@@ -99,7 +151,10 @@ public sealed class WatchedFolderMonitor : IAsyncDisposable
 
         try
         {
-            using ImportSelection selection = await importer.ExpandAsync([folder.Path], cancellationToken);
+            using ImportSelection selection = await importer.ExpandAsync(
+                [folder.Path],
+                folder.IsRecursive,
+                cancellationToken);
 
             if (selection.Files.Count == 0)
             {
@@ -125,10 +180,12 @@ public sealed class WatchedFolderMonitor : IAsyncDisposable
                 return 0;
             }
 
+            // The mark is what puts them under the library's new entry, so a directory that imports
+            // on its own does not drop profiles into the middle of the list unannounced.
             int created = await importer.CommitAsync(
                 candidates,
-                folder.TargetFolderId,
                 [],
+                timeProvider.GetUtcNow(),
                 cancellationToken);
 
             await store.MarkScannedAsync(folder.Id, cancellationToken);

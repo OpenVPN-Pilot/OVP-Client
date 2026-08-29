@@ -25,9 +25,9 @@ public sealed class ProfilePackageTests : IDisposable
 
         ProfilePackageContent content = await new ProfilePackageService(source).CreateAsync();
 
-        await ProfilePackageFile.WriteAsync(PackagePath, content);
+        await ProfilePackageFile.WriteAsync(PackagePath, content, "round trip");
 
-        ProfilePackageContent read = await ProfilePackageFile.ReadAsync(PackagePath);
+        ProfilePackageContent read = await ProfilePackageFile.ReadAsync(PackagePath, "round trip");
 
         await using PilotDbContext target = CreateContext("target.db");
         PackageApplyResult result = await new ProfilePackageService(target).ApplyAsync(read);
@@ -39,10 +39,11 @@ public sealed class ProfilePackageTests : IDisposable
 
         Assert.Equal("client\nremote vpn.example.com 1194", restored.Configuration);
         Assert.Equal("vpn.example.com", restored.RemoteHost);
-        Assert.NotNull(restored.FolderId);
 
-        Folder folder = await target.Folders.SingleAsync(item => item.Id == restored.FolderId);
-        Assert.Equal("Customers", folder.Name);
+        // Tags travel with the profile, because they are how the set is organised.
+        Assert.Contains(
+            await target.ProfileTags.Include(link => link.Tag).ToListAsync(),
+            link => link.ProfileId == restored.Id && link.Tag!.Name == "production");
     }
 
     [Fact]
@@ -132,17 +133,14 @@ public sealed class ProfilePackageTests : IDisposable
     }
 
     [Fact]
-    public async Task CredentialsAreRefused_WhenThePackageWouldNotBeProtected()
+    public async Task APackageCannotBeWrittenWithoutAPassphrase()
     {
-        ProfilePackageContent content = new()
-        {
-            Credentials = [new PackagedCredential(Guid.NewGuid(), "Auth", "operator", "secret")],
-        };
+        ProfilePackageContent content = new();
 
-        InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => ProfilePackageFile.WriteAsync(PackagePath, content));
+        // The file carries private keys and is made to be moved, so there is no unprotected form.
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => ProfilePackageFile.WriteAsync(PackagePath, content, string.Empty));
 
-        Assert.Contains("passphrase", failure.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(File.Exists(PackagePath));
     }
 
@@ -152,7 +150,7 @@ public sealed class ProfilePackageTests : IDisposable
         await File.WriteAllTextAsync(PackagePath, "just some text");
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => ProfilePackageFile.ReadAsync(PackagePath));
+            () => ProfilePackageFile.ReadAsync(PackagePath, "anything"));
 
         Assert.False(await ProfilePackageFile.IsEncryptedAsync(PackagePath));
     }
@@ -212,9 +210,6 @@ public sealed class ProfilePackageTests : IDisposable
 
         PackagedProfile packaged = Assert.Single(content.Profiles);
         Assert.Equal("site-beta", packaged.Name);
-
-        // The folder the profile is filed under has to travel with it or the filing is lost.
-        Assert.Empty(content.Folders);
     }
 
     private PilotDbContext CreateContext(string name)
@@ -231,9 +226,6 @@ public sealed class ProfilePackageTests : IDisposable
 
     private static async Task Seed(PilotDbContext context)
     {
-        Folder folder = new() { Name = "Customers" };
-        context.Folders.Add(folder);
-
         Tag tag = new() { Name = "production" };
         context.Tags.Add(tag);
 
@@ -242,7 +234,6 @@ public sealed class ProfilePackageTests : IDisposable
             Name = "site-alpha",
             Configuration = "client\nremote vpn.example.com 1194",
             ContentHash = new string('a', 64),
-            FolderId = folder.Id,
             RemoteHost = "vpn.example.com",
             RemotePort = 1194,
             Protocol = "udp",

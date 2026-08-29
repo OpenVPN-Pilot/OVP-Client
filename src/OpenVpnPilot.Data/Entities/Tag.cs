@@ -1,36 +1,8 @@
 namespace OpenVpnPilot.Data.Entities;
 
 /// <summary>
-/// A node in the profile tree. Folders may nest to any depth.
-/// </summary>
-public sealed class Folder
-{
-    public Guid Id { get; set; } = Guid.NewGuid();
-
-    public required string Name { get; set; }
-
-    public Guid? ParentId { get; set; }
-
-    public Folder? Parent { get; set; }
-
-    /// <summary>
-    /// Position among siblings. Lower values come first.
-    /// </summary>
-    public int SortOrder { get; set; }
-
-    /// <summary>
-    /// Optional icon key resolved by the presentation layer.
-    /// </summary>
-    public string? Icon { get; set; }
-
-    public List<Folder> Children { get; } = [];
-
-    public List<Profile> Profiles { get; } = [];
-}
-
-/// <summary>
-/// A free form label. Tags cut across the folder tree, so a profile can be filed once and labelled
-/// several ways.
+/// A free form label. Tags are how a profile set is organised: a profile can carry as many as it
+/// needs, and searching across them is faster than walking a tree.
 /// </summary>
 public sealed class Tag
 {
@@ -86,7 +58,7 @@ public sealed class CredentialSet
 }
 
 /// <summary>
-/// A folder watched for configuration files, so that profiles stay in step with a shared directory.
+/// A directory watched for configuration files, so that profiles stay in step with a shared location.
 /// </summary>
 public sealed class WatchedFolder
 {
@@ -100,11 +72,6 @@ public sealed class WatchedFolder
     /// True when new files are imported without asking.
     /// </summary>
     public bool AutoImport { get; set; } = true;
-
-    /// <summary>
-    /// Folder that imported profiles are filed under.
-    /// </summary>
-    public Guid? TargetFolderId { get; set; }
 
     public DateTimeOffset? LastScanAt { get; set; }
 }

@@ -12,9 +12,9 @@ process doing the tunnelling and replaces the interface around it.
 
 ## Features
 
-- Instant search across profile name, folder, tag and remote host
+- Instant search across profile name, tag and remote host
 - A quick switcher: one global shortcut, type a few letters, press return
-- Folders, tags and favourites with numbered slots bound to shortcuts
+- Tags and favourites with numbered slots bound to shortcuts
 - Global shortcuts for connect, reconnect, disconnect and the favourite slots
 - Several tunnels connected at once, each with its own live telemetry
 - Live figures per tunnel: throughput, uptime, round trip, assigned address, pushed routes and DNS
@@ -22,7 +22,7 @@ process doing the tunnelling and replaces the interface around it.
 - One time codes, both the kind presented up front and the kind raised after a refusal
 - Session history with durations and transfer volumes, exportable as CSV
 - Bulk import from files, folders and ZIP archives, plus watched folders that keep profiles in sync
-- Portable `.ovppkg` packages for moving a profile set between machines, optionally encrypted
+- Export as plain configurations, or as an encrypted `.ovppkg` package for another machine
 - Notifications for connected, lost, reconnecting and failed, suppressible per event
 - Dark, light and system themes, autostart, bounded auto reconnect
 - English and German, and a new language is a JSON file rather than a new build
@@ -65,7 +65,7 @@ ovp doctor
 ```
 
 ```bash
-ovp add C:\profiles --commit --folder Customers --tag production
+ovp add C:\profiles --commit --tag production
 ```
 
 ```bash
@@ -88,6 +88,15 @@ dotnet pack src/OpenVpnPilot.Cli -c Release
 ```bash
 dotnet tool install --global --add-source artifacts/packages OpenVpnPilot.Cli
 ```
+
+## Organising a set
+
+There are no folders. A profile carries as many tags as it needs, the sidebar lists them, and the
+search box matches a tag along with the name and the remote host. One profile can belong to as many
+groupings as make sense, which a tree cannot express, and nothing has to be maintained by hand.
+
+Profiles a watched directory brings in appear under **New** until they are marked as seen, so an
+automatic import never drops them unannounced into the middle of the list.
 
 ## Adding a language
 
@@ -120,7 +129,7 @@ implementation of the existing interfaces rather than restructuring the applicat
 - [x] Connection supervisor, credential handling and one time codes
 - [x] SQLite store, schema and profile import with duplicate detection
 - [x] User interface with profile list, search, live status and notification area icon
-- [x] Folders, tags, favourites, quick switcher and import
+- [x] Tags, favourites, quick switcher, import and export
 - [x] Global shortcuts, notifications, telemetry and session history
 - [x] Localization, settings, autostart and auto reconnect
 - [x] Portable packages, watched folders and a diagnostics bundle

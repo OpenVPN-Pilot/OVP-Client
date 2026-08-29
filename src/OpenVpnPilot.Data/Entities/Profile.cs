@@ -13,10 +13,6 @@ public sealed class Profile
 
     public required string Name { get; set; }
 
-    public Guid? FolderId { get; set; }
-
-    public Folder? Folder { get; set; }
-
     /// <summary>
     /// The complete configuration. Never contains credentials.
     /// </summary>
@@ -84,6 +80,16 @@ public sealed class Profile
     /// Accent colour for the list, stored as a hexadecimal value such as #4C8BF5.
     /// </summary>
     public string? Colour { get; set; }
+
+    /// <summary>
+    /// When a watched directory brought this profile in, until the user has looked at it.
+    /// </summary>
+    /// <remarks>
+    /// A directory that imports on its own would otherwise drop profiles into the middle of an
+    /// alphabetical list with nothing to distinguish them. This is what the library's new entry
+    /// filters on, and clearing it is how the user says they have seen it.
+    /// </remarks>
+    public DateTimeOffset? DiscoveredAt { get; set; }
 
     public DateTimeOffset? LastConnectedAt { get; set; }
 

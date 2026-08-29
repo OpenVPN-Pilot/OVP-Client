@@ -8,7 +8,7 @@ namespace OpenVpnPilot.App.ViewModels;
 /// </summary>
 /// <remarks>
 /// The built in filters take their label from the catalogue and follow a language change, while a
-/// folder or a tag is named by the user and is shown exactly as written.
+/// tag is named by the user and is shown exactly as written.
 /// </remarks>
 public sealed partial class SidebarFilterViewModel : ViewModelBase
 {
@@ -21,23 +21,16 @@ public sealed partial class SidebarFilterViewModel : ViewModelBase
         ILocalizer? localizer,
         string? labelKey,
         string? fixedLabel,
-        Guid? folderId,
         string? tagName)
     {
         Kind = kind;
         this.localizer = localizer;
         this.labelKey = labelKey;
         this.fixedLabel = fixedLabel;
-        FolderId = folderId;
         TagName = tagName;
     }
 
     public SidebarFilterKind Kind { get; }
-
-    /// <summary>
-    /// Set for a folder entry. Null for every other kind.
-    /// </summary>
-    public Guid? FolderId { get; }
 
     /// <summary>
     /// Set for a tag entry. Null for every other kind.
@@ -51,11 +44,6 @@ public sealed partial class SidebarFilterViewModel : ViewModelBase
     [ObservableProperty]
     public partial int Count { get; set; }
 
-    /// <summary>
-    /// True for entries the user can rename or remove, which is only folders.
-    /// </summary>
-    public bool IsFolder => Kind == SidebarFilterKind.Folder;
-
     public static SidebarFilterViewModel ForBuiltIn(
         SidebarFilterKind kind,
         string labelKey,
@@ -63,14 +51,11 @@ public sealed partial class SidebarFilterViewModel : ViewModelBase
     {
         ArgumentNullException.ThrowIfNull(localizer);
 
-        return new SidebarFilterViewModel(kind, localizer, labelKey, fixedLabel: null, folderId: null, tagName: null);
+        return new SidebarFilterViewModel(kind, localizer, labelKey, fixedLabel: null, tagName: null);
     }
 
-    public static SidebarFilterViewModel ForFolder(Guid folderId, string name) =>
-        new(SidebarFilterKind.Folder, localizer: null, labelKey: null, name, folderId, tagName: null);
-
     public static SidebarFilterViewModel ForTag(string name) =>
-        new(SidebarFilterKind.Tag, localizer: null, labelKey: null, name, folderId: null, name);
+        new(SidebarFilterKind.Tag, localizer: null, labelKey: null, name, name);
 
     /// <summary>
     /// Re-reads the label, which a language change requires for the built in entries.
@@ -84,6 +69,11 @@ public enum SidebarFilterKind
     Active,
     Favourites,
     Recent,
-    Folder,
+
+    /// <summary>
+    /// Profiles a watched directory brought in that the user has not looked at yet.
+    /// </summary>
+    New,
+
     Tag,
 }

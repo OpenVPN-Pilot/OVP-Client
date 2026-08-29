@@ -17,7 +17,6 @@ public partial class ImportWindow : Window
 
         this.FindControl<Button>("PickFilesButton")!.Click += async (_, _) => await PickFilesAsync();
         this.FindControl<Button>("PickFolderButton")!.Click += async (_, _) => await PickFolderAsync();
-        this.FindControl<Button>("PickArchiveButton")!.Click += async (_, _) => await PickArchiveAsync();
 
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DropEvent, OnDrop);
@@ -68,7 +67,11 @@ public partial class ImportWindow : Window
                 AllowMultiple = true,
                 FileTypeFilter =
                 [
-                    new FilePickerFileType("OpenVPN") { Patterns = ["*.ovpn"] },
+                    // Archives are picked here too. A separate button for them was one more
+                    // decision for something the picker can simply offer.
+                    new FilePickerFileType("OpenVPN") { Patterns = ["*.ovpn", "*.zip"] },
+                    new FilePickerFileType("OpenVPN configuration") { Patterns = ["*.ovpn"] },
+                    new FilePickerFileType("ZIP archive") { Patterns = ["*.zip"] },
                 ],
             });
 
@@ -81,21 +84,6 @@ public partial class ImportWindow : Window
             new FolderPickerOpenOptions { AllowMultiple = false });
 
         await ExamineAsync(folders.Select(folder => folder.TryGetLocalPath()));
-    }
-
-    private async Task PickArchiveAsync()
-    {
-        IReadOnlyList<IStorageFile> files = await StorageProvider.OpenFilePickerAsync(
-            new FilePickerOpenOptions
-            {
-                AllowMultiple = true,
-                FileTypeFilter =
-                [
-                    new FilePickerFileType("ZIP") { Patterns = ["*.zip"] },
-                ],
-            });
-
-        await ExamineAsync(files.Select(file => file.TryGetLocalPath()));
     }
 
     private async Task ExamineAsync(IEnumerable<string?> paths)

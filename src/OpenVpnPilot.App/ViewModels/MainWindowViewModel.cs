@@ -21,12 +21,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly ConnectionManager connections;
     private readonly ProfileNameCache nameCache;
     private readonly ISettingsService settings;
+    private readonly ISecretStore secrets;
     private readonly ILocalizer localizer;
     private readonly TimeProvider timeProvider;
 
     private readonly List<ProfileItemViewModel> allProfiles = [];
     private readonly Dictionary<Guid, ProfileItemViewModel> byId = [];
-    private readonly Dictionary<Guid, string> folderNames = [];
     private readonly DispatcherTimer uptimeTimer;
     private bool disposed;
 
@@ -35,6 +35,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         ConnectionManager connections,
         ProfileNameCache nameCache,
         ISettingsService settings,
+        ISecretStore secrets,
         ILocalizer localizer,
         TimeProvider timeProvider)
     {
@@ -42,6 +43,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         ArgumentNullException.ThrowIfNull(connections);
         ArgumentNullException.ThrowIfNull(nameCache);
         ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(secrets);
         ArgumentNullException.ThrowIfNull(localizer);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
@@ -49,6 +51,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         this.connections = connections;
         this.nameCache = nameCache;
         this.settings = settings;
+        this.secrets = secrets;
         this.localizer = localizer;
         this.timeProvider = timeProvider;
 
@@ -61,6 +64,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.Active, "nav.active", localizer),
             SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.Favourites, "nav.favourites", localizer),
             SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.Recent, "nav.recent", localizer),
+            SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.New, "nav.new", localizer),
         ];
 
         // A connected row shows its uptime, which has to advance on its own because nothing in the
@@ -83,11 +87,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public ObservableCollection<SidebarFilterViewModel> Filters { get; }
 
-    public ObservableCollection<SidebarFilterViewModel> FolderFilters { get; } = [];
-
     public ObservableCollection<SidebarFilterViewModel> TagFilters { get; } = [];
-
-    public bool HasFolders => FolderFilters.Count > 0;
 
     public bool HasTags => TagFilters.Count > 0;
 
@@ -99,19 +99,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     public partial string SearchTerm { get; set; } = string.Empty;
 
     [ObservableProperty]
-    public partial string NewFolderName { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    public partial bool IsCreatingFolder { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsFolderSelected))]
+    [NotifyPropertyChangedFor(nameof(IsNewSelected))]
     public partial SidebarFilterViewModel? SelectedFilter { get; set; }
 
     /// <summary>
-    /// True when the sidebar selection is a folder, which is what the folder actions apply to.
+    /// True while the new entry is selected, which is when marking everything seen makes sense.
     /// </summary>
-    public bool IsFolderSelected => SelectedFilter?.Kind == SidebarFilterKind.Folder;
+    public bool IsNewSelected => SelectedFilter?.Kind == SidebarFilterKind.New;
 
     [ObservableProperty]
     public partial string StatusMessage { get; set; } = string.Empty;
@@ -174,19 +168,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         try
         {
             IReadOnlyList<Profile> profiles = await store.GetProfilesAsync(cancellationToken);
-            IReadOnlyList<Folder> folders = await store.GetFoldersAsync(cancellationToken);
             IReadOnlyList<TagSummary> tags = await store.GetTagsAsync(cancellationToken);
             IReadOnlyDictionary<Guid, IReadOnlyList<string>> profileTags =
                 await store.GetProfileTagsAsync(cancellationToken);
 
             allProfiles.Clear();
             byId.Clear();
-            folderNames.Clear();
-
-            foreach (Folder folder in folders)
-            {
-                folderNames[folder.Id] = folder.Name;
-            }
 
             foreach (Profile profile in profiles)
             {
@@ -195,9 +182,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
                 ProfileItemViewModel item = new(profile, localizer, assigned)
                 {
                     Status = connections.GetStatus(profile.Id),
-                    FolderName = profile.FolderId is { } id && folderNames.TryGetValue(id, out string? name)
-                        ? name
-                        : null,
                 };
 
                 allProfiles.Add(item);
@@ -208,7 +192,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             nameCache.Replace(allProfiles.Select(
                 profile => new KeyValuePair<Guid, string>(profile.Id, profile.Name)));
 
-            RebuildSidebar(folders, tags);
+            RebuildSidebar(tags);
 
             SelectedFilter ??= Filters[0];
             UpdateFilterCounts();
@@ -298,16 +282,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     partial void OnSelectedFilterChanged(SidebarFilterViewModel? value) => ApplyFilter();
 
-    private void RebuildSidebar(IReadOnlyList<Folder> folders, IReadOnlyList<TagSummary> tags)
+    private void RebuildSidebar(IReadOnlyList<TagSummary> tags)
     {
-        Guid? selectedFolder = SelectedFilter?.FolderId;
         string? selectedTag = SelectedFilter?.TagName;
-
-        FolderFilters.Clear();
-        foreach (Folder folder in folders)
-        {
-            FolderFilters.Add(SidebarFilterViewModel.ForFolder(folder.Id, folder.Name));
-        }
 
         TagFilters.Clear();
         foreach (TagSummary tag in tags)
@@ -316,16 +293,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         // A rebuild replaces the instances, so a selection has to be re-established by identity.
-        if (selectedFolder is { } folderId)
+        if (selectedTag is not null)
         {
-            SelectedFilter = FolderFilters.FirstOrDefault(filter => filter.FolderId == folderId) ?? Filters[0];
-        }
-        else if (selectedTag is not null)
-        {
-            SelectedFilter = TagFilters.FirstOrDefault(filter => filter.TagName == selectedTag) ?? Filters[0];
+            SelectedFilter = TagFilters.FirstOrDefault(filter => filter.TagName == selectedTag)
+                ?? Filters[0];
         }
 
-        OnPropertyChanged(nameof(HasFolders));
         OnPropertyChanged(nameof(HasTags));
     }
 
@@ -342,13 +315,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
                 SidebarFilterKind.Active => allProfiles.Count(profile => !profile.IsIdle),
                 SidebarFilterKind.Favourites => allProfiles.Count(profile => profile.IsFavourite),
                 SidebarFilterKind.Recent => allProfiles.Count(profile => profile.LastConnectedAt is not null),
+                SidebarFilterKind.New => allProfiles.Count(profile => profile.IsNew),
                 _ => 0,
             };
-        }
-
-        foreach (SidebarFilterViewModel folder in FolderFilters)
-        {
-            folder.Count = allProfiles.Count(profile => profile.FolderId == folder.FolderId);
         }
 
         foreach (SidebarFilterViewModel tag in TagFilters)
@@ -373,7 +342,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             SidebarFilterKind.Recent => matches
                 .Where(profile => profile.LastConnectedAt is not null)
                 .OrderByDescending(profile => profile.LastConnectedAt),
-            SidebarFilterKind.Folder => matches.Where(profile => profile.FolderId == filter!.FolderId),
+            SidebarFilterKind.New => matches
+                .Where(profile => profile.IsNew)
+                .OrderByDescending(profile => profile.DiscoveredAt),
             SidebarFilterKind.Tag => matches.Where(profile =>
                 profile.Tags.Contains(filter!.TagName!, StringComparer.OrdinalIgnoreCase)),
             _ => matches,
@@ -498,100 +469,72 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
-    /// Connects every profile filed under the selected folder that is not already up.
+    /// Connects everything the current filter shows that is not already up.
     /// </summary>
+    /// <remarks>
+    /// Acts on what is on screen rather than on a saved grouping, so a tag, a search term or both
+    /// together decide the set. That is the same thing the user is already looking at.
+    /// </remarks>
     [RelayCommand]
-    private async Task ConnectFolderAsync()
+    private async Task ConnectVisibleAsync()
     {
-        if (SelectedFilter is not { Kind: SidebarFilterKind.Folder, FolderId: { } folderId })
-        {
-            return;
-        }
-
-        foreach (ProfileItemViewModel profile in allProfiles
-            .Where(profile => profile.FolderId == folderId && profile.IsIdle)
-            .ToList())
+        foreach (ProfileItemViewModel profile in VisibleProfiles.Where(profile => profile.IsIdle).ToList())
         {
             await ConnectAsync(profile);
         }
     }
 
     /// <summary>
-    /// Creates a folder and files the selected profile under it in one step.
-    /// </summary>
-    /// <remarks>
-    /// Creating an empty folder and then moving something into it is two operations for what is
-    /// almost always one intent, so the selected profile follows the new folder when there is one.
-    /// </remarks>
-    [RelayCommand]
-    private async Task CreateFolderAsync()
-    {
-        string name = NewFolderName.Trim();
-
-        if (name.Length == 0)
-        {
-            return;
-        }
-
-        Guid folderId = await store.CreateFolderAsync(name, parentId: null);
-
-        if (SelectedProfile is { } profile)
-        {
-            await store.MoveProfileAsync(profile.Id, folderId);
-        }
-
-        NewFolderName = string.Empty;
-        IsCreatingFolder = false;
-
-        await LoadAsync();
-
-        SelectedFilter = FolderFilters.FirstOrDefault(filter => filter.FolderId == folderId)
-            ?? SelectedFilter;
-    }
-
-    [RelayCommand]
-    private void BeginCreateFolder()
-    {
-        NewFolderName = string.Empty;
-        IsCreatingFolder = true;
-    }
-
-    [RelayCommand]
-    private void CancelCreateFolder()
-    {
-        NewFolderName = string.Empty;
-        IsCreatingFolder = false;
-    }
-
-    /// <summary>
-    /// Moves the selected profile into the folder that is currently selected in the sidebar, or out
-    /// of any folder when a library filter is selected instead.
+    /// Clears the new marks, which is how the user says they have looked at what arrived.
     /// </summary>
     [RelayCommand]
-    private async Task FileSelectedProfileAsync()
+    private async Task MarkDiscoveriesSeenAsync()
     {
-        if (SelectedProfile is not { } profile)
+        int cleared = await store.ClearDiscoveriesAsync();
+
+        if (cleared == 0)
         {
             return;
         }
-
-        await store.MoveProfileAsync(profile.Id, SelectedFilter?.FolderId);
-        await LoadAsync();
-    }
-
-    [RelayCommand]
-    private async Task DeleteFolderAsync()
-    {
-        if (SelectedFilter is not { Kind: SidebarFilterKind.Folder, FolderId: { } folderId })
-        {
-            return;
-        }
-
-        // The profiles are only filed here, so removing the folder must not remove them.
-        await store.DeleteFolderAsync(folderId);
 
         SelectedFilter = Filters[0];
         await LoadAsync();
+
+        StatusMessage = localizer.Translate("status.discoveriesCleared", cleared);
+    }
+
+    /// <summary>
+    /// Forgets what is stored for a profile, so the next connection asks again.
+    /// </summary>
+    /// <remarks>
+    /// A stored credential is used without asking, which is the point of storing it. This is the way
+    /// back when the password changed on the server side and the user knows it before a refusal
+    /// does: without it they would have to fail a connection first to be offered the prompt.
+    /// </remarks>
+    [RelayCommand]
+    private async Task SignInAgainAsync(ProfileItemViewModel? profile)
+    {
+        profile ??= SelectedProfile;
+
+        if (profile is null || !secrets.IsAvailable)
+        {
+            return;
+        }
+
+        int removed = 0;
+
+        foreach (string reference in await secrets.ListAsync())
+        {
+            if (SecretReference.BelongsToProfile(reference, profile.Id))
+            {
+                await secrets.DeleteAsync(reference);
+                removed++;
+            }
+        }
+
+        StatusMessage = removed == 0
+            ? localizer.Translate("status.noStoredCredentials", profile.Name)
+            : localizer.Translate("status.credentialsForgotten", profile.Name);
     }
 
     [RelayCommand]
@@ -605,6 +548,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [RelayCommand]
     private void OpenImport() => ScreenRequested?.Invoke(this, AppScreen.Import);
+
+    [RelayCommand]
+    private void OpenExport() => ScreenRequested?.Invoke(this, AppScreen.Export);
 
     [RelayCommand]
     private void OpenQuickSwitcher() => ScreenRequested?.Invoke(this, AppScreen.QuickSwitcher);
@@ -791,5 +737,6 @@ public enum AppScreen
     Settings,
     History,
     Import,
+    Export,
     ProfileEditor,
 }

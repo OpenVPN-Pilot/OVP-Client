@@ -150,7 +150,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public partial bool RestoreOnStart { get; set; }
 
     [ObservableProperty]
+    public partial int WatchIntervalMinutes { get; set; }
+
+    [ObservableProperty]
     public partial bool NotificationsEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool NotifyOnConnecting { get; set; }
 
     [ObservableProperty]
     public partial bool NotifyOnConnected { get; set; }
@@ -265,8 +271,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
         MaxReconnectAttempts = draft.Connections.MaxReconnectAttempts;
         ReconnectDelaySeconds = draft.Connections.ReconnectDelaySeconds;
         RestoreOnStart = draft.Connections.RestoreOnStart;
+        WatchIntervalMinutes = draft.Connections.WatchIntervalMinutes;
 
         NotificationsEnabled = draft.Notifications.Enabled;
+        NotifyOnConnecting = draft.Notifications.OnConnecting;
         NotifyOnConnected = draft.Notifications.OnConnected;
         NotifyOnDisconnected = draft.Notifications.OnDisconnected;
         NotifyOnConnectionLost = draft.Notifications.OnConnectionLost;
@@ -296,8 +304,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
         draft.Connections.MaxReconnectAttempts = Math.Clamp(MaxReconnectAttempts, 0, 100);
         draft.Connections.ReconnectDelaySeconds = Math.Clamp(ReconnectDelaySeconds, 1, 600);
         draft.Connections.RestoreOnStart = RestoreOnStart;
+        draft.Connections.WatchIntervalMinutes = Math.Clamp(WatchIntervalMinutes, 0, 1440);
 
         draft.Notifications.Enabled = NotificationsEnabled;
+        draft.Notifications.OnConnecting = NotifyOnConnecting;
         draft.Notifications.OnConnected = NotifyOnConnected;
         draft.Notifications.OnDisconnected = NotifyOnDisconnected;
         draft.Notifications.OnConnectionLost = NotifyOnConnectionLost;
@@ -399,12 +409,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        await watchedFolders.AddAsync(
-            path,
-            WatchRecursively,
-            WatchAutoImports,
-            targetFolderId: null,
-            cancellationToken);
+        await watchedFolders.AddAsync(path, WatchRecursively, WatchAutoImports, cancellationToken);
 
         await watchedFolderMonitor.ReloadAsync(cancellationToken);
         await LoadAsync(cancellationToken);
