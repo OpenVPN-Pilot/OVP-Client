@@ -399,9 +399,9 @@ This repository was written with the help of Claude Opus 5, at maximum reasoning
 also where the `CLAUDE.md` at the root comes from. It is not a prompt; it is the standard the code
 is held to.
 
-None of this is vibe code. The author was writing C# long before a model could write any of it and
-knows what belongs in a codebase and what does not. The model is the faster typist, not the one
-deciding what is right.
+None of this is vibe code. I was writing C# long before a model could write any of it, and I know
+what belongs in a codebase and what does not. The model is the faster typist; it does not decide
+what is right.
 
 Judge it by the code.
 
