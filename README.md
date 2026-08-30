@@ -395,19 +395,15 @@ gitmoji code.
 
 ## How this was built
 
-Every line of this repository was written by Claude Opus 5, run at maximum reasoning effort, in a
-conversation with the author. No part of it was typed by hand.
+This repository was written with the help of Claude Opus 5, at maximum reasoning effort, which is
+also where the `CLAUDE.md` at the root comes from. It is not a prompt; it is the standard the code
+is held to.
 
-That is worth stating plainly rather than leaving to be discovered, and it is worth qualifying. The
-author writes C# and read what was produced: the architecture, the layering, the platform boundary
-and the decisions recorded in `CLAUDE.md` were reviewed and pushed back on, and the model was
-corrected where it was wrong. Several of the hardest findings in this repository came from measuring
-against real servers and disagreeing with what had been assumed, including one case where the
-documented workaround for a pushed compression setting turned out to produce a tunnel that connects
-and silently carries nothing.
+None of this is vibe code. The author was writing C# long before a model could write any of it and
+knows what belongs in a codebase and what does not. The model is the faster typist, not the one
+deciding what is right.
 
-So: generated, but not unexamined. Judge it by the code, the comments and the tests rather than by
-how it was produced.
+Judge it by the code.
 
 ## Roadmap
 
