@@ -10,6 +10,10 @@ process doing the tunnelling and replaces the interface around it.
 > OpenVPN Community 2.7.6 and against the ten server lab in this repository. Builds are unsigned by
 > choice. See [Roadmap](#roadmap).
 
+![The profile list with two tunnels up, live figures for the selected one](assets/screenshots/main-window.png)
+
+*Sample profiles. The hosts are invented and the addresses come from the documentation ranges.*
+
 ## Contents
 
 **Using it**
@@ -123,6 +127,8 @@ Profiles a watched directory brings in appear under **New** until they are marke
 automatic import never drops them unannounced into the middle of the list.
 
 ## Working on more than one at a time
+
+![The quick switcher filtering the list as letters are typed](assets/screenshots/quick-switcher.png)
 
 **Select** in the header puts a checkbox on every row. Tick some and connect, disconnect or delete
 them together; deleting asks a second time, because it is the one action here that cannot be undone.
@@ -253,6 +259,8 @@ ovp connect lab/clients/lab-09-cert.ovpn --detached --seconds 20
 That server pushes `redirect-gateway def1`, so with protection off the host sends everything into the
 tunnel for as long as it is up. Nothing else about the machine changes and it is over when the
 command is, which is why a short run from a terminal is the way to look at it.
+
+![The connection settings: route protection, reconnect attempts and timeouts](assets/screenshots/settings.png)
 
 ## Where things are kept
 
