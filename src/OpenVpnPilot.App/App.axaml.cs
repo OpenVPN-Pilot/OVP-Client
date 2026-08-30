@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -31,6 +32,22 @@ public partial class App : Application
     /// What the command line asked for. Set before the framework starts.
     /// </summary>
     internal static StartupOptions Startup { get; set; } = new();
+
+    /// <summary>
+    /// How long the whole teardown may take.
+    /// </summary>
+    /// <remarks>
+    /// Windows gives an application a few seconds to end its session and kills whatever is still
+    /// running, so the steps share one budget instead of each holding its own: four steps waiting
+    /// two seconds apiece would take longer than Windows waits, and the tunnels the last of them
+    /// stops would be the ones left running.
+    /// </remarks>
+    private static readonly TimeSpan TeardownBudget = TimeSpan.FromSeconds(4);
+
+    /// <summary>
+    /// The most one asynchronous step may take, so one that hangs still leaves time for the rest.
+    /// </summary>
+    private static readonly TimeSpan StepTimeout = TimeSpan.FromSeconds(2);
 
     private IHost? host;
     private WindowCoordinator? windows;
@@ -86,8 +103,13 @@ public partial class App : Application
             InstanceGuard.CommandHandler = remote.HandleAsync;
         }
 
-        // Closing the application must not leave tunnels running unattended.
-        desktop.ShutdownRequested += OnShutdownRequested;
+        // Closing the application must not leave tunnels running unattended, and Exit is the only
+        // event that reports every way out. Measured against Avalonia 12.1: ending the Windows
+        // session raises ShutdownRequested and then closes the windows, while the application
+        // shutting itself down, which is what the tray and the companion command do, raises no
+        // such request at all. Both raise Exit, once, after the last window has gone, which is also
+        // the first moment at which nothing is left that could ask for a service this disposes.
+        desktop.Exit += (_, _) => Teardown();
 
         base.OnFrameworkInitializationCompleted();
     }
@@ -251,7 +273,16 @@ public partial class App : Application
         context.Database.Migrate();
     }
 
-    private void OnShutdownRequested(object? sender, ShutdownRequestedEventArgs e)
+    /// <summary>
+    /// Stops everything the application started, once, on the way out.
+    /// </summary>
+    /// <remarks>
+    /// Windows ends a session by giving each application a few seconds and killing whatever is left,
+    /// so no step may wait without a deadline. A step that fails must not cost the ones after it
+    /// either: an exception escaping here would leave the tunnels up and end the process with a
+    /// fault dialog on the shutdown screen rather than a shutdown.
+    /// </remarks>
+    private void Teardown()
     {
         if (host is null)
         {
@@ -259,25 +290,85 @@ public partial class App : Application
         }
 
         IServiceProvider services = host.Services;
+        ILogger<App> logger = services.GetRequiredService<ILogger<App>>();
+        long started = Stopwatch.GetTimestamp();
 
-        // Shutdown cannot await, so the tunnels are stopped before the process exits.
-        RunOffUiThread(async () =>
+        RunStep(logger, started, "sessions", async () =>
         {
             SessionRecorder recorder = services.GetRequiredService<SessionRecorder>();
             await recorder.CloseOpenSessionsAsync(SessionEndReason.ApplicationClosed);
             await recorder.DisposeAsync();
         });
 
-        RunOffUiThread(() => services.GetRequiredService<ConnectionManager>().DisconnectAllAsync());
+        RunStep(logger, started, "connections", () => services.GetRequiredService<ConnectionManager>().DisconnectAllAsync());
+        RunStep(logger, "hotkeys", () => services.GetRequiredService<HotkeyCoordinator>().Dispose());
+        RunStep(logger, "reconnects", () => services.GetRequiredService<ReconnectSupervisor>().Dispose());
+        RunStep(logger, started, "ping", async () => await services.GetRequiredService<PingMonitor>().DisposeAsync());
+        RunStep(logger, started, "watched folders", async () => await services.GetRequiredService<WatchedFolderMonitor>().DisposeAsync());
+        RunStep(logger, "tray icon", () => services.GetRequiredService<TrayIconController>().Dispose());
 
-        services.GetRequiredService<HotkeyCoordinator>().Dispose();
-        services.GetRequiredService<ReconnectSupervisor>().Dispose();
-        RunOffUiThread(async () => await services.GetRequiredService<PingMonitor>().DisposeAsync());
-        RunOffUiThread(async () => await services.GetRequiredService<WatchedFolderMonitor>().DisposeAsync());
-        services.GetRequiredService<TrayIconController>().Dispose();
+        AppLog.ShutdownCompleted(logger, (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
 
-        host.Dispose();
+        IHost stopping = host;
         host = null;
+
+        RunStep(logger, "host", stopping.Dispose);
+    }
+
+    /// <summary>
+    /// Runs one step of the teardown on this thread, reporting rather than raising a failure.
+    /// </summary>
+    /// <remarks>
+    /// A synchronous step is not handed to the thread pool: the message window that carries the
+    /// notification area icon and the global shortcuts can only be destroyed from the thread that
+    /// created it, and destroying it from another one fails rather than waits. It is therefore run
+    /// here, without a deadline, which none of these steps needs.
+    /// </remarks>
+    private static void RunStep(ILogger logger, string step, Action work)
+    {
+        try
+        {
+            work();
+        }
+        catch (Exception exception)
+        {
+            AppLog.ShutdownStepFailed(logger, step, exception);
+        }
+    }
+
+    /// <summary>
+    /// Runs one asynchronous step of the teardown, within what is left of the budget, reporting
+    /// rather than raising a failure.
+    /// </summary>
+    /// <remarks>
+    /// A step whose turn comes with nothing left is still started and simply not waited for. It is
+    /// about to be killed with the process either way, and a tunnel that stops on the way out is
+    /// worth more than one that was never asked to.
+    /// </remarks>
+    private static void RunStep(ILogger logger, long started, string step, Func<Task> work)
+    {
+        TimeSpan left = TeardownBudget - Stopwatch.GetElapsedTime(started);
+        TimeSpan wait = left < StepTimeout ? left : StepTimeout;
+
+        if (wait < TimeSpan.Zero)
+        {
+            wait = TimeSpan.Zero;
+        }
+
+        try
+        {
+            if (!Task.Run(work).Wait(wait))
+            {
+                AppLog.ShutdownStepTimedOut(logger, step, wait.TotalSeconds);
+            }
+        }
+        catch (Exception exception)
+        {
+            // Every step is someone else's resource being released, so the failures are theirs and
+            // cannot be enumerated here. Reporting one and carrying on is what keeps the remaining
+            // tunnels from being left running by the first thing that goes wrong.
+            AppLog.ShutdownStepFailed(logger, step, exception);
+        }
     }
 
     /// <summary>

@@ -46,6 +46,26 @@ version heading when one is tagged.
   default bindings were applied once and a flag remembered it, so the machines using the application
   longest were the ones a new shortcut was never bound on. They are applied every start now, which
   adds only what has no binding at all and leaves everything else alone.
+- Shutting Windows down while the application was open ended it with a fault dialog on the
+  shutdown screen, reporting an unknown software error at 0xE0434352. Ending the session raises
+  a shutdown request and then closes every window, so the teardown that answered the request had
+  already disposed the container the window's own handler was about to ask for a setting. The
+  windows are closed first now and the teardown runs after them.
+- The same handler refused that close when the window was set to close to the notification area,
+  which answers Windows with a veto and reports the application as the reason the machine will
+  not shut down. Only a person closing the window is a preference now; a close that comes from
+  the session ending or the application shutting down proceeds.
+- Closing the main window with close to the notification area turned off ended the process with a
+  stack overflow. The handler shut the application down, which closed the same window, which
+  entered the handler again. The request is posted now rather than made from inside the close.
+- Quitting from the notification area, from the window, or with `--quit` left the tunnels running
+  and the sessions open in the history. Only ending the Windows session raised the shutdown request
+  the teardown was attached to, and that was the path that crashed. Measured against a lab server:
+  the tunnel outlived the application every time it was asked to quit. The teardown now runs on the
+  event both paths raise, and every step of it is bounded and reported, so a step that hangs or
+  fails no longer costs the ones after it.
+- An exception that reaches nobody is written to `logs\failure.log` instead of only appearing as
+  a Windows error dialog that names an address and nothing else.
 
 ## [1.0.0] - 2026-08-29
 

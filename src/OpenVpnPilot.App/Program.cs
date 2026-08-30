@@ -24,6 +24,8 @@ internal sealed class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        ReportFailures();
+
         StartupOptions options = StartupOptions.Parse(args);
 
         if (options.Error is { } problem)
@@ -68,7 +70,7 @@ internal sealed class Program
             // A failure during startup would otherwise leave a running process with no window and
             // nothing in the log, which is impossible to diagnose. The report is written before the
             // logger exists, so it goes to a file next to the other application data.
-            WriteStartupFailure(exception);
+            WriteFailure("startup", exception);
             return 1;
         }
         finally
@@ -146,7 +148,30 @@ internal sealed class Program
             .WithInterFont()
             .LogToTrace();
 
-    private static void WriteStartupFailure(Exception exception)
+    /// <summary>
+    /// Records the failures that end the process without passing through anything that logs.
+    /// </summary>
+    /// <remarks>
+    /// An exception nobody catches leaves the runtime raising 0xE0434352, which Windows shows as an
+    /// unknown software error naming an address in a system library and nothing else. During a
+    /// shutdown that dialog is all there is, because the process is gone before it could write
+    /// anything. Recording it here does not swallow it: the process still ends, and the report says
+    /// what ended it.
+    /// </remarks>
+    private static void ReportFailures()
+    {
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception exception)
+            {
+                WriteFailure("unhandled exception", exception);
+            }
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, args) => WriteFailure("unobserved task", args.Exception);
+    }
+
+    private static void WriteFailure(string stage, Exception exception)
     {
         try
         {
@@ -159,9 +184,9 @@ internal sealed class Program
 
             string report = string.Create(
                 CultureInfo.InvariantCulture,
-                $"{DateTimeOffset.Now:O} startup failed{Environment.NewLine}{exception}{Environment.NewLine}");
+                $"{DateTimeOffset.Now:O} {stage}{Environment.NewLine}{exception}{Environment.NewLine}");
 
-            File.AppendAllText(Path.Combine(directory, "startup-failure.log"), report, Encoding.UTF8);
+            File.AppendAllText(Path.Combine(directory, "failure.log"), report, Encoding.UTF8);
         }
         catch (IOException)
         {

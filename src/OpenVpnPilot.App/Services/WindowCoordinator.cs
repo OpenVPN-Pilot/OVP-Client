@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.App.Views;
@@ -19,6 +20,7 @@ namespace OpenVpnPilot.App.Services;
 public sealed class WindowCoordinator
 {
     private readonly IServiceProvider services;
+    private readonly ISettingsService settings;
     private readonly MainWindow mainWindow;
     private readonly MainWindowViewModel viewModel;
     private readonly IClassicDesktopStyleApplicationLifetime desktop;
@@ -36,6 +38,11 @@ public sealed class WindowCoordinator
         ArgumentNullException.ThrowIfNull(desktop);
 
         this.services = services;
+
+        // Read once, because the window is also closed while the application is tearing down and
+        // the container that answers this is one of the things being disposed.
+        settings = services.GetRequiredService<ISettingsService>();
+
         this.mainWindow = mainWindow;
         this.viewModel = viewModel;
         this.desktop = desktop;
@@ -54,17 +61,68 @@ public sealed class WindowCoordinator
 
         mainWindow.Closing += (_, args) =>
         {
-            // Closing keeps the tunnels running; the tray icon is the way back in.
-            if (services.GetRequiredService<ISettingsService>().Current.General.CloseToTray)
+            switch (DecideClose(args.CloseReason, settings.Current.General.CloseToTray))
             {
-                args.Cancel = true;
-                mainWindow.Hide();
-            }
-            else
-            {
-                desktop.Shutdown();
+                case CloseIntent.HideToTray:
+                    args.Cancel = true;
+                    mainWindow.Hide();
+                    break;
+
+                case CloseIntent.Quit:
+                    // The shutdown closes this window, which raises this handler again. Calling it
+                    // from inside the handler therefore re-enters it until the stack runs out, so
+                    // the request is posted and this close is refused; the window goes a moment
+                    // later, as the window of an application that is shutting down.
+                    args.Cancel = true;
+                    Dispatcher.UIThread.Post(() => desktop.Shutdown());
+                    break;
+
+                case CloseIntent.Proceed:
+                default:
+                    break;
             }
         };
+    }
+
+    /// <summary>
+    /// What closing the main window is meant to do.
+    /// </summary>
+    public enum CloseIntent
+    {
+        /// <summary>
+        /// Let the window close and leave the application running.
+        /// </summary>
+        Proceed,
+
+        /// <summary>
+        /// Keep the application where it is, reachable from the notification area.
+        /// </summary>
+        HideToTray,
+
+        /// <summary>
+        /// Close the window and end the application with it.
+        /// </summary>
+        Quit,
+    }
+
+    /// <summary>
+    /// Decides what a request to close the main window means.
+    /// </summary>
+    /// <remarks>
+    /// Only a person closing the window is expressing a preference. A close that comes from the
+    /// application shutting down, or from Windows ending the session, is not a request that may be
+    /// refused: refusing the last one answers <c>WM_QUERYENDSESSION</c> with a veto, which Windows
+    /// reports as this application preventing the machine from shutting down.
+    /// </remarks>
+    public static CloseIntent DecideClose(WindowCloseReason reason, bool closeToTray)
+    {
+        if (reason is not WindowCloseReason.WindowClosing)
+        {
+            return CloseIntent.Proceed;
+        }
+
+        // Closing keeps the tunnels running; the tray icon is the way back in.
+        return closeToTray ? CloseIntent.HideToTray : CloseIntent.Quit;
     }
 
     /// <summary>

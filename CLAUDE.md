@@ -259,3 +259,27 @@ the model.
   verification failure, `CRV1:<flags>:<state>:<base64 user>:<text>`, and is answered in the next
   attempt with a password of `CRV1::<state>::<response>`. A dynamic challenge is a request for a
   code, not a wrong password, so it must not be reported to the user as a rejected credential.
+
+---
+
+## Verified shutdown behaviour
+
+Measured against Avalonia 12.1 on Windows 11, by delivering `WM_QUERYENDSESSION` and `WM_ENDSESSION`
+to the running process. These are test results, not assumptions.
+
+- **The two ways out are not the same event.** Ending the Windows session raises
+  `ShutdownRequested` and then closes every window. `desktop.Shutdown()`, which the notification
+  area, the window and the companion command all call, raises no such request at all. `Exit` is
+  raised by both, once, after the last window has closed, and is therefore where the teardown
+  belongs. Attaching it to `ShutdownRequested` means it never runs on the ordinary quit, and means
+  disposing the container while the windows that read from it are still to be closed.
+- **A window that refuses to close vetoes the shutdown.** Cancelling a close whose
+  `WindowCloseReason` is `OSShutdown` answers `WM_QUERYENDSESSION` with zero, and Windows reports
+  the application as the reason the machine will not shut down. Only `WindowClosing` is a person
+  expressing a preference; the other reasons must be allowed to proceed.
+- **Shutting down from inside a `Closing` handler recurses.** The shutdown closes the same window,
+  which enters the handler again, until the stack runs out. Post the request instead.
+- **An exception in these handlers is an exception inside `WndProc`.** Nothing catches it, the
+  process dies with `0xE0434352`, and on the shutdown screen the Windows fault dialog is the only
+  trace left. Every step of the teardown is therefore bounded and reported, and unhandled
+  exceptions are written to `logs\failure.log`.
