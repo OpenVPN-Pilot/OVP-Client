@@ -375,7 +375,7 @@ That stops it and removes the certificate authority with it.
 
 ## Contributing
 
-Issues and merge requests are welcome, including the small ones: a wrong translation, a confusing
+Issues and pull requests are welcome, including the small ones: a wrong translation, a confusing
 label, a server that behaves in a way the client does not expect. A bug report that names the server
 and what it pushed is worth more than a stack trace.
 
@@ -431,3 +431,6 @@ being an exit node, so a tunnel that drops leaks nothing that was not already go
 ## Licence
 
 MIT. See [LICENSE](LICENSE).
+
+OpenVPN is a registered trademark of OpenVPN Inc. This is an independent client that drives the
+OpenVPN Community software; it is not affiliated with, endorsed by or supported by OpenVPN Inc.
