@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Development happens on `dev`. `main` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged.
 
-## [Unreleased]
+## [1.1.0] - 2026-08-30
 
 ### Added
 
