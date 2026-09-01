@@ -5,7 +5,7 @@
         x:Class="OpenVpnPilot.App.Views.QuickSwitcherWindow"
         x:DataType="vm:QuickSwitcherViewModel"
         Width="620" Height="420"
-        WindowStartupLocation="CenterScreen"
+        WindowStartupLocation="Manual"
         WindowDecorations="None"
         CanResize="False"
         ShowInTaskbar="False"
@@ -49,12 +49,13 @@
                 <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"
                            Foreground="{DynamicResource TextPrimary}"
                            TextTrimming="CharacterEllipsis" />
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <TextBlock Text="{Binding Endpoint}" Classes="muted" />
-                  <TextBlock Text="{Binding Tags}" Classes="muted"
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                  <TextBlock Grid.Column="0" Text="{Binding Endpoint}" Classes="muted" />
+                  <TextBlock Grid.Column="1" Text="{Binding Tags}" Classes="muted"
                              Foreground="{DynamicResource TextTertiary}"
-                             IsVisible="{Binding HasTags}" />
-                </StackPanel>
+                             IsVisible="{Binding HasTags}"
+                             TextTrimming="CharacterEllipsis" />
+                </Grid>
               </StackPanel>
 
               <Border Grid.Column="3" Classes="pill"

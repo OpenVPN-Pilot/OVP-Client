@@ -24,7 +24,8 @@ public sealed class CatalogueCoverageTests
     /// Extensions that turn a matching literal into a file name rather than a key, such as the
     /// settings file, whose name collides with the settings group.
     /// </summary>
-    private static readonly string[] FileExtensions = [".json", ".csv", ".log", ".db", ".ovpn", ".ovppkg", ".zip"];
+    private static readonly string[] FileExtensions =
+        [".json", ".csv", ".log", ".db", ".ovpn", ".ovppkg", ".zip", ".txt"];
 
     [Fact]
     public void EveryKeyTheSourcesUse_IsTranslated()

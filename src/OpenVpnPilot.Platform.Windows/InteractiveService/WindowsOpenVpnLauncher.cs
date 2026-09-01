@@ -55,7 +55,7 @@ public sealed class WindowsOpenVpnLauncher : IOpenVpnLauncher
         builder.Append(" --management-hold");
         builder.Append(" --management-forget-disconnect");
         builder.Append(" --auth-retry interact");
-        builder.Append(" --verb 3");
+        builder.Append(CultureInfo.InvariantCulture, $" --verb {Math.Clamp(request.Verbosity, 0, 11)}");
 
         if (!string.IsNullOrWhiteSpace(request.LogPath))
         {

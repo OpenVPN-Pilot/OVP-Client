@@ -64,6 +64,17 @@ public interface ISessionStore
     /// </summary>
     /// <returns>How many sessions were removed.</returns>
     public Task<int> PruneAsync(DateTimeOffset olderThan, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes every session the query selects.
+    /// </summary>
+    /// <remarks>
+    /// Deletes what the filter selects, not what a page of it happens to show. A row limit exists so
+    /// a long history cannot stall the view; letting it decide what a delete removes would make the
+    /// same button do a different thing depending on how far the user had scrolled.
+    /// </remarks>
+    /// <returns>How many sessions were removed.</returns>
+    public Task<int> DeleteAsync(SessionQuery query, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -279,6 +290,15 @@ public sealed class SessionStore : ISessionStore
         return await context.Sessions
             .Where(session => session.StartedAt < olderThan)
             .ExecuteDeleteAsync(cancellationToken);
+    }
+
+    public async Task<int> DeleteAsync(SessionQuery query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        return await Filter(context, query).ExecuteDeleteAsync(cancellationToken);
     }
 
     private static IQueryable<Session> Filter(PilotDbContext context, SessionQuery query)

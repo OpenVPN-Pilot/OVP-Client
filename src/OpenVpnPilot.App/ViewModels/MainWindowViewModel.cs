@@ -17,11 +17,18 @@ namespace OpenVpnPilot.App.ViewModels;
 /// </summary>
 public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
+    /// <summary>
+    /// Where OpenVPN Community is obtained. Named in the interface because a user told that
+    /// something is missing and not told where to get it has been given half an answer.
+    /// </summary>
+    public const string OpenVpnDownloadUrl = "https://openvpn.net/community-downloads/";
+
     private readonly IProfileStore store;
     private readonly ConnectionManager connections;
     private readonly ProfileNameCache nameCache;
     private readonly ISettingsService settings;
     private readonly ISecretStore secrets;
+    private readonly EnvironmentGate environment;
     private readonly ILocalizer localizer;
     private readonly TimeProvider timeProvider;
 
@@ -36,6 +43,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         ProfileNameCache nameCache,
         ISettingsService settings,
         ISecretStore secrets,
+        EnvironmentGate environment,
         ILocalizer localizer,
         TimeProvider timeProvider)
     {
@@ -44,6 +52,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         ArgumentNullException.ThrowIfNull(nameCache);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(secrets);
+        ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(localizer);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
@@ -52,6 +61,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         this.nameCache = nameCache;
         this.settings = settings;
         this.secrets = secrets;
+        this.environment = environment;
         this.localizer = localizer;
         this.timeProvider = timeProvider;
 
@@ -169,6 +179,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     public partial bool IsLoading { get; set; }
+
+    /// <summary>
+    /// True while something in the environment prevents any tunnel from being started.
+    /// </summary>
+    /// <remarks>
+    /// Shown as a banner rather than raised when a connection is attempted. The user should know
+    /// before they pick a profile, and the client should not look perfectly healthy right up to the
+    /// moment it cannot do the one thing it exists for.
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool IsEnvironmentBlocked { get; set; }
+
+    /// <summary>
+    /// What is missing, one plainly worded line per failed check.
+    /// </summary>
+    [ObservableProperty]
+    public partial string EnvironmentProblems { get; set; } = string.Empty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ActiveSummary))]
@@ -687,12 +714,30 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             : SelectedProfile;
     }
 
+    /// <summary>
+    /// Starts one tunnel.
+    /// </summary>
+    /// <remarks>
+    /// Two things here are about not ending the process. The environment is checked first, so a
+    /// machine without the interactive service is told what is missing instead of being asked to
+    /// open a pipe that is not there. And everything else is caught, because anything that escapes
+    /// an asynchronous command is rethrown on the user interface thread and takes the application
+    /// with it, tunnels and all. Launching talks to a service, a pipe, a socket and the file system;
+    /// the exceptions those produce cannot be enumerated in advance, and none of them is worth
+    /// losing every running tunnel over.
+    /// </remarks>
     [RelayCommand]
     private async Task ConnectAsync(ProfileItemViewModel? profile)
     {
         profile ??= SelectedProfile;
         if (profile is null || !profile.IsIdle)
         {
+            return;
+        }
+
+        if (!await EnvironmentAllowsConnectingAsync())
+        {
+            StatusMessage = localizer["environment.cannotConnect"];
             return;
         }
 
@@ -709,7 +754,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
                 profile.Id,
                 configuration,
                 RouteProtectionFor(profile),
-                ConnectTimeout);
+                ConnectTimeout,
+                settings.Current.Advanced.OpenVpnVerbosity);
 
             if (status.State == VpnConnectionState.Failed)
             {
@@ -721,13 +767,61 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             await store.RecordConnectionAsync(profile.Id);
             StatusMessage = localizer.Translate("status.connecting", profile.Name);
         }
-        catch (ManagementUnavailableException exception)
+        catch (Exception exception)
         {
             StatusMessage = localizer.Translate("status.profileFailed", profile.Name, exception.Message);
+
+            // Re-examined rather than assumed: the most likely reason a launch failed outright is
+            // that something the environment needs went away, and the banner should say so.
+            await RefreshEnvironmentAsync();
         }
-        catch (InvalidOperationException exception)
+    }
+
+    /// <summary>
+    /// Examines the environment and updates the banner.
+    /// </summary>
+    public async Task RefreshEnvironmentAsync(CancellationToken cancellationToken = default)
+    {
+        await environment.RefreshAsync(cancellationToken);
+        ShowEnvironment();
+    }
+
+    /// <summary>
+    /// Re-checks immediately before a connection, so a service stopped since startup is caught.
+    /// </summary>
+    private async Task<bool> EnvironmentAllowsConnectingAsync()
+    {
+        await environment.EnsureExaminedAsync();
+        ShowEnvironment();
+        return !IsEnvironmentBlocked;
+    }
+
+    private void ShowEnvironment()
+    {
+        IsEnvironmentBlocked = environment.IsBlocked;
+        EnvironmentProblems = string.Join(
+            Environment.NewLine,
+            environment.Blocking.Select(check =>
+                localizer.Translate("environment." + Key(check.Id), check.Detail)));
+    }
+
+    /// <summary>
+    /// The localization key suffix for one check, which is its name with a lower case first letter.
+    /// </summary>
+    private static string Key(EnvironmentCheckId id)
+    {
+        string name = id.ToString();
+        return char.ToLowerInvariant(name[0]) + name[1..];
+    }
+
+    [RelayCommand]
+    private async Task RecheckEnvironmentAsync()
+    {
+        await RefreshEnvironmentAsync();
+
+        if (!IsEnvironmentBlocked)
         {
-            StatusMessage = localizer.Translate("status.profileFailed", profile.Name, exception.Message);
+            StatusMessage = localizer["environment.ready"];
         }
     }
 
@@ -898,6 +992,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [RelayCommand]
     private void OpenHistory() => ScreenRequested?.Invoke(this, AppScreen.History);
+
+    [RelayCommand]
+    private void OpenLog() => ScreenRequested?.Invoke(this, AppScreen.Log);
 
     [RelayCommand]
     private void OpenImport() => ScreenRequested?.Invoke(this, AppScreen.Import);
@@ -1103,6 +1200,12 @@ public enum AppScreen
 
     Settings,
     History,
+
+    /// <summary>
+    /// The live log, showing what the application and OpenVPN both recorded.
+    /// </summary>
+    Log,
+
     Import,
     Export,
     ProfileEditor,

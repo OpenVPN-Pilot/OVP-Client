@@ -1,4 +1,7 @@
+using System.Buffers.Binary;
 using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
 
 namespace OpenVpnPilot.OpenVpn.Runtime;
 
@@ -119,7 +122,15 @@ public static class PushReplyParser
                 case "ifconfig" when parts.Length >= 3 && gateway is null:
                     // A server without an explicit gateway still names the peer address, which is
                     // the far end of the tunnel and therefore the useful thing to measure against.
-                    gateway = parts[2];
+                    //
+                    // Only under topology net30, where the second value is that peer. Under topology
+                    // subnet the same option carries the netmask instead, and taking that as the
+                    // gateway produces an address nothing answers, or worse, a broadcast one.
+                    if (!IsNetmask(parts[2]))
+                    {
+                        gateway = parts[2];
+                    }
+
                     break;
 
                 case "dhcp-option" when parts.Length >= 3
@@ -144,5 +155,29 @@ public static class PushReplyParser
         }
 
         return new PushedOptions(routes, dns, gateway, redirect, compression);
+    }
+
+    /// <summary>
+    /// True when a dotted quad is a netmask rather than an address.
+    /// </summary>
+    /// <remarks>
+    /// A netmask is a run of set bits followed by a run of clear ones, which is what is checked
+    /// here rather than a list of the usual values. Zero is excluded: it is a valid mask and not a
+    /// plausible peer either, and treating it as a mask keeps it out of the gateway.
+    /// </remarks>
+    internal static bool IsNetmask(string value)
+    {
+        if (!IPAddress.TryParse(value, out IPAddress? address)
+            || address.AddressFamily != AddressFamily.InterNetwork)
+        {
+            return false;
+        }
+
+        uint bits = BinaryPrimitives.ReadUInt32BigEndian(address.GetAddressBytes());
+        uint inverted = ~bits;
+
+        // A contiguous run of ones inverts to a run of zeroes followed by ones, and adding one to
+        // such a value clears every bit it holds.
+        return (inverted & (inverted + 1)) == 0;
     }
 }

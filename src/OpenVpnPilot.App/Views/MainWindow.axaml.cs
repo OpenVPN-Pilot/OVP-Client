@@ -58,6 +58,22 @@ public partial class MainWindow : Window
 
         AddHandler(PointerPressedEvent, OnPointerPressedForDrag, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         AddHandler(PointerMovedEvent, OnPointerMovedForDrag, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
+        // Opening a web page is a platform operation, so it belongs to the window rather than to a
+        // view model that would then be untestable and would be starting processes besides.
+        this.FindControl<Button>("OpenVpnDownloadButton")!.Click += async (_, _) =>
+            await OpenDownloadPageAsync();
+    }
+
+    /// <summary>
+    /// Opens the page OpenVPN Community is downloaded from.
+    /// </summary>
+    private async Task OpenDownloadPageAsync()
+    {
+        if (TopLevel.GetTopLevel(this)?.Launcher is { } launcher)
+        {
+            await launcher.LaunchUriAsync(new Uri(MainWindowViewModel.OpenVpnDownloadUrl));
+        }
     }
 
     /// <summary>

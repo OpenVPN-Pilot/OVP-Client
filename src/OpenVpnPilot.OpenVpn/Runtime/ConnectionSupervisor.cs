@@ -134,6 +134,8 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                 ServerRequestedCompression = false,
                 PingMilliseconds = null,
                 PingFailed = false,
+                PingTarget = null,
+                PingTargetKind = PingTargetKind.None,
             });
 
             string managementPassword = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
@@ -145,7 +147,8 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                     request.ManagementPort,
                     managementPassword,
                     request.AdditionalOptions,
-                    request.LogPath),
+                    request.LogPath,
+                    request.Verbosity),
                 cancellationToken);
 
             if (!launch.Succeeded)
@@ -582,12 +585,17 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
     /// <summary>
     /// Records a round trip measurement taken by whatever is monitoring this connection.
     /// </summary>
-    public void ReportPing(double? milliseconds)
+    /// <param name="milliseconds">The measured round trip, or null when nothing answered.</param>
+    /// <param name="target">The address that was measured, so the figure can be checked.</param>
+    /// <param name="kind">Whether that address is the tunnel gateway or the server itself.</param>
+    public void ReportPing(double? milliseconds, string? target, PingTargetKind kind)
     {
         Publish(status with
         {
             PingMilliseconds = milliseconds,
-            PingFailed = milliseconds is null,
+            PingFailed = milliseconds is null && kind != PingTargetKind.None,
+            PingTarget = target,
+            PingTargetKind = kind,
         });
     }
 
@@ -774,6 +782,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
 /// for as long as it is left running, so without a bound a tunnel that cannot come up holds a
 /// process and reports that it is connecting for as long as the application lives.
 /// </param>
+/// <param name="Verbosity">What OpenVPN is asked to report, passed as --verb.</param>
 public sealed record ConnectionRequest(
     Guid ProfileId,
     string ConfigurationPath,
@@ -781,4 +790,5 @@ public sealed record ConnectionRequest(
     int ManagementPort,
     IReadOnlyList<string> AdditionalOptions,
     string? LogPath = null,
-    TimeSpan? ConnectTimeout = null);
+    TimeSpan? ConnectTimeout = null,
+    int Verbosity = 3);

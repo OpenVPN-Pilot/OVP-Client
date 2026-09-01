@@ -62,13 +62,20 @@
       <Files Include="$(var.PublishDir)\**" />
     </ComponentGroup>
 
+    <!--
+      The shortcut carries the application user model identity the process declares for itself. That
+      is what lets Windows attribute a notification to an installed application rather than to a
+      generated identifier, and the two must therefore say exactly the same thing.
+    -->
     <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder" Guid="1a7b9c30-5e84-42d7-b1f6-9c0a3d5e7f21">
       <Shortcut Id="ApplicationShortcut"
                 Name="OpenVpnPilot"
                 Description="Manage and connect OpenVPN profiles"
                 Target="[INSTALLFOLDER]OpenVpnPilot.exe"
                 WorkingDirectory="INSTALLFOLDER"
-                Icon="OpenVpnPilot.exe" />
+                Icon="OpenVpnPilot.exe">
+        <ShortcutProperty Key="System.AppUserModel.ID" Value="OpenVpnPilot" />
+      </Shortcut>
       <RegistryValue Root="HKLM" Key="Software\OpenVpnPilot" Name="StartMenu"
                      Type="integer" Value="1" KeyPath="yes" />
     </Component>

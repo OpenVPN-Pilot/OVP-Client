@@ -60,6 +60,12 @@ public sealed partial class HistoryViewModel : ViewModelBase
     [ObservableProperty]
     public partial bool IsLoading { get; set; }
 
+    /// <summary>
+    /// Shown after asking to clear, because deleting history cannot be undone.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsConfirmingClear { get; set; }
+
     public bool HasRows => Rows.Count > 0;
 
     public string EmptyText => localizer["history.empty"];
@@ -116,6 +122,39 @@ public sealed partial class HistoryViewModel : ViewModelBase
         {
             IsLoading = false;
         }
+    }
+
+    [RelayCommand]
+    private void AskToClear() => IsConfirmingClear = true;
+
+    [RelayCommand]
+    private void CancelClear() => IsConfirmingClear = false;
+
+    /// <summary>
+    /// Removes the sessions the current filter selects.
+    /// </summary>
+    /// <remarks>
+    /// Two ways out on purpose. Somebody who filtered to one profile in order to clear that
+    /// profile's history should not have to choose between clearing everything and clearing
+    /// nothing, and somebody who wants the lot should not have to widen the filter first.
+    /// </remarks>
+    [RelayCommand]
+    private async Task ClearFilteredAsync(CancellationToken cancellationToken = default) =>
+        await ClearAsync(BuildQuery(), cancellationToken);
+
+    [RelayCommand]
+    private async Task ClearEverythingAsync(CancellationToken cancellationToken = default) =>
+        await ClearAsync(new SessionQuery(), cancellationToken);
+
+    private async Task ClearAsync(SessionQuery query, CancellationToken cancellationToken)
+    {
+        IsConfirmingClear = false;
+
+        int removed = await sessions.DeleteAsync(query, cancellationToken);
+
+        await RefreshAsync(cancellationToken);
+
+        StatusMessage = localizer.Translate("history.cleared", removed);
     }
 
     /// <summary>

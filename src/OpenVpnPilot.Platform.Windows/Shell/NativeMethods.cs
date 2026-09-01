@@ -113,6 +113,12 @@ internal static partial class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool ShellNotifyIcon(uint message, ref NotifyIconData data);
 
+    /// <summary>
+    /// Declares the identity the shell files this process's notifications under. Returns an HRESULT.
+    /// </summary>
+    [LibraryImport("shell32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    public static partial int SetCurrentProcessExplicitAppUserModelID(string appId);
+
     [LibraryImport("user32.dll", EntryPoint = "RegisterClassExW", SetLastError = true)]
     public static partial ushort RegisterClassEx(ref WindowClassEx windowClass);
 

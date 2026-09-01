@@ -25,13 +25,19 @@ public interface IOpenVpnLauncher
 /// Extra command line options, for example pull filters that protect the host routing table.
 /// </param>
 /// <param name="LogPath">Optional path for the OpenVPN log file.</param>
+/// <param name="Verbosity">
+/// What OpenVPN is asked to report, passed as --verb. Three carries the state changes, the push
+/// reply and the reason a handshake failed, which is what the client reads. Higher is for looking
+/// into something and is offered as a setting rather than fixed here.
+/// </param>
 public sealed record OpenVpnLaunchRequest(
     string ConfigurationPath,
     string WorkingDirectory,
     int ManagementEndpoint,
     string ManagementPassword,
     IReadOnlyList<string> AdditionalOptions,
-    string? LogPath = null);
+    string? LogPath = null,
+    int Verbosity = 3);
 
 /// <summary>
 /// The result of a launch attempt.

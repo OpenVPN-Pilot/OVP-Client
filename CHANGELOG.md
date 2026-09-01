@@ -8,6 +8,55 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged.
 
+## [Unreleased]
+
+### Added
+
+- A log window, opened from the header beside the history. It carries both streams in the order they
+  happened: what the application recorded and what OpenVPN said, filterable by source, by level and
+  by text, following the newest line unless told not to. OpenVPN's log stream was already being read
+  for the push reply and thrown away afterwards, which is why a connection that failed used to leave
+  nothing behind to look at.
+- One log file per day, named `yyyy-MM-dd.log`, carrying both streams. How many days are kept is a
+  setting, seven by default: a log names profiles, hosts and paths that include the account name, so
+  keeping them for ever is not a decision to make on the user's behalf.
+- The environment is checked at startup and again before every connection, and what is missing is
+  said in a banner with a link to the OpenVPN download. The check existed and backed `ovp doctor`;
+  nothing in the window had ever asked it.
+- The connection history can be cleared from the history window, either the sessions the current
+  filter selects or the whole thing, after a confirmation.
+- The quick menus remember which display they were left on and move between displays with alt and an
+  arrow key. The main window remembers where it was, and refuses to restore onto a monitor that is no
+  longer there.
+- The round trip says which address it was measured against, and whether that address is the far end
+  of the tunnel or the server itself.
+
+### Fixed
+
+- The round trip was measured against this machine's own tunnel address whenever the server pushed no
+  gateway. The local stack answers that without a packet leaving, so every such tunnel reported one
+  or two milliseconds and looked excellent while measuring nothing. The address is now the pushed
+  gateway, or the gateway of the tunnel interface, or the server itself, and never this machine.
+- A server using `topology subnet` had its netmask read as the tunnel gateway, because the second
+  value of `ifconfig` is the peer only under `topology net30`.
+- A missing dependency ended the process. Anything escaping an asynchronous command is rethrown on
+  the user interface thread, and a machine without the interactive service produced exactly that from
+  the pipe. Connecting now reports what went wrong and keeps the other tunnels running.
+- Windows labelled every notification with a generated identifier such as
+  `Microsoft.Explorer.Notification{...}`, because the process declared no application identity. It
+  now declares one, registers a name and icon for it, and the installer stamps the same identity on
+  the start menu shortcut.
+- Long text ran past the edge of the detail panel instead of wrapping. A scroll viewer that allows
+  horizontal scrolling measures its content without a width limit, and text measured without one
+  neither wraps nor trims; the same mistake stopped the profile list from ever showing an ellipsis,
+  because a stack panel does the same thing to what it stacks. The detail column can also be dragged
+  wider now.
+- The log level and the OpenVPN verbosity were stored, shown in the settings and never applied. The
+  logger fixed its minimum before the settings file was read, and the verbosity was written into the
+  command line as a constant.
+- The application log was nine tenths Entity Framework reporting each SQL statement it ran at
+  information level, which buried everything worth reading. It is raised to warning.
+
 ## [1.1.0] - 2026-08-30
 
 ### Added

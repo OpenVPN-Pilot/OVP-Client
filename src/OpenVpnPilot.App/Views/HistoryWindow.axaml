@@ -87,17 +87,42 @@
     <Border Grid.Row="2" Background="{DynamicResource SurfaceSidebar}"
             BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
             Padding="16,12">
-      <Grid ColumnDefinitions="*,Auto">
-        <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
-          <TextBlock Text="{Binding TotalsDisplay}" Classes="body" />
-          <TextBlock Text="{Binding StatusMessage}" Classes="muted"
-                     TextTrimming="CharacterEllipsis" />
-        </StackPanel>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-          <Button Name="ExportButton" Content="{loc:Translate history.export}" MinWidth="120" />
-          <Button Name="CloseButton" Content="{loc:Translate common.close}" MinWidth="96" />
-        </StackPanel>
-      </Grid>
+      <StackPanel Spacing="10">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+          <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+            <TextBlock Text="{Binding TotalsDisplay}" Classes="body" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding StatusMessage}" Classes="muted"
+                       TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+            <Button Content="{loc:Translate history.clear}" Classes="quiet" MinWidth="96"
+                    Command="{Binding AskToClearCommand}" />
+            <Button Name="ExportButton" Content="{loc:Translate history.export}" MinWidth="120" />
+            <Button Name="CloseButton" Content="{loc:Translate common.close}" MinWidth="96" />
+          </StackPanel>
+        </Grid>
+
+        <!--
+          Asks first, and offers both readings of what clearing means. Somebody who filtered to one
+          profile in order to clear it should not have to empty the whole history to do so.
+        -->
+        <Border CornerRadius="7" Padding="12,10"
+                Background="{DynamicResource StateFailedSoft}"
+                IsVisible="{Binding IsConfirmingClear}">
+          <StackPanel Spacing="9">
+            <TextBlock Text="{loc:Translate history.clearConfirm}" TextWrapping="Wrap" FontSize="12"
+                       Foreground="{DynamicResource StateFailed}" />
+            <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+              <Button Content="{loc:Translate history.clearFiltered}"
+                      Command="{Binding ClearFilteredCommand}" />
+              <Button Content="{loc:Translate history.clearEverything}"
+                      Command="{Binding ClearEverythingCommand}" />
+              <Button Content="{loc:Translate common.cancel}" Classes="quiet"
+                      Command="{Binding CancelClearCommand}" />
+            </WrapPanel>
+          </StackPanel>
+        </Border>
+      </StackPanel>
     </Border>
 
   </Grid>

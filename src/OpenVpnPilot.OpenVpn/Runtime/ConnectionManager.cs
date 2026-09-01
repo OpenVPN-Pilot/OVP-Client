@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Vpn;
+using OpenVpnPilot.OpenVpn.Management;
 
 namespace OpenVpnPilot.OpenVpn.Runtime;
 
@@ -67,6 +68,17 @@ public sealed class ConnectionManager : IAsyncDisposable
     public event EventHandler<ConnectionStatusChanged>? StateChanged;
 
     /// <summary>
+    /// Raised for every line OpenVPN logs, tagged with the profile it belongs to.
+    /// </summary>
+    /// <remarks>
+    /// OpenVPN's own log is the only place several things appear at all: the pushed options, the
+    /// reason a handshake failed, the certificate the server presented. The supervisor already reads
+    /// it in order to find the push reply. Passing it on costs nothing and is the difference between
+    /// a diagnosable failure and one the user can only describe.
+    /// </remarks>
+    public event EventHandler<ConnectionLogReceived>? LogReceived;
+
+    /// <summary>
     /// Profiles that currently have a process running.
     /// </summary>
     public IReadOnlyCollection<Guid> ActiveProfiles => active.Keys.ToList();
@@ -88,18 +100,26 @@ public sealed class ConnectionManager : IAsyncDisposable
     /// network probe has nothing to do with either. Whoever measures reports the result here so it
     /// travels with the rest of the connection's telemetry.
     /// </remarks>
-    public void ReportPing(Guid profileId, double? milliseconds)
+    public void ReportPing(Guid profileId, double? milliseconds, string? target, PingTargetKind kind)
     {
         if (active.TryGetValue(profileId, out ActiveConnection? connection))
         {
-            connection.Supervisor.ReportPing(milliseconds);
+            connection.Supervisor.ReportPing(milliseconds, target, kind);
         }
     }
 
     /// <summary>
-    /// The address worth measuring for one connection, or null when there is nothing to measure.
+    /// The addresses a round trip could be measured against, or null when the tunnel is not up.
     /// </summary>
-    public string? GetPingTarget(Guid profileId)
+    /// <remarks>
+    /// Deciding between them is not this class's business: the tunnel address alone does not say
+    /// which of them is reachable, and finding out means probing the network. What belongs here is
+    /// what the connection knows, so whoever measures can choose with the whole picture in front of
+    /// it. The one thing that is never a candidate is the address assigned to this machine's own
+    /// tunnel interface: the local stack answers it without a packet leaving, so it measures nothing
+    /// and reports an implausibly good result while doing so.
+    /// </remarks>
+    public PingCandidates? GetPingCandidates(Guid profileId)
     {
         if (!active.TryGetValue(profileId, out ActiveConnection? connection))
         {
@@ -108,10 +128,8 @@ public sealed class ConnectionManager : IAsyncDisposable
 
         VpnConnectionStatus status = connection.Supervisor.Status;
 
-        // The far end of the tunnel is the meaningful target. The server's public address would be
-        // measured over the ordinary route and would say nothing about the tunnel.
         return status.State == VpnConnectionState.Connected
-            ? status.Gateway ?? status.LocalAddress
+            ? new PingCandidates(status.Gateway, status.LocalAddress, status.ServerAddress)
             : null;
     }
 
@@ -124,6 +142,7 @@ public sealed class ConnectionManager : IAsyncDisposable
         string configuration,
         IReadOnlyList<string>? additionalOptions = null,
         TimeSpan? connectTimeout = null,
+        int verbosity = 3,
         CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -161,13 +180,18 @@ public sealed class ConnectionManager : IAsyncDisposable
             StateChanged?.Invoke(this, new ConnectionStatusChanged(profileId, status));
         }
 
+        void ForwardLog(object? sender, LogMessage message) =>
+            LogReceived?.Invoke(this, new ConnectionLogReceived(profileId, message));
+
         supervisor.StatusChanged += Forward;
         supervisor.StateChanged += ForwardState;
+        supervisor.LogReceived += ForwardLog;
 
         connection.Unsubscribe = () =>
         {
             supervisor.StatusChanged -= Forward;
             supervisor.StateChanged -= ForwardState;
+            supervisor.LogReceived -= ForwardLog;
         };
 
         if (!active.TryAdd(profileId, connection))
@@ -185,7 +209,8 @@ public sealed class ConnectionManager : IAsyncDisposable
                     materialised.Directory,
                     portAllocator.Reserve(),
                     additionalOptions ?? [],
-                    ConnectTimeout: connectTimeout),
+                    ConnectTimeout: connectTimeout,
+                    Verbosity: verbosity),
                 cancellationToken);
 
             if (status.State == VpnConnectionState.Failed)
@@ -329,6 +354,25 @@ public sealed class ConnectionManager : IAsyncDisposable
 /// Reports a status change for one profile.
 /// </summary>
 public sealed record ConnectionStatusChanged(Guid ProfileId, VpnConnectionStatus Status);
+
+/// <summary>
+/// Reports one line of the OpenVPN log for one profile.
+/// </summary>
+public sealed record ConnectionLogReceived(Guid ProfileId, LogMessage Message);
+
+/// <summary>
+/// What a connection offers as a target for a round trip measurement.
+/// </summary>
+/// <param name="Gateway">The tunnel gateway the server named, when it named one.</param>
+/// <param name="LocalAddress">
+/// This machine's tunnel address. Never a target in itself, but it identifies the interface whose
+/// gateway can be read from the routing table when the server named none.
+/// </param>
+/// <param name="ServerAddress">
+/// The server's public address, which is known for every connection that came up. It is reached
+/// outside the tunnel, so it is the last resort rather than the preference.
+/// </param>
+public sealed record PingCandidates(string? Gateway, string? LocalAddress, string? ServerAddress);
 
 /// <summary>
 /// Hands out free local ports for management interfaces.

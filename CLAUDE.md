@@ -253,12 +253,43 @@ the model.
 - The status that reports the end of a connection carries no byte counters, because nothing is
   flowing any more. Anything that records what a session transferred has to keep the last values it
   saw while the tunnel was up.
+- **The far end of the tunnel is not always in the push reply, and the second value of `ifconfig`
+  is only sometimes the peer.** Under `topology net30` the reply carries `ifconfig <local> <peer>`
+  and the peer is the address a round trip should measure. Under `topology subnet` the same option
+  carries `ifconfig <local> <netmask>`, and a server using it pushes `route-gateway` separately.
+  Reading the second value unconditionally therefore yields a netmask as the gateway.
+
+  A server may push neither. What must never be measured in that case is this machine's own tunnel
+  address: the local stack answers it without a packet leaving the host, so it reports one or two
+  milliseconds for any tunnel anywhere and reads as an unusually good connection. The order is the
+  pushed gateway, then the gateway of the interface holding the tunnel address, then the server's
+  public address measured over the ordinary route, and the interface says which of them it used.
 - One time codes take two forms and both are implemented. A static challenge arrives appended to the
   password request as `SC:<echo>,<text>` and is answered in the same attempt with a password of
   `SCRV1:base64(password):base64(response)`. A dynamic challenge arrives as the reason for a
   verification failure, `CRV1:<flags>:<state>:<base64 user>:<text>`, and is answered in the next
   attempt with a password of `CRV1::<state>::<response>`. A dynamic challenge is a request for a
   code, not a wrong password, so it must not be reported to the user as a rejected credential.
+
+---
+
+## Windows notification identity
+
+A notification area balloon is not shown as a balloon on Windows 10 and later. The shell converts it
+into a toast, files it in the notification centre and labels it with the calling process's
+application user model identity. A process that never declares one is given a generated identity,
+which is what put `Microsoft.Explorer.Notification{<guid>}` above every message this client sent.
+
+`WindowsAppIdentity.Apply` therefore does two things before the framework starts: it calls
+`SetCurrentProcessExplicitAppUserModelID`, and it writes `DisplayName` and `IconUri` under
+`HKCU\Software\Classes\AppUserModelId\OpenVpnPilot` so the shell can resolve that identity to a
+name and an icon. The installer stamps the same identity onto the start menu shortcut through
+`System.AppUserModel.ID`. All three must say `OpenVpnPilot` and the identifier must not change once
+released, because notification settings the user makes are stored against it.
+
+The registration is confirmed present after a run. The label the notification centre shows has not
+been observed end to end, because raising a notification means completing a connection; verify it the
+next time one is made and correct this if it says otherwise.
 
 ---
 

@@ -15,7 +15,7 @@
         Icon="/Assets/openvpnpilot.ico"
         Title="OpenVpnPilot">
 
-  <Grid RowDefinitions="Auto,*,Auto">
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
 
     <!--
       Header: identity on the left, search in the middle, actions on the right.
@@ -61,6 +61,9 @@
                   Command="{Binding ToggleSelectingCommand}" />
           <Button Content="{loc:Translate nav.history}" Classes="quiet"
                   Command="{Binding OpenHistoryCommand}" />
+          <Button Content="{loc:Translate nav.log}" Classes="quiet"
+                  ToolTip.Tip="{loc:Translate nav.logHint}"
+                  Command="{Binding OpenLogCommand}" />
           <Button Content="{loc:Translate header.settings}" Classes="quiet"
                   Command="{Binding OpenSettingsCommand}" />
           <Button Content="{loc:Translate header.disconnectAll}"
@@ -71,7 +74,47 @@
       </Grid>
     </Border>
 
-    <Grid Grid.Row="1" ColumnDefinitions="228,*,352">
+    <!--
+      What is missing, before anything is attempted. A client that starts perfectly and then ends
+      the process the moment somebody presses connect is not reporting a missing dependency, it is
+      hiding one.
+    -->
+    <Border Grid.Row="1" Padding="18,12"
+            Background="{DynamicResource StateFailedSoft}"
+            BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1"
+            IsVisible="{Binding IsEnvironmentBlocked}">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+        <StackPanel Grid.Column="0" Spacing="5">
+          <TextBlock Text="{loc:Translate environment.title}" FontSize="13" FontWeight="SemiBold"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource StateFailed}" />
+          <TextBlock Text="{Binding EnvironmentProblems}" FontSize="12" TextWrapping="Wrap"
+                     Foreground="{DynamicResource StateFailed}" />
+          <TextBlock Text="{loc:Translate environment.hint}" FontSize="12" TextWrapping="Wrap"
+                     Foreground="{DynamicResource StateFailed}" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Vertical" Spacing="8" VerticalAlignment="Center">
+          <Button Name="OpenVpnDownloadButton" Content="{loc:Translate environment.download}"
+                  MinWidth="150" HorizontalContentAlignment="Center" />
+          <Button Content="{loc:Translate environment.recheck}" Classes="quiet"
+                  MinWidth="150" HorizontalContentAlignment="Center"
+                  Command="{Binding RecheckEnvironmentCommand}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!--
+      The detail column can be dragged wider. It is a fixed width by default because that is the
+      right size for most of what it holds, and a profile name is free text: someone whose names run
+      to sixty characters needs the column to give, not the text to be cut.
+    -->
+    <Grid Grid.Row="2">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="228" />
+        <ColumnDefinition Width="*" MinWidth="260" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="352" MinWidth="280" MaxWidth="640" />
+      </Grid.ColumnDefinitions>
 
       <!-- Sidebar -->
       <Border Grid.Column="0" Background="{DynamicResource SurfaceSidebar}"
@@ -156,30 +199,42 @@
                           Margin="0,0,14,0" VerticalAlignment="Center"
                           Background="{Binding Status.State, Converter={x:Static conv:AppConverters.StateBrush}}" />
 
+                  <!--
+                    Grids, not stacks. A stack panel measures its children with unlimited width in
+                    the direction it stacks, so a name inside one is never trimmed however narrow
+                    the row gets: it simply runs on past the edge. The badges therefore sit in their
+                    own column and the name is what gives.
+                  -->
                   <StackPanel Grid.Column="2" Spacing="3">
-                    <StackPanel Orientation="Horizontal" Spacing="7">
-                      <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold"
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="7">
+                      <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                 FontSize="13.5" FontWeight="SemiBold"
                                  Foreground="{DynamicResource TextPrimary}"
-                                 TextTrimming="CharacterEllipsis" />
-                      <Border Classes="slot" IsVisible="{Binding HasFavouriteSlot}">
-                        <TextBlock Text="{Binding FavouriteSlotDisplay}" />
-                      </Border>
-                      <TextBlock Text="*" FontSize="14" VerticalAlignment="Center"
-                                 Foreground="{DynamicResource StatePending}"
-                                 IsVisible="{Binding IsFavourite}" />
-                      <Border Classes="pill" IsVisible="{Binding IsNew}"
-                              Background="{DynamicResource AccentSoft}">
-                        <TextBlock Text="{loc:Translate nav.new}"
-                                   Foreground="{DynamicResource Accent}" />
-                      </Border>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                      <TextBlock Text="{Binding Endpoint}" Classes="muted" />
-                      <TextBlock Text="{Binding TagsDisplay}" Classes="muted"
+                                 TextTrimming="CharacterEllipsis"
+                                 ToolTip.Tip="{Binding Name}" />
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7"
+                                  VerticalAlignment="Center">
+                        <Border Classes="slot" IsVisible="{Binding HasFavouriteSlot}">
+                          <TextBlock Text="{Binding FavouriteSlotDisplay}" />
+                        </Border>
+                        <TextBlock Text="*" FontSize="14" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource StatePending}"
+                                   IsVisible="{Binding IsFavourite}" />
+                        <Border Classes="pill" IsVisible="{Binding IsNew}"
+                                Background="{DynamicResource AccentSoft}">
+                          <TextBlock Text="{loc:Translate nav.new}"
+                                     Foreground="{DynamicResource Accent}" />
+                        </Border>
+                      </StackPanel>
+                    </Grid>
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                      <TextBlock Grid.Column="0" Text="{Binding Endpoint}" Classes="muted" />
+                      <TextBlock Grid.Column="1" Text="{Binding TagsDisplay}" Classes="muted"
                                  Foreground="{DynamicResource TextTertiary}"
                                  IsVisible="{Binding HasTags}"
-                                 TextTrimming="CharacterEllipsis" />
-                    </StackPanel>
+                                 TextTrimming="CharacterEllipsis"
+                                 ToolTip.Tip="{Binding TagsDisplay}" />
+                    </Grid>
                   </StackPanel>
 
                   <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8"
@@ -256,23 +311,34 @@
         </Border>
       </Grid>
 
-      <!-- Detail -->
-      <Border Grid.Column="2" Background="{DynamicResource SurfaceSidebar}"
+      <GridSplitter Grid.Column="2" Width="5" ResizeDirection="Columns"
+                    Background="Transparent" />
+
+      <!--
+        Detail. Horizontal scrolling is switched off deliberately: a scroll viewer that allows it
+        measures its content with unlimited width, and text that is measured without a limit neither
+        wraps nor trims. That is how a long name came to run past the edge of the panel into nothing.
+      -->
+      <Border Grid.Column="3" Background="{DynamicResource SurfaceSidebar}"
               BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1,0,0,0">
-        <ScrollViewer>
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="20" Spacing="18" IsVisible="{Binding HasSelection}">
 
             <StackPanel Spacing="8">
-              <TextBlock Text="{Binding SelectedProfile.Name}" Classes="title" TextWrapping="Wrap" />
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <TextBlock Text="{Binding SelectedProfile.Endpoint}" Classes="muted"
+              <TextBlock Text="{Binding SelectedProfile.Name}" Classes="title"
+                         TextWrapping="Wrap"
+                         ToolTip.Tip="{Binding SelectedProfile.Name}" />
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBlock Grid.Column="0" Text="{Binding SelectedProfile.Endpoint}" Classes="muted"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip.Tip="{Binding SelectedProfile.Endpoint}"
                            VerticalAlignment="Center" />
-                <Border Classes="pill"
+                <Border Grid.Column="1" Classes="pill" VerticalAlignment="Center"
                         Background="{Binding SelectedProfile.Status.State, Converter={x:Static conv:AppConverters.StatePillBackground}}">
                   <TextBlock Text="{Binding SelectedProfile.StatusLabel}"
                              Foreground="{Binding SelectedProfile.Status.State, Converter={x:Static conv:AppConverters.StatePillForeground}}" />
                 </Border>
-              </StackPanel>
+              </Grid>
             </StackPanel>
 
             <!--
@@ -323,7 +389,8 @@
               </Grid>
 
               <Grid ColumnDefinitions="*,2*">
-                <StackPanel Grid.Column="0" Spacing="3">
+                <StackPanel Grid.Column="0" Spacing="3"
+                            ToolTip.Tip="{Binding SelectedProfile.PingTooltip}">
                   <TextBlock Text="{loc:Translate profile.ping}" Classes="overline" />
                   <TextBlock Classes="body" Text="{Binding SelectedProfile.PingDisplay}" />
                 </StackPanel>
@@ -352,34 +419,40 @@
               <Border Classes="divider" />
             </StackPanel>
 
+            <!--
+              Every value wraps. The labels are translated and the values are free text or an
+              address of unknown length, so a row that only fits the English label and a short
+              address is a row that will eventually be too narrow for somebody.
+            -->
             <StackPanel Spacing="11">
-              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+              <Grid ColumnDefinitions="104,*" ColumnSpacing="12">
                 <TextBlock Grid.Column="0" Text="{loc:Translate profile.localAddress}" Classes="muted"
-                           MinWidth="104" />
-                <TextBlock Grid.Column="1" Classes="body"
+                           TextWrapping="Wrap" />
+                <TextBlock Grid.Column="1" Classes="body" TextWrapping="Wrap"
                            Text="{Binding SelectedProfile.LocalAddressDisplay}" />
               </Grid>
-              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+              <Grid ColumnDefinitions="104,*" ColumnSpacing="12">
                 <TextBlock Grid.Column="0" Text="{loc:Translate profile.server}" Classes="muted"
-                           MinWidth="104" />
-                <TextBlock Grid.Column="1" Classes="body"
+                           TextWrapping="Wrap" />
+                <TextBlock Grid.Column="1" Classes="body" TextWrapping="Wrap"
                            Text="{Binding SelectedProfile.ServerDisplay}" />
               </Grid>
-              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+              <Grid ColumnDefinitions="104,*" ColumnSpacing="12">
                 <TextBlock Grid.Column="0" Text="{loc:Translate profile.signIn}" Classes="muted"
-                           MinWidth="104" />
-                <TextBlock Grid.Column="1" Classes="body"
+                           TextWrapping="Wrap" />
+                <TextBlock Grid.Column="1" Classes="body" TextWrapping="Wrap"
                            Text="{Binding SelectedProfile.AuthenticationDisplay}" />
               </Grid>
-              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+              <Grid ColumnDefinitions="104,*" ColumnSpacing="12">
                 <TextBlock Grid.Column="0" Text="{loc:Translate profile.lastUsed}" Classes="muted"
-                           MinWidth="104" />
-                <TextBlock Grid.Column="1" Classes="body"
+                           TextWrapping="Wrap" />
+                <TextBlock Grid.Column="1" Classes="body" TextWrapping="Wrap"
                            Text="{Binding SelectedProfile.LastConnectedDisplay}" />
               </Grid>
-              <Grid ColumnDefinitions="104,*" IsVisible="{Binding SelectedProfile.HasTags}">
+              <Grid ColumnDefinitions="104,*" ColumnSpacing="12"
+                    IsVisible="{Binding SelectedProfile.HasTags}">
                 <TextBlock Grid.Column="0" Text="{loc:Translate nav.tags}" Classes="muted"
-                           MinWidth="104" />
+                           TextWrapping="Wrap" />
                 <TextBlock Grid.Column="1" Classes="body" TextWrapping="Wrap"
                            Text="{Binding SelectedProfile.TagsDisplay}" />
               </Grid>
@@ -420,7 +493,7 @@
     </Grid>
 
     <!-- Status bar -->
-    <Border Grid.Row="2" Background="{DynamicResource SurfaceSidebar}"
+    <Border Grid.Row="3" Background="{DynamicResource SurfaceSidebar}"
             BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
             Padding="18,8">
       <Grid ColumnDefinitions="*,Auto">

@@ -202,6 +202,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     public partial string LogLevel { get; set; } = "Information";
 
+    /// <summary>
+    /// How many days of log files are kept. Zero keeps them until somebody removes them.
+    /// </summary>
+    [ObservableProperty]
+    public partial int LogRetentionDays { get; set; }
+
     [ObservableProperty]
     public partial int StoredSecretCount { get; set; }
 
@@ -301,6 +307,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         OpenVpnPath = draft.Advanced.OpenVpnPath ?? string.Empty;
         OpenVpnVerbosity = draft.Advanced.OpenVpnVerbosity;
         LogLevel = draft.Advanced.LogLevel;
+        LogRetentionDays = draft.Advanced.LogRetentionDays;
     }
 
     private void WriteToDraft()
@@ -334,6 +341,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         draft.Advanced.OpenVpnPath = string.IsNullOrWhiteSpace(OpenVpnPath) ? null : OpenVpnPath.Trim();
         draft.Advanced.OpenVpnVerbosity = Math.Clamp(OpenVpnVerbosity, 0, 11);
         draft.Advanced.LogLevel = LogLevel;
+        draft.Advanced.LogRetentionDays = Math.Clamp(LogRetentionDays, 0, 365);
     }
 
     /// <summary>

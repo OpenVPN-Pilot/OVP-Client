@@ -1,6 +1,8 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using Avalonia.Platform;
+using OpenVpnPilot.App.Services;
 using OpenVpnPilot.App.ViewModels;
 
 namespace OpenVpnPilot.App.Views;
@@ -21,6 +23,20 @@ public partial class QuickSwitcherWindow : Window
         Deactivated += (_, _) => Close();
     }
 
+    /// <summary>
+    /// Raised when the palette was moved to another display, carrying its identity.
+    /// </summary>
+    /// <remarks>
+    /// The window moves itself, because placing a window is a windowing operation, and reports the
+    /// choice rather than writing it. What is remembered and where is not the window's business.
+    /// </remarks>
+    public event EventHandler<string>? ScreenChosen;
+
+    /// <summary>
+    /// The display the palette should open on, or null to use the one the pointer is on.
+    /// </summary>
+    public string? PreferredScreen { get; set; }
+
     private void InitializeComponent()
     {
         AvaloniaXamlLoader.Load(this);
@@ -32,8 +48,53 @@ public partial class QuickSwitcherWindow : Window
     {
         base.OnOpened(e);
 
+        PlaceOn(ScreenPlacement.Match(Displays, PreferredScreen) ?? Current);
+
         Activate();
         this.FindControl<TextBox>("QueryBox")?.Focus();
+    }
+
+    /// <summary>
+    /// Moves the palette one display along and remembers where it went.
+    /// </summary>
+    private void MoveToAdjacentScreen(int direction)
+    {
+        if (ScreenPlacement.Step(Displays, Current, direction) is not { } target)
+        {
+            return;
+        }
+
+        PlaceOn(target);
+        ScreenChosen?.Invoke(this, ScreenPlacement.Identify(target));
+    }
+
+    /// <summary>
+    /// The displays, read once through the framework and reasoned about afterwards.
+    /// </summary>
+    private IReadOnlyList<ScreenInfo> Displays => ScreenInfo.From(Screens.All);
+
+    /// <summary>
+    /// The display the palette is on, when the platform can say.
+    /// </summary>
+    /// <remarks>
+    /// The primary display is the fallback rather than nothing, because the window is placed
+    /// manually: without an answer here it would open in the top left corner of the desktop.
+    /// </remarks>
+    private ScreenInfo? Current
+    {
+        get
+        {
+            Screen? screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            return screen is null ? null : ScreenInfo.From(screen);
+        }
+    }
+
+    private void PlaceOn(ScreenInfo? screen)
+    {
+        if (screen is { } target)
+        {
+            ScreenPlacement.CentreOn(this, target);
+        }
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
@@ -66,6 +127,13 @@ public partial class QuickSwitcherWindow : Window
                 // Only where choosing several is the point. In the connect palette a space belongs
                 // to whatever is being typed.
                 ViewModel.ToggleTick();
+                e.Handled = true;
+                return;
+
+            // Alt and an arrow moves the palette between displays. The arrows on their own move the
+            // selection, which is why the modifier is checked before them rather than after.
+            case Key.Left or Key.Right when e.KeyModifiers.HasFlag(KeyModifiers.Alt):
+                MoveToAdjacentScreen(e.Key == Key.Right ? 1 : -1);
                 e.Handled = true;
                 return;
 

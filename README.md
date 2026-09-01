@@ -52,13 +52,19 @@ process doing the tunnelling and replaces the interface around it.
 - Live figures per tunnel: throughput, uptime, round trip, assigned address, pushed routes and DNS
 - Credentials kept in the operating system keystore, never in a file on disk
 - One time codes, both the kind presented up front and the kind raised after a refusal
-- Session history with durations and transfer volumes, exportable as CSV
+- Session history with durations and transfer volumes, exportable as CSV and clearable by filter
+- A live log window carrying both this application's own record and OpenVPN's, filterable by source,
+  level and text, written to one file per day and kept for as long as you say
 - Bulk import from files, folders and ZIP archives, plus watched folders that keep profiles in sync
 - Export as plain configurations, or as an encrypted `.ovppkg` package for another machine, which
   can carry the saved sign ins so a whole set arrives ready to connect
 - A command line on both the application and `ovp`, so other software can bring a tunnel up before
   it needs one
 - Notifications for connected, lost, reconnecting and failed, suppressible per event
+- A check at startup and before every connection that says which dependency is missing, rather than
+  failing when a tunnel is asked for
+- The quick menus open on the display you left them on, and move between displays with alt and an
+  arrow key
 - Dark, light and system themes, autostart, bounded auto reconnect
 - English and German, and a new language is a JSON file rather than a new build
 
@@ -238,6 +244,10 @@ configuration you gave it plus a fixed set of options:
 --management-hold --management-forget-disconnect --auth-retry interact --verb 3
 ```
 
+The verbosity is the one part of that line you can change, under **Settings, Advanced**. Three
+carries the state changes, the push reply and the reason a handshake failed, which is what the
+client reads and what the log window shows; raise it only while looking into something.
+
 The management interface is how the client drives the tunnel and the only way a credential ever
 reaches OpenVPN; its password is generated per connection and passed on standard input, so it never
 touches disk. Nothing else is added unless it was asked for:
@@ -272,7 +282,7 @@ machine still keeps each person's profiles apart.
 | Profiles, tags and history | `%LOCALAPPDATA%\OpenVpnPilot\pilot.db` |
 | Settings | `%LOCALAPPDATA%\OpenVpnPilot\settings.json`, editable by hand |
 | Credentials | `%LOCALAPPDATA%\OpenVpnPilot\secrets\`, one protected file each |
-| Logs | `%LOCALAPPDATA%\OpenVpnPilot\logs\` |
+| Logs | `%LOCALAPPDATA%\OpenVpnPilot\logs\`, one `yyyy-MM-dd.log` per day |
 | Added languages | `%LOCALAPPDATA%\OpenVpnPilot\lang\` |
 | Configurations while connected | `%ProgramData%\OpenVpnPilot\runtime\<user SID>\` |
 
@@ -286,6 +296,7 @@ The registry holds settings that have nowhere else to go:
 | Key | Written by | What for |
 | --- | --- | --- |
 | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` | the application | The autostart entry, only while "start with Windows" is on. Removing it turns autostart off. |
+| `HKCU\Software\Classes\AppUserModelId\OpenVpnPilot` | the application | The name and icon Windows shows above a notification. Without it the notification centre labels every message with a generated identifier. |
 | `HKLM\Software\OpenVpnPilot` | the installer | Two markers so the Start menu entry and the PATH entry can be removed again. |
 | `HKLM\...\Uninstall\<product code>` | Windows | The entry under Apps and features. |
 | `HKLM\SOFTWARE\OpenVPN` | nobody, it is only read | Where OpenVPN Community says it is installed, and which group the interactive service authorises. |

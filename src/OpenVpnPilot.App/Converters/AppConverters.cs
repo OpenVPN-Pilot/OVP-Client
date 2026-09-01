@@ -2,6 +2,7 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
+using OpenVpnPilot.App.Services;
 using OpenVpnPilot.Core.Vpn;
 
 namespace OpenVpnPilot.App.Converters;
@@ -63,6 +64,18 @@ public static class AppConverters
     /// </summary>
     public static readonly IValueConverter CountBadge = new FuncValueConverter<int, string>(
         static count => count == 0 ? string.Empty : count.ToString(CultureInfo.CurrentCulture));
+
+    /// <summary>
+    /// Colour of a log line, so a warning and a failure stand out of a long list.
+    /// </summary>
+    public static readonly IValueConverter LogLevelBrush =
+        new FuncValueConverter<LogEntryLevel, IBrush?>(level => Resource(level switch
+        {
+            LogEntryLevel.Warning => "StatePending",
+            LogEntryLevel.Error or LogEntryLevel.Fatal => "StateFailed",
+            LogEntryLevel.Trace or LogEntryLevel.Debug => "TextTertiary",
+            _ => "TextSecondary",
+        }));
 
     private static string BrushKeyFor(VpnConnectionState state) => state switch
     {

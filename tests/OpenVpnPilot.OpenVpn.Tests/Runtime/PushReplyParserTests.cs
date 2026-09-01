@@ -33,6 +33,33 @@ public sealed class PushReplyParserTests
         Assert.Equal("10.8.0.5", options.Gateway);
     }
 
+    /// <summary>
+    /// Under topology subnet the second value of ifconfig is the netmask, not the peer.
+    /// </summary>
+    /// <remarks>
+    /// Taking it anyway produced a gateway of 255.255.255.0, which nothing answers, so the round
+    /// trip silently reported that the tunnel never replies.
+    /// </remarks>
+    [Fact]
+    public void Parse_WithANetmaskInsteadOfAPeer_NamesNoGateway()
+    {
+        PushedOptions options = Assert.IsType<PushedOptions>(PushReplyParser.Parse(
+            "PUSH: Received control message: 'PUSH_REPLY,ifconfig 10.8.0.6 255.255.255.0'"));
+
+        Assert.Null(options.Gateway);
+    }
+
+    [Theory]
+    [InlineData("255.255.255.0", true)]
+    [InlineData("255.255.0.0", true)]
+    [InlineData("255.255.255.252", true)]
+    [InlineData("0.0.0.0", true)]
+    [InlineData("10.8.0.5", false)]
+    [InlineData("255.0.255.0", false)]
+    [InlineData("not an address", false)]
+    public void IsNetmask_SeparatesAMaskFromAnAddress(string value, bool expected) =>
+        Assert.Equal(expected, PushReplyParser.IsNetmask(value));
+
     [Fact]
     public void Parse_WithoutARedirect_DoesNotClaimTheServerAskedForOne()
     {

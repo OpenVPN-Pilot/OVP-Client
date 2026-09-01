@@ -122,6 +122,16 @@ public partial class App : Application
     {
         IServiceProvider services = host!.Services;
 
+        // The log first, so what the other services do on their way up is recorded rather than
+        // being the part of the startup nothing kept.
+        services.GetRequiredService<LogSettingsApplier>().Attach();
+        services.GetRequiredService<OpenVpnLogRelay>().Attach();
+
+        AppLog.Started(
+            services.GetRequiredService<ILogger<App>>(),
+            typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown",
+            Environment.OSVersion.VersionString);
+
         services.GetRequiredService<SessionRecorder>().Attach();
         services.GetRequiredService<PingMonitor>().Start();
 
@@ -188,6 +198,10 @@ public partial class App : Application
     {
         await viewModel.LoadAsync();
         host!.Services.GetRequiredService<RemoteCommandHandler>().IsReady = true;
+
+        // After the list, not before it. The window should appear at once; whether OpenVPN is
+        // installed is worth knowing a moment later and is not worth waiting for a pipe to answer.
+        await viewModel.RefreshEnvironmentAsync();
     }
 
     /// <summary>
@@ -306,8 +320,13 @@ public partial class App : Application
         RunStep(logger, started, "ping", async () => await services.GetRequiredService<PingMonitor>().DisposeAsync());
         RunStep(logger, started, "watched folders", async () => await services.GetRequiredService<WatchedFolderMonitor>().DisposeAsync());
         RunStep(logger, "tray icon", () => services.GetRequiredService<TrayIconController>().Dispose());
+        RunStep(logger, "log relay", () => services.GetRequiredService<OpenVpnLogRelay>().Dispose());
+        RunStep(logger, "log settings", () => services.GetRequiredService<LogSettingsApplier>().Dispose());
 
         AppLog.ShutdownCompleted(logger, (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+
+        // After the last line worth writing, and before the container that owns the file handle goes.
+        RunStep(logger, started, "log", async () => await services.GetRequiredService<LogHub>().DisposeAsync());
 
         IHost stopping = host;
         host = null;

@@ -7,6 +7,20 @@ namespace OpenVpnPilot.App;
 /// </summary>
 internal static partial class AppLog
 {
+    /// <summary>
+    /// The first line of every day's log.
+    /// </summary>
+    /// <remarks>
+    /// A log that begins in the middle of whatever went wrong cannot say whether the application had
+    /// been running for a week or had just started, and cannot say which build produced the lines
+    /// below it. Both are the first two questions anybody reading it asks.
+    /// </remarks>
+    [LoggerMessage(
+        EventId = 2999,
+        Level = LogLevel.Information,
+        Message = "OpenVpnPilot {Version} started on {Platform}.")]
+    public static partial void Started(ILogger logger, string version, string platform);
+
     [LoggerMessage(
         EventId = 3000,
         Level = LogLevel.Information,

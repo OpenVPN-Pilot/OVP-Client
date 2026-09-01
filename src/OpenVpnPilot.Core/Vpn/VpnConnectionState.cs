@@ -131,6 +131,20 @@ public sealed record VpnConnectionStatus
     public bool PingFailed { get; init; }
 
     /// <summary>
+    /// The address the round trip was measured against.
+    /// </summary>
+    /// <remarks>
+    /// Shown alongside the figure. A round trip without its target cannot be checked against
+    /// anything, and a number nobody can check is a number nobody should be asked to believe.
+    /// </remarks>
+    public string? PingTarget { get; init; }
+
+    /// <summary>
+    /// What the measured address is, which decides what the figure means.
+    /// </summary>
+    public PingTargetKind PingTargetKind { get; init; } = PingTargetKind.None;
+
+    /// <summary>
     /// Why the connection ended, when it ended for a reason worth acting on.
     /// </summary>
     /// <remarks>
@@ -148,6 +162,35 @@ public sealed record VpnConnectionStatus
 
     public static VpnConnectionStatus Disconnected { get; } =
         new() { State = VpnConnectionState.Disconnected };
+}
+
+/// <summary>
+/// What a round trip was measured against.
+/// </summary>
+/// <remarks>
+/// The two are different measurements and the difference is large enough to be noticed: the gateway
+/// is reached through the tunnel and carries the encapsulation with it, while the server's public
+/// address is reached over the ordinary route and says only how far away the endpoint is. Reporting
+/// a figure without saying which one it is invites the user to compare it with a terminal ping and
+/// conclude the client is lying.
+/// </remarks>
+public enum PingTargetKind
+{
+    /// <summary>
+    /// Nothing has been measured, because nothing worth measuring is known yet.
+    /// </summary>
+    None,
+
+    /// <summary>
+    /// The far end of the tunnel. The figure is the round trip through the tunnel.
+    /// </summary>
+    TunnelGateway,
+
+    /// <summary>
+    /// The server's public address, reached outside the tunnel. Used when the server names no
+    /// gateway, which is the only case where there would otherwise be nothing to measure at all.
+    /// </summary>
+    ServerEndpoint,
 }
 
 /// <summary>

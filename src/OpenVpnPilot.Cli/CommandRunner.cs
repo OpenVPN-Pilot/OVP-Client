@@ -89,23 +89,12 @@ internal static class CommandRunner
     [SupportedOSPlatform("windows")]
     private static async Task<int> RunDoctorAsync()
     {
-        WindowsOpenVpnEnvironmentProbe probe = new(new InteractiveServicePipeClient());
-        OpenVpnEnvironmentReport report = await probe.ProbeAsync();
+        OpenVpnEnvironmentReport report = await EnvironmentReadiness.ProbeAsync();
 
         Console.WriteLine("OpenVPN environment");
         Console.WriteLine();
 
-        foreach (EnvironmentCheck check in report.Checks)
-        {
-            string marker = check.Status switch
-            {
-                EnvironmentCheckStatus.Passed => "ok  ",
-                EnvironmentCheckStatus.Warning => "warn",
-                _ => "fail",
-            };
-
-            Console.WriteLine($"  [{marker}] {check.Id,-19} {check.Detail}");
-        }
+        EnvironmentReadiness.WriteChecks(report);
 
         Console.WriteLine();
 
@@ -113,8 +102,7 @@ internal static class CommandRunner
         {
             Console.WriteLine("Result: connections are not possible until the failures above are resolved.");
             Console.WriteLine();
-            Console.WriteLine("OpenVPN Community can be installed from https://openvpn.net/community-downloads/");
-            Console.WriteLine("Make sure the OpenVPN Interactive Service component is included.");
+            EnvironmentReadiness.WriteGuidance();
             return 2;
         }
 

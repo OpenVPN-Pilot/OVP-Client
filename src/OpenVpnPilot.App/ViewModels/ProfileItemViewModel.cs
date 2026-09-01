@@ -129,6 +129,7 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(ServerDisplay))]
     [NotifyPropertyChangedFor(nameof(UptimeDisplay))]
     [NotifyPropertyChangedFor(nameof(PingDisplay))]
+    [NotifyPropertyChangedFor(nameof(PingTooltip))]
     [NotifyPropertyChangedFor(nameof(RoutesDisplay))]
     [NotifyPropertyChangedFor(nameof(DnsDisplay))]
     [NotifyPropertyChangedFor(nameof(HasPushedOptions))]
@@ -186,6 +187,23 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     public string PingDisplay => Status.PingMilliseconds is { } milliseconds
         ? string.Create(CultureInfo.InvariantCulture, $"{milliseconds:0} ms")
         : Status.PingFailed ? localizer["profile.noReply"] : "-";
+
+    /// <summary>
+    /// Says which address the round trip was measured against and what that makes the figure.
+    /// </summary>
+    /// <remarks>
+    /// Without this the number cannot be checked. The two targets differ by more than measurement
+    /// noise, so someone comparing the figure with a terminal ping has to be able to see which
+    /// question was answered.
+    /// </remarks>
+    public string PingTooltip => Status.PingTargetKind switch
+    {
+        PingTargetKind.TunnelGateway =>
+            localizer.Translate("profile.pingViaTunnel", Status.PingTarget ?? string.Empty),
+        PingTargetKind.ServerEndpoint =>
+            localizer.Translate("profile.pingViaServer", Status.PingTarget ?? string.Empty),
+        _ => localizer["profile.pingNoTarget"],
+    };
 
     public bool HasPushedOptions =>
         Status.PushedRoutes.Count > 0 || Status.PushedDnsServers.Count > 0;

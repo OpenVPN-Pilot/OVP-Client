@@ -291,6 +291,9 @@ public sealed class SessionRecorderTests
 
         public Task<int> PruneAsync(DateTimeOffset olderThan, CancellationToken cancellationToken = default) =>
             Task.FromResult(0);
+
+        public Task<int> DeleteAsync(SessionQuery query, CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
     }
 
     private sealed class RecordedSession

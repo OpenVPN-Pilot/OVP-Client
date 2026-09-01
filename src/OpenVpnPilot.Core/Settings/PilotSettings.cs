@@ -59,7 +59,59 @@ public sealed class GeneralSettings
     /// </summary>
     public bool CloseToTray { get; set; } = true;
 
-    public GeneralSettings Clone() => (GeneralSettings)MemberwiseClone();
+    /// <summary>
+    /// Which display the quick menus open on. Null uses the one the pointer is on.
+    /// </summary>
+    /// <remarks>
+    /// Stored as the display's own name and the corner it occupies rather than as an index, because
+    /// an index changes the moment a monitor is unplugged or the arrangement is altered, and the
+    /// palette would then open somewhere the user never chose.
+    /// </remarks>
+    public string? QuickMenuScreen { get; set; }
+
+    /// <summary>
+    /// Where the main window was left. Restored on the next start.
+    /// </summary>
+    public WindowPlacementSettings MainWindow { get; set; } = new();
+
+    public GeneralSettings Clone()
+    {
+        GeneralSettings copy = (GeneralSettings)MemberwiseClone();
+
+        // A memberwise copy shares the nested object, which would let a settings screen editing a
+        // draft write the window placement straight into the live settings.
+        copy.MainWindow = MainWindow.Clone();
+        return copy;
+    }
+}
+
+/// <summary>
+/// Where a window was and how large it was.
+/// </summary>
+/// <remarks>
+/// Kept as plain numbers rather than as a platform rectangle so the settings file stays readable and
+/// the type stays free of a windowing framework. Every value is optional: a placement that was never
+/// recorded, or one that belongs to a monitor that is no longer there, means the window opens where
+/// it would have without this.
+/// </remarks>
+public sealed class WindowPlacementSettings
+{
+    public int? X { get; set; }
+
+    public int? Y { get; set; }
+
+    public int? Width { get; set; }
+
+    public int? Height { get; set; }
+
+    public bool Maximised { get; set; }
+
+    /// <summary>
+    /// True when there is enough here to restore anything.
+    /// </summary>
+    public bool HasPosition => X is not null && Y is not null;
+
+    public WindowPlacementSettings Clone() => (WindowPlacementSettings)MemberwiseClone();
 }
 
 public sealed class AppearanceSettings
@@ -189,6 +241,16 @@ public sealed class AdvancedSettings
     /// Minimum level written to the application log.
     /// </summary>
     public string LogLevel { get; set; } = "Information";
+
+    /// <summary>
+    /// How many days of log files to keep. Zero keeps them until somebody removes them.
+    /// </summary>
+    /// <remarks>
+    /// A week is enough to look into something that happened over a weekend and short enough that
+    /// the directory does not grow without anybody deciding that it should. The logs name profiles
+    /// and hosts, so keeping them forever by default would be a decision made on the user's behalf.
+    /// </remarks>
+    public int LogRetentionDays { get; set; } = 7;
 
     /// <summary>
     /// Keep the database, logs and settings beside the executable instead of under the user profile.

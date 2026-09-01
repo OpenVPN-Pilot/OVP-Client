@@ -38,6 +38,7 @@ public sealed class MainWindowViewModelTests : IAsyncLifetime
             new ProfileNameCache(),
             new FakeSettingsService(),
             new FakeSecrets(),
+            ReadyEnvironmentProbe.Gate(),
             new StubLocalizer(),
             TimeProvider.System);
 

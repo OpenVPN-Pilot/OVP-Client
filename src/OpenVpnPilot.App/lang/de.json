@@ -44,7 +44,9 @@
       "recent": "Zuletzt verwendet",
       "history": "Verlauf",
       "new": "Neu",
-      "markSeen": "Als gesehen markieren"
+      "markSeen": "Als gesehen markieren",
+      "log": "Protokoll",
+      "logHint": "Alles, was diese Anwendung und OpenVPN aufzeichnen, während es geschieht. Pro Tag wird eine Datei neben dem Profilspeicher abgelegt."
     },
     "profile": {
       "connect": "Verbinden",
@@ -70,7 +72,10 @@
       "compressionRefused": "Dieser Server schickt eine Komprimierungseinstellung, und ein aktueller OpenVPN-Client kann keine davon anwenden, auch keine, die Komprimierung ausschaltet. Er verwirft stattdessen alle übermittelten Optionen, deshalb kommt der Tunnel nicht zustande. Die Einstellung per pull-filter zu ignorieren ist kein Ausweg: der Tunnel verbindet sich dann und überträgt nichts, weil der Server komprimiert, womit der Client nicht mehr rechnet. Das kann nur der Server beheben, indem er keine Komprimierung schickt.",
       "defaultRouteRefused": "Der Server wollte den gesamten Verkehr übernehmen. Dieses Profil ignoriert das, daher behält der Host seine eigene Standardroute. Ändern Sie es im Profil, wenn der Tunnel alles tragen soll.",
       "signInAgain": "Neu anmelden",
-      "signInAgainHint": "Vergisst die für dieses Profil gespeicherten Anmeldedaten, sodass die nächste Verbindung danach fragt. Nützlich, wenn sich das Passwort auf dem Server geändert hat."
+      "signInAgainHint": "Vergisst die für dieses Profil gespeicherten Anmeldedaten, sodass die nächste Verbindung danach fragt. Nützlich, wenn sich das Passwort auf dem Server geändert hat.",
+      "pingViaTunnel": "Gemessen gegen das Tunnel-Gateway {0}, das ist also die Laufzeit durch den Tunnel.",
+      "pingViaServer": "Dieser Server nennt kein Tunnel-Gateway, deshalb wird gegen den Server selbst gemessen, {0}, über die gewöhnliche Route statt durch den Tunnel.",
+      "pingNoTarget": "Es wurde noch nichts gemessen."
     },
     "state": {
       "connected": "Verbunden",
@@ -228,7 +233,9 @@
       "diagnosticsHint": "Fasst den Umgebungsbericht, die Protokolle und eine Profilliste in einem Archiv für eine Supportanfrage zusammen. Konfigurationen und Anmeldedaten sind nie enthalten.",
       "diagnosticsWritten": "{0} Einträge nach {1} geschrieben.",
       "notifyConnecting": "Verbindung wird aufgebaut",
-      "diagnosticsPrivacy": "Ein Paket ist nicht anonym. Es enthält Profilnamen, Hostnamen und Ports der Gegenstellen, Dateipfade mit Ihrem Windows-Benutzernamen sowie Protokollzeilen, die dasselbe nennen. Es enthält nie Konfigurationen, private Schlüssel oder Anmeldedaten. Sehen Sie es durch, bevor Sie es weitergeben."
+      "diagnosticsPrivacy": "Ein Paket ist nicht anonym. Es enthält Profilnamen, Hostnamen und Ports der Gegenstellen, Dateipfade mit Ihrem Windows-Benutzernamen sowie Protokollzeilen, die dasselbe nennen. Es enthält nie Konfigurationen, private Schlüssel oder Anmeldedaten. Sehen Sie es durch, bevor Sie es weitergeben.",
+      "logRetention": "Protokolldateien aufbewahren, in Tagen",
+      "logRetentionHint": "Null behält sie, bis sie von Hand entfernt werden. Ein Protokoll nennt Profile, Hosts und Dateipfade mit Ihrem Benutzernamen, deshalb ist eine kurze Aufbewahrung die sicherere Voreinstellung."
     },
     "hotkey": {
       "unbound": "Nicht gesetzt",
@@ -275,7 +282,12 @@
         "AuthenticationFailed": "Anmeldung abgelehnt",
         "Error": "Fehler",
         "ApplicationClosed": "Anwendung beendet"
-      }
+      },
+      "clear": "Leeren",
+      "clearConfirm": "Das Löschen des Verlaufs lässt sich nicht rückgängig machen. Die Sitzungen des aktuellen Filters entfernen oder den ganzen Verlauf?",
+      "clearFiltered": "Aktuelle Auswahl löschen",
+      "clearEverything": "Alles löschen",
+      "cleared": "{0} Sitzung(en) entfernt."
     },
     "import": {
       "pickFiles": "Dateien hinzufügen",
@@ -361,6 +373,42 @@
       "credentialsAvailable": "{0} gespeicherte Anmeldung(en) gehören zu den gewählten Profilen.",
       "credentialsWarning": "Wer diese Datei und ihre Passphrase hat, kann sich als Sie verbinden. Geben Sie die Passphrase getrennt vom Paket weiter, und löschen Sie Gespeichertes auf der Seite Anmeldedaten in den Einstellungen, wenn das nicht gewollt ist.",
       "configurationsWritten": "{0} Konfiguration(en) nach {1} geschrieben."
+    },
+    "environment": {
+      "title": "OpenVPN ist auf diesem Rechner nicht einsatzbereit",
+      "hint": "Installieren Sie OpenVPN Community und achten Sie darauf, die Komponente OpenVPN Interactive Service mit aufzunehmen. Vorher lässt sich kein Tunnel starten.",
+      "download": "OpenVPN holen",
+      "recheck": "Erneut prüfen",
+      "ready": "Alles, was OpenVPN braucht, ist vorhanden.",
+      "cannotConnect": "Es kann nichts verbunden werden, solange das im Hinweis Genannte nicht behoben ist.",
+      "installation": "OpenVPN Community ist nicht installiert. ({0})",
+      "executable": "Die in der Registrierung genannte openvpn-Datei fehlt. ({0})",
+      "version": "Das installierte OpenVPN ist älter, als dieser Client unterstützt. ({0})",
+      "interactiveService": "Der OpenVPN Interactive Service läuft nicht. Er ist eine Komponente des OpenVPN-Installers und sorgt dafür, dass ein Tunnel startet, ohne jedes Mal nach Administratorrechten zu fragen. ({0})",
+      "servicePipe": "Der OpenVPN Interactive Service ist nicht erreichbar. ({0})",
+      "authorisation": "Profile lassen sich nur aus dem OpenVPN-Konfigurationsverzeichnis starten. ({0})",
+      "conflictingProduct": "Es wurde ein anderes OpenVPN-Produkt gefunden. ({0})"
+    },
+    "log": {
+      "title": "Protokoll",
+      "search": "Text durchsuchen",
+      "follow": "Mitlaufen",
+      "sourceAll": "Beide Protokolle",
+      "sourcePilot": "Nur diese Anwendung",
+      "sourceOpenVpn": "Nur OpenVPN",
+      "levelAll": "Alles",
+      "levelDebug": "Debug und höher",
+      "levelInformation": "Information und höher",
+      "levelWarning": "Warnungen und Fehler",
+      "levelError": "Nur Fehler",
+      "empty": "Nichts anzuzeigen. OpenVPN schreibt nur, solange ein Tunnel läuft, und die Anwendung schreibt, wenn etwas geschieht.",
+      "showing": "{0} Zeile(n) angezeigt.",
+      "save": "Speichern unter...",
+      "saved": "{0} Zeile(n) nach {1} geschrieben.",
+      "openFolder": "Ordner öffnen",
+      "clearView": "Ansicht leeren",
+      "viewCleared": "Die Ansicht wurde geleert. Die Dateien sind unberührt.",
+      "retentionHint": "Eine Datei pro Tag, benannt nach diesem Tag, aufbewahrt so lange, wie es die Einstellungen sagen."
     }
   }
 }

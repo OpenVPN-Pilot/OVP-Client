@@ -19,6 +19,8 @@ using OpenVpnPilot.Platform.Windows.Runtime;
 using OpenVpnPilot.Platform.Windows.Security;
 using OpenVpnPilot.Platform.Windows.Shell;
 using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 
 namespace OpenVpnPilot.App;
 
@@ -33,7 +35,17 @@ internal static class AppHost
 
         HostApplicationBuilder builder = Host.CreateApplicationBuilder();
 
-        ConfigureLogging(builder, paths);
+        // Built before the logger, because the logger writes into it. Both are handed to the
+        // container afterwards so that everything else reaches them the ordinary way.
+        LogHub hub = new(paths.LogDirectory);
+        LoggingLevelSwitch levelSwitch = new(LogEventLevel.Information);
+
+        ConfigureLogging(builder, paths, hub, levelSwitch);
+
+        builder.Services.AddSingleton(hub);
+        builder.Services.AddSingleton(levelSwitch);
+        builder.Services.AddSingleton<LogSettingsApplier>();
+        builder.Services.AddSingleton<OpenVpnLogRelay>();
 
         builder.Services.AddSingleton<IApplicationPaths>(paths);
         builder.Services.AddSingleton(TimeProvider.System);
@@ -49,6 +61,7 @@ internal static class AppHost
         builder.Services.AddSingleton<IWatchedFolderStore, WatchedFolderStore>();
         builder.Services.AddSingleton<WatchedFolderMonitor>();
         builder.Services.AddSingleton<DiagnosticsBundle>();
+        builder.Services.AddSingleton<EnvironmentGate>();
 
         RegisterSettings(builder.Services, paths);
         RegisterLocalization(builder.Services, paths);
@@ -91,6 +104,7 @@ internal static class AppHost
         // closed without saving does not reopen with the abandoned edits still in it.
         builder.Services.AddTransient<SettingsViewModel>();
         builder.Services.AddTransient<HistoryViewModel>();
+        builder.Services.AddTransient<LogViewModel>();
         builder.Services.AddTransient<ImportViewModel>();
         builder.Services.AddTransient<ExportViewModel>();
 
@@ -139,17 +153,45 @@ internal static class AppHost
             provider => provider.GetRequiredService<WindowsTrayIcon>());
     }
 
-    private static void ConfigureLogging(HostApplicationBuilder builder, UserApplicationPaths paths)
+    /// <summary>
+    /// Sets up the log, which is one stream, one file per day and one level switch.
+    /// </summary>
+    /// <remarks>
+    /// The level is a switch rather than a fixed minimum because the setting that chooses it is read
+    /// from a file that is loaded after the container is built. Fixing it here is what made that
+    /// setting decorative: it was stored, shown in the settings screen, and never applied.
+    ///
+    /// Entity Framework logs every command it executes at information level. In a client that reads
+    /// its profile list on every change that is nine tenths of the log by volume, all of it SQL, and
+    /// it buried the handful of lines that say what the application actually did. It is raised to
+    /// warning, where a failing query still appears and a successful one does not.
+    /// </remarks>
+    private static void ConfigureLogging(
+        HostApplicationBuilder builder,
+        UserApplicationPaths paths,
+        LogHub hub,
+        LoggingLevelSwitch levelSwitch)
     {
         Serilog.Core.Logger logger = new LoggerConfiguration()
-            .MinimumLevel.Information()
-            .WriteTo.File(
-                Path.Combine(paths.LogDirectory, "pilot-.log"),
-                rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 14)
+            .MinimumLevel.ControlledBy(levelSwitch)
+            .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
+            .WriteTo.Sink(new LogHubSink(hub))
             .CreateLogger();
 
         builder.Logging.ClearProviders();
         builder.Logging.AddSerilog(logger, dispose: true);
     }
+
+    /// <summary>
+    /// Turns the stored level name into the switch value, defaulting rather than failing.
+    /// </summary>
+    public static LogEventLevel ParseLevel(string? name) => name switch
+    {
+        "Verbose" => LogEventLevel.Verbose,
+        "Debug" => LogEventLevel.Debug,
+        "Warning" => LogEventLevel.Warning,
+        "Error" => LogEventLevel.Error,
+        "Fatal" => LogEventLevel.Fatal,
+        _ => LogEventLevel.Information,
+    };
 }

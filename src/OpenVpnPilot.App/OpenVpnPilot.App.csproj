@@ -15,6 +15,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      The icon also ships as a file. The shell reads it from disk when it looks up the application
+      identity that labels the notifications, and it cannot reach one embedded in the assembly.
+    -->
+    <Content Include="Assets\openvpnpilot.ico" Link="openvpnpilot.ico"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Language files ship beside the executable so a new one can be added without a rebuild. -->
     <Content Include="lang\**\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
@@ -33,6 +42,15 @@
     <PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The choice of ping target is a pure decision with three branches and one of them used to be
+      wrong in a way nothing else revealed. It is internal because nothing outside needs it, and
+      visible to the tests because it is exactly the kind of thing that has to stay covered.
+    -->
+    <InternalsVisibleTo Include="OpenVpnPilot.App.Tests" />
   </ItemGroup>
 
   <ItemGroup>

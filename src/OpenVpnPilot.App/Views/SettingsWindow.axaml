@@ -300,6 +300,16 @@
                         MinWidth="200" HorizontalAlignment="Left" />
             </StackPanel>
 
+            <Grid ColumnDefinitions="220,140">
+              <TextBlock Grid.Column="0" Classes="muted" VerticalAlignment="Center"
+                         TextWrapping="Wrap"
+                         Text="{loc:Translate settings.logRetention}" />
+              <NumericUpDown Grid.Column="1" Minimum="0" Maximum="365" Increment="1"
+                             FormatString="0" Value="{Binding LogRetentionDays}" />
+            </Grid>
+            <TextBlock Text="{loc:Translate settings.logRetentionHint}" Classes="muted"
+                       TextWrapping="Wrap" />
+
             <Border Classes="divider" />
 
             <StackPanel Orientation="Horizontal" Spacing="8">

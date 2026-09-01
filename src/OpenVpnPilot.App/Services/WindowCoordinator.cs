@@ -57,10 +57,21 @@ public sealed class WindowCoordinator
 
         // A copy that started with no window has none to own a dialog. The first time the window is
         // shown, from the notification area or a shortcut, it becomes the one dialogs belong to.
-        mainWindow.Opened += (_, _) => desktop.MainWindow = mainWindow;
+        mainWindow.Opened += (_, _) =>
+        {
+            desktop.MainWindow = mainWindow;
+            ScreenPlacement.Restore(
+                mainWindow,
+                settings.Current.General.MainWindow,
+                ScreenInfo.From(mainWindow.Screens.All));
+        };
 
         mainWindow.Closing += (_, args) =>
         {
+            // First, because the window may be about to be hidden, closed or taken away with the
+            // session, and where it was is worth the same in all three cases.
+            RememberMainWindowPlacement();
+
             switch (DecideClose(args.CloseReason, settings.Current.General.CloseToTray))
             {
                 case CloseIntent.HideToTray:
@@ -82,6 +93,24 @@ public sealed class WindowCoordinator
                     break;
             }
         };
+    }
+
+    /// <summary>
+    /// Records where the main window is, so the next start opens it there.
+    /// </summary>
+    /// <remarks>
+    /// Written without being waited for. This runs while the window is closing, and the alternative
+    /// is blocking the user interface thread on a file write in the middle of a shutdown. A
+    /// placement that does not make it to disk costs the user one window position; a shutdown that
+    /// waits on a locked file costs them the fault dialog on the shutdown screen.
+    /// </remarks>
+    private void RememberMainWindowPlacement()
+    {
+        WindowPlacementSettings placement = ScreenPlacement.Capture(
+            mainWindow,
+            settings.Current.General.MainWindow);
+
+        _ = settings.UpdateAsync(current => current.General.MainWindow = placement);
     }
 
     /// <summary>
@@ -225,6 +254,7 @@ public sealed class WindowCoordinator
         AppScreen.QuickDisconnect => CreateQuickSwitcher(QuickSwitcherMode.Disconnect),
         AppScreen.Settings => CreateSettings(),
         AppScreen.History => CreateHistory(),
+        AppScreen.Log => CreateLog(),
         AppScreen.Import => CreateImport(),
         AppScreen.Export => CreateExport(),
         AppScreen.ProfileEditor => CreateProfileEditor(),
@@ -236,7 +266,17 @@ public sealed class WindowCoordinator
         QuickSwitcherViewModel model = services.GetRequiredService<QuickSwitcherViewModel>();
         model.Reset(viewModel.AllProfiles, mode);
 
-        QuickSwitcherWindow window = new() { DataContext = model };
+        QuickSwitcherWindow window = new()
+        {
+            DataContext = model,
+            PreferredScreen = settings.Current.General.QuickMenuScreen,
+        };
+
+        // Written as soon as it is chosen rather than when the palette closes: the palette closes by
+        // losing the focus, which is also what happens when the machine is locked or the session
+        // ends, and a choice that is only saved on the way out is a choice that is regularly lost.
+        window.ScreenChosen += async (_, identity) =>
+            await settings.UpdateAsync(current => current.General.QuickMenuScreen = identity);
 
         void OnAccepted(object? sender, QuickSwitcherChoice choice)
         {
@@ -299,6 +339,19 @@ public sealed class WindowCoordinator
         HistoryWindow window = new() { DataContext = model };
 
         window.Opened += async (_, _) => await model.LoadAsync();
+
+        return window;
+    }
+
+    private LogWindow CreateLog()
+    {
+        LogViewModel model = services.GetRequiredService<LogViewModel>();
+        LogWindow window = new() { DataContext = model };
+
+        // Attached when the window opens rather than when the view model is built, so a screen that
+        // was closed is not still copying every log line into a list nobody is looking at.
+        window.Opened += (_, _) => model.Attach();
+        window.Closed += (_, _) => model.Dispose();
 
         return window;
     }

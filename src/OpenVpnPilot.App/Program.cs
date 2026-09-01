@@ -62,6 +62,8 @@ internal sealed class Program
             App.InstanceGuard = guard;
             App.Startup = options;
 
+            DeclareApplicationIdentity();
+
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
             return 0;
         }
@@ -115,6 +117,24 @@ internal sealed class Program
         }
 
         return answered ? 0 : NothingListening;
+    }
+
+    /// <summary>
+    /// Tells Windows who this process is, before anything it shows can be attributed to nobody.
+    /// </summary>
+    /// <remarks>
+    /// This has to happen before the first notification and therefore before the framework starts,
+    /// because the shell reads the identity from the process when the notification is raised and a
+    /// process that has none is given a generated one. It is a platform call, so the platform
+    /// neutral part of the application never sees it: on a system that is not Windows there is
+    /// simply nothing to declare.
+    /// </remarks>
+    private static void DeclareApplicationIdentity()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Platform.Windows.Shell.WindowsAppIdentity.Apply("OpenVpnPilot");
+        }
     }
 
     /// <summary>

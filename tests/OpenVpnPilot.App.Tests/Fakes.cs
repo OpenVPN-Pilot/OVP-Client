@@ -261,3 +261,22 @@ internal static class IdleConnections
         public int RemoveStaleFiles() => 0;
     }
 }
+
+/// <summary>
+/// Reports an environment that can connect, so a test is about the view model rather than about
+/// whether the machine running it has OpenVPN installed.
+/// </summary>
+internal sealed class ReadyEnvironmentProbe : IOpenVpnEnvironmentProbe
+{
+    public Task<OpenVpnEnvironmentReport> ProbeAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(new OpenVpnEnvironmentReport(
+        [
+            new EnvironmentCheck(EnvironmentCheckId.Installation, EnvironmentCheckStatus.Passed, "Test"),
+            new EnvironmentCheck(EnvironmentCheckId.InteractiveService, EnvironmentCheckStatus.Passed, "Test"),
+        ]));
+
+    public static EnvironmentGate Gate() => new(
+        new ReadyEnvironmentProbe(),
+        TimeProvider.System,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<EnvironmentGate>.Instance);
+}

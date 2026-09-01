@@ -44,7 +44,9 @@
       "recent": "Recent",
       "history": "History",
       "new": "New",
-      "markSeen": "Mark these as seen"
+      "markSeen": "Mark these as seen",
+      "log": "Log",
+      "logHint": "Everything this application and OpenVPN record, as it happens. One file per day is kept beside the profile store."
     },
     "profile": {
       "connect": "Connect",
@@ -70,7 +72,10 @@
       "compressionRefused": "This server pushed a compression setting, and a current OpenVPN client cannot apply any of them, including one that turns compression off. It refuses the whole set of pushed options instead, which is why the tunnel never comes up. Ignoring the setting with a pull filter is not a way around it: the tunnel then connects and carries nothing, because the server compresses what the client no longer expects. Only the server can fix this, by not pushing compression.",
       "defaultRouteRefused": "The server asked to carry all traffic. This profile ignores that, so the host keeps its own default route. Change it in the profile if the tunnel is meant to carry everything.",
       "signInAgain": "Sign in again",
-      "signInAgainHint": "Forgets the credentials stored for this profile so the next connection asks for them. Use it when the password changed on the server."
+      "signInAgainHint": "Forgets the credentials stored for this profile so the next connection asks for them. Use it when the password changed on the server.",
+      "pingViaTunnel": "Measured against the tunnel gateway {0}, so this is the round trip through the tunnel.",
+      "pingViaServer": "This server names no tunnel gateway, so the round trip is measured against the server itself at {0}, over the ordinary route rather than through the tunnel.",
+      "pingNoTarget": "Nothing has been measured yet."
     },
     "state": {
       "connected": "Connected",
@@ -228,7 +233,9 @@
       "diagnosticsHint": "Collects the environment report, the logs and a profile listing into one archive for a support request. Configurations and credentials are never included.",
       "diagnosticsWritten": "{0} item(s) written to {1}.",
       "notifyConnecting": "Connecting",
-      "diagnosticsPrivacy": "A bundle is not anonymous. It contains profile names, remote host names and ports, file paths that include your Windows user name, and log lines that mention the same. It never contains configurations, private keys or credentials. Read it before sending it on."
+      "diagnosticsPrivacy": "A bundle is not anonymous. It contains profile names, remote host names and ports, file paths that include your Windows user name, and log lines that mention the same. It never contains configurations, private keys or credentials. Read it before sending it on.",
+      "logRetention": "Keep log files for, in days",
+      "logRetentionHint": "Zero keeps them until they are removed by hand. A log names profiles, hosts and file paths that include your user name, so a short retention is the safer default."
     },
     "hotkey": {
       "unbound": "Not set",
@@ -275,7 +282,12 @@
         "AuthenticationFailed": "Sign in refused",
         "Error": "Error",
         "ApplicationClosed": "Application closed"
-      }
+      },
+      "clear": "Clear",
+      "clearConfirm": "Deleting history cannot be undone. Remove the sessions the current filter selects, or the whole history?",
+      "clearFiltered": "Delete the current selection",
+      "clearEverything": "Delete everything",
+      "cleared": "{0} session(s) removed."
     },
     "import": {
       "pickFiles": "Add files",
@@ -361,6 +373,42 @@
       "credentialsAvailable": "{0} saved sign in(s) belong to the selected profiles.",
       "credentialsWarning": "Anyone who has this file and its passphrase can connect as you. Send the passphrase separately from the package, and use the credentials page in the settings to clear what is stored if that is not what you want.",
       "configurationsWritten": "{0} configuration(s) written to {1}."
+    },
+    "environment": {
+      "title": "OpenVPN is not ready on this machine",
+      "hint": "Install OpenVPN Community and make sure the OpenVPN Interactive Service component is included. No tunnel can be started until it is.",
+      "download": "Get OpenVPN",
+      "recheck": "Check again",
+      "ready": "Everything OpenVPN needs is in place.",
+      "cannotConnect": "Nothing can be connected until what the banner reports is resolved.",
+      "installation": "OpenVPN Community is not installed. ({0})",
+      "executable": "The openvpn executable the registry names is missing. ({0})",
+      "version": "The installed OpenVPN is older than this client supports. ({0})",
+      "interactiveService": "The OpenVPN Interactive Service is not running. It is a component of the OpenVPN installer and is what starts a tunnel without asking for administrative rights each time. ({0})",
+      "servicePipe": "The OpenVPN Interactive Service cannot be reached. ({0})",
+      "authorisation": "Profiles can only be started from the OpenVPN configuration directory. ({0})",
+      "conflictingProduct": "A different OpenVPN product was found. ({0})"
+    },
+    "log": {
+      "title": "Log",
+      "search": "Search the text",
+      "follow": "Follow",
+      "sourceAll": "Both logs",
+      "sourcePilot": "This application only",
+      "sourceOpenVpn": "OpenVPN only",
+      "levelAll": "Everything",
+      "levelDebug": "Debug and above",
+      "levelInformation": "Information and above",
+      "levelWarning": "Warnings and errors",
+      "levelError": "Errors only",
+      "empty": "Nothing to show. OpenVPN writes to the log only while a tunnel is running, and the application writes when something happens.",
+      "showing": "{0} line(s) shown.",
+      "save": "Save as...",
+      "saved": "{0} line(s) written to {1}.",
+      "openFolder": "Open folder",
+      "clearView": "Clear view",
+      "viewCleared": "The view was cleared. The files are untouched.",
+      "retentionHint": "One file per day, named for that day, kept for as long as the settings say."
     }
   }
 }

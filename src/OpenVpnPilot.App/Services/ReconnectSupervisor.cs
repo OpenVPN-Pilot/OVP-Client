@@ -160,6 +160,7 @@ public sealed class ReconnectSupervisor : IDisposable
                 preferences.ConnectTimeoutSeconds > 0
                     ? TimeSpan.FromSeconds(preferences.ConnectTimeoutSeconds)
                     : null,
+                settings.Current.Advanced.OpenVpnVerbosity,
                 lifetime.Token);
         }
         catch (Exception exception) when (exception is InvalidOperationException or IOException)

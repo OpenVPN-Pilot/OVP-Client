@@ -140,6 +140,13 @@ internal static class ConnectCommand
 
     private static async Task<int> RunConnectedAsync(string[] args, Guid profileId, string configurationPath)
     {
+        // Asked before the pipe is opened. Without it a machine that has no interactive service
+        // fails inside the launch with an exception naming a named pipe, which is true and useless.
+        if (!await EnvironmentReadiness.EnsureReadyAsync())
+        {
+            return 2;
+        }
+
         int seconds = ReadInt(args, "--seconds", 30);
         bool protectRoutes = args.Contains("--protect-routes", StringComparer.Ordinal);
 
@@ -175,8 +182,12 @@ internal static class ConnectCommand
             Console.WriteLine($"Started openvpn, process {supervisor.ProcessId}, "
                 + $"management port {request.ManagementPort}.");
         }
-        catch (ManagementUnavailableException exception)
+        catch (Exception exception)
+            when (exception is ManagementUnavailableException or IOException or TimeoutException)
         {
+            // The environment was checked a moment ago, so anything here is the service or the
+            // socket failing during the attempt rather than a missing installation. It is still a
+            // sentence to print rather than a stack trace to read.
             Console.Error.WriteLine(exception.Message);
             return 2;
         }
