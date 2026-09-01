@@ -9,7 +9,7 @@ process doing the tunnelling and replaces the interface around it.
 The compact form stays where a name has to be one word: the executable is `OpenVpnPilot.exe`, the
 installation directory and the data directory are `OpenVpnPilot`, and the companion command is `ovp`.
 
-> **Status: version 1.2.0.** The integration layer and the interface are proven end to end against
+> **Status: version 1.3.0.** The integration layer and the interface are proven end to end against
 > OpenVPN Community 2.7.6 and against the ten server lab in this repository. Builds are unsigned by
 > choice. See [Roadmap](#roadmap).
 
