@@ -39,6 +39,7 @@ public sealed class MainWindowViewModelTests : IAsyncLifetime
             new FakeSettingsService(),
             new FakeSecrets(),
             ReadyEnvironmentProbe.Gate(),
+            SilentUpdates.Coordinator(),
             new StubLocalizer(),
             TimeProvider.System);
 

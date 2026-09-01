@@ -50,8 +50,12 @@ public sealed class JsonSettingsService : ISettingsService, IDisposable
     {
         if (!File.Exists(path))
         {
-            // First start. Writing the defaults out immediately makes the file discoverable.
-            await PersistAsync(new PilotSettings(), cancellationToken);
+            // First start. Writing the defaults out immediately makes the file discoverable, and
+            // stamping the layout stops the next build from mistaking them for an older file.
+            await PersistAsync(
+                new PilotSettings { SchemaVersion = PilotSettings.CurrentSchemaVersion },
+                cancellationToken);
+
             return;
         }
 
@@ -76,6 +80,14 @@ public sealed class JsonSettingsService : ISettingsService, IDisposable
             // The defaults keep the application usable and the file is left untouched for next time.
             SettingsLog.FileUnreadable(logger, path, exception);
             current = new PilotSettings();
+        }
+
+        // A file from an older build is brought up to date and written back once, so the change is
+        // visible in the file rather than being reapplied invisibly on every start.
+        if (current.Migrate())
+        {
+            SettingsLog.Migrated(logger, PilotSettings.CurrentSchemaVersion);
+            await PersistAsync(current, cancellationToken);
         }
 
         Changed?.Invoke(this, current);

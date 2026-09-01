@@ -40,10 +40,28 @@ public sealed class RemoteCommandHandler
     public event EventHandler? ShutdownRequested;
 
     /// <summary>
+    /// Raised with the path of a file another process asked this copy to import.
+    /// </summary>
+    /// <remarks>
+    /// The handler does not own a window and must not learn to. It reports what was asked for and
+    /// whoever coordinates the windows decides what importing looks like.
+    /// </remarks>
+    public event EventHandler<string>? ImportRequested;
+
+    /// <summary>
     /// Set once the profile list has been read, which is when a command naming a profile can be
     /// answered truthfully.
     /// </summary>
     public bool IsReady { get; set; }
+
+    /// <summary>
+    /// False in a copy started without a window, where there is nothing to show a wizard in.
+    /// </summary>
+    /// <remarks>
+    /// A headless copy exists to be driven by a launcher. Importing there is what the companion
+    /// command is for, and saying so is better than reporting an import that nothing carried out.
+    /// </remarks>
+    public bool HasWindows { get; set; } = true;
 
     public async Task<string> HandleAsync(string command)
     {
@@ -80,8 +98,42 @@ public sealed class RemoteCommandHandler
                 return await DisconnectAsync(command[PilotCommands.Disconnect.Length..].Trim());
             }
 
+            if (command.StartsWith(PilotCommands.Import, StringComparison.Ordinal))
+            {
+                return Import(command[PilotCommands.Import.Length..].Trim());
+            }
+
             return $"Unknown command '{command}'.";
         });
+    }
+
+    /// <summary>
+    /// Hands a file to whoever imports, having first established that it is there.
+    /// </summary>
+    /// <remarks>
+    /// Checked here rather than in the wizard because the answer goes back to whoever asked. A shell
+    /// that passed a path this process cannot see, which is what a mapped drive in another session
+    /// looks like, should be told that rather than shown an empty wizard.
+    /// </remarks>
+    private string Import(string path)
+    {
+        if (path.Length == 0)
+        {
+            return "A path is required.";
+        }
+
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            return $"'{path}' does not exist.";
+        }
+
+        if (!HasWindows)
+        {
+            return "This copy runs without a window. Import from a terminal with: ovp import <path>";
+        }
+
+        ImportRequested?.Invoke(this, path);
+        return $"Importing {path}.";
     }
 
     private string DescribeStatus()

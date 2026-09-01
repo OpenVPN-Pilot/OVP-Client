@@ -46,6 +46,17 @@ public sealed record StartupOptions
     public bool Quit { get; init; }
 
     /// <summary>
+    /// Configurations, archives or packages named on the command line, to be imported.
+    /// </summary>
+    /// <remarks>
+    /// This is what a double click on a configuration comes through as. The shell passes the file
+    /// as a bare argument, so an argument that is not an option is read as one: rejecting it, which
+    /// is what used to happen, means the application opens and immediately exits reporting an
+    /// unknown option that the user never typed.
+    /// </remarks>
+    public IReadOnlyList<string> FilesToImport { get; init; } = [];
+
+    /// <summary>
     /// Set when the arguments could not be understood, which is reported rather than ignored.
     /// </summary>
     public string? Error { get; init; }
@@ -56,7 +67,7 @@ public sealed record StartupOptions
     /// True when the process was asked to do something rather than only to appear.
     /// </summary>
     public bool HasActions =>
-        Connect.Count > 0 || Disconnect.Count > 0 || DisconnectAll || Quit;
+        Connect.Count > 0 || Disconnect.Count > 0 || DisconnectAll || Quit || FilesToImport.Count > 0;
 
     /// <summary>
     /// True when starting with no window of any kind, which is what a launcher wants.
@@ -74,6 +85,7 @@ public sealed record StartupOptions
         bool help = false;
         List<string> connect = [];
         List<string> disconnect = [];
+        List<string> files = [];
 
         for (int index = 0; index < args.Length; index++)
         {
@@ -120,7 +132,16 @@ public sealed record StartupOptions
                     break;
 
                 default:
-                    return new StartupOptions { Error = $"Unknown option '{argument}'." };
+                    // Anything that is not an option is a file to import. An empty argument is not
+                    // a path, and neither is something that begins with a dash: that is a mistyped
+                    // option, and reading it as a file name would hide the mistake.
+                    if (argument.Length == 0 || argument.StartsWith('-'))
+                    {
+                        return new StartupOptions { Error = $"Unknown option '{argument}'." };
+                    }
+
+                    files.Add(argument);
+                    break;
             }
         }
 
@@ -133,6 +154,7 @@ public sealed record StartupOptions
             DisconnectAll = disconnectAll,
             Quit = quit,
             ShowHelp = help,
+            FilesToImport = files,
         };
     }
 
@@ -160,6 +182,11 @@ public sealed record StartupOptions
             yield return PilotCommands.Connect + profile;
         }
 
+        foreach (string path in FilesToImport)
+        {
+            yield return PilotCommands.Import + path;
+        }
+
         if (Quit)
         {
             yield return PilotCommands.Quit;
@@ -168,10 +195,13 @@ public sealed record StartupOptions
 
     public static string Usage =>
         """
-        OpenVpnPilot - a desktop client for OpenVPN
+        OpenVPN Pilot - a desktop client for OpenVPN
 
         Usage:
-          OpenVpnPilot.exe [options]
+          OpenVpnPilot.exe [options] [file...]
+
+        A file named without an option is imported, which is what a double click on a .ovpn, a ZIP
+        archive or a .ovppkg package arrives as.
 
         Options:
           --headless             Start with no window and no notification area icon. The tunnels

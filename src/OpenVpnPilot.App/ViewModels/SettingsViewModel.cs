@@ -5,6 +5,7 @@ using OpenVpnPilot.App.Services;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.Core.Settings;
+using OpenVpnPilot.Core.Updates;
 
 namespace OpenVpnPilot.App.ViewModels;
 
@@ -30,6 +31,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private readonly IWatchedFolderStore watchedFolders;
     private readonly WatchedFolderMonitor watchedFolderMonitor;
     private readonly DiagnosticsBundle diagnostics;
+    private readonly UpdateCoordinator updates;
 
     private PilotSettings draft;
 
@@ -44,7 +46,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         ISessionStore sessions,
         IWatchedFolderStore watchedFolders,
         WatchedFolderMonitor watchedFolderMonitor,
-        DiagnosticsBundle diagnostics)
+        DiagnosticsBundle diagnostics,
+        UpdateCoordinator updates)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(localizer);
@@ -57,6 +60,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(watchedFolders);
         ArgumentNullException.ThrowIfNull(watchedFolderMonitor);
         ArgumentNullException.ThrowIfNull(diagnostics);
+        ArgumentNullException.ThrowIfNull(updates);
 
         this.settings = settings;
         this.localizer = localizer;
@@ -69,6 +73,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         this.watchedFolders = watchedFolders;
         this.watchedFolderMonitor = watchedFolderMonitor;
         this.diagnostics = diagnostics;
+        this.updates = updates;
 
         draft = settings.Current.Clone();
 
@@ -208,6 +213,25 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     public partial int LogRetentionDays { get; set; }
 
+    /// <summary>
+    /// Ask GitHub for a newer release when the application starts.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool CheckForUpdates { get; set; }
+
+    /// <summary>
+    /// The repository the check asks about, in the form owner/name.
+    /// </summary>
+    [ObservableProperty]
+    public partial string UpdateRepository { get; set; } = string.Empty;
+
+    /// <summary>
+    /// What the last check found. Every outcome is reported here, including being up to date,
+    /// because somebody pressed a button and is waiting for an answer.
+    /// </summary>
+    [ObservableProperty]
+    public partial string UpdateStatus { get; set; } = string.Empty;
+
     [ObservableProperty]
     public partial int StoredSecretCount { get; set; }
 
@@ -308,6 +332,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         OpenVpnVerbosity = draft.Advanced.OpenVpnVerbosity;
         LogLevel = draft.Advanced.LogLevel;
         LogRetentionDays = draft.Advanced.LogRetentionDays;
+        CheckForUpdates = draft.Advanced.CheckForUpdates;
+        UpdateRepository = draft.Advanced.UpdateRepository ?? string.Empty;
     }
 
     private void WriteToDraft()
@@ -342,6 +368,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         draft.Advanced.OpenVpnVerbosity = Math.Clamp(OpenVpnVerbosity, 0, 11);
         draft.Advanced.LogLevel = LogLevel;
         draft.Advanced.LogRetentionDays = Math.Clamp(LogRetentionDays, 0, 365);
+        draft.Advanced.CheckForUpdates = CheckForUpdates;
+        draft.Advanced.UpdateRepository =
+            string.IsNullOrWhiteSpace(UpdateRepository) ? null : UpdateRepository.Trim();
     }
 
     /// <summary>
@@ -437,6 +466,38 @@ public sealed partial class SettingsViewModel : ViewModelBase
         int removed = await secrets.ClearAsync();
         StoredSecretCount = 0;
         StatusMessage = localizer.Translate("settings.credentialsCleared", removed);
+    }
+
+    /// <summary>
+    /// Checks now, whatever the switch says, and reports whatever came back.
+    /// </summary>
+    /// <remarks>
+    /// The repository from the form rather than from the saved settings, so the field can be tried
+    /// before it is saved. Saving first would make a typo something you discover after committing
+    /// to it.
+    /// </remarks>
+    [RelayCommand]
+    private async Task CheckForUpdatesNowAsync(CancellationToken cancellationToken = default)
+    {
+        UpdateStatus = localizer["update.checking"];
+
+        WriteToDraft();
+        await settings.ReplaceAsync(draft, cancellationToken);
+
+        UpdateCheckResult result = await updates.CheckAsync(cancellationToken);
+
+        UpdateStatus = result.Outcome switch
+        {
+            UpdateOutcome.UpdateAvailable => localizer.Translate(
+                "update.available",
+                result.LatestVersion?.ToString() ?? string.Empty,
+                UpdateCoordinator.CurrentVersion.ToString()),
+            UpdateOutcome.UpToDate => localizer.Translate(
+                "update.upToDate",
+                UpdateCoordinator.CurrentVersion.ToString()),
+            UpdateOutcome.NotConfigured => localizer["update.notConfigured"],
+            _ => localizer.Translate("update.failed", result.Detail),
+        };
     }
 
     [RelayCommand]

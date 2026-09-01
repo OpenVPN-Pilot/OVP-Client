@@ -10,6 +10,22 @@ namespace OpenVpnPilot.Core.Settings;
 /// </remarks>
 public sealed class PilotSettings
 {
+    /// <summary>
+    /// The newest layout this build knows how to write.
+    /// </summary>
+    public const int CurrentSchemaVersion = 1;
+
+    /// <summary>
+    /// Which layout the file was written by. Zero for a file written before this existed.
+    /// </summary>
+    /// <remarks>
+    /// Adding a setting needs nothing here: a key that is missing takes the property's default. This
+    /// is for the other case, where the default of an existing setting changes. Without a stamp
+    /// there is no way to tell a value somebody chose from one that was merely serialized, and
+    /// nothing may quietly overrule the first kind.
+    /// </remarks>
+    public int SchemaVersion { get; set; }
+
     public GeneralSettings General { get; set; } = new();
 
     public AppearanceSettings Appearance { get; set; } = new();
@@ -26,8 +42,37 @@ public sealed class PilotSettings
     /// Produces an independent copy, so a screen can edit settings without the change taking effect
     /// until it is saved.
     /// </summary>
+    /// <summary>
+    /// Brings a file written by an older build up to the current layout.
+    /// </summary>
+    /// <returns>True when something was changed and the file should be written again.</returns>
+    /// <remarks>
+    /// One step so far. The update check and the repository it asks about were both stored and
+    /// neither was ever reachable: there was no switch, no field and no caller. Every value in an
+    /// existing file is therefore a serialized default rather than an answer anybody gave, which is
+    /// what makes adopting the new ones legitimate here and would not make it legitimate again.
+    /// </remarks>
+    public bool Migrate()
+    {
+        if (SchemaVersion >= CurrentSchemaVersion)
+        {
+            return false;
+        }
+
+        if (SchemaVersion < 1)
+        {
+            PilotSettings defaults = new();
+            Advanced.CheckForUpdates = defaults.Advanced.CheckForUpdates;
+            Advanced.UpdateRepository = defaults.Advanced.UpdateRepository;
+        }
+
+        SchemaVersion = CurrentSchemaVersion;
+        return true;
+    }
+
     public PilotSettings Clone() => new()
     {
+        SchemaVersion = SchemaVersion,
         General = General.Clone(),
         Appearance = Appearance.Clone(),
         Connections = Connections.Clone(),
@@ -258,18 +303,24 @@ public sealed class AdvancedSettings
     public bool PortableMode { get; set; }
 
     /// <summary>
-    /// Look for a newer release on start. Off by default.
+    /// Look for a newer release on start.
     /// </summary>
     /// <remarks>
-    /// Checking contacts a third party, so it is something the user turns on rather than something
-    /// they have to discover and turn off.
+    /// On, and switchable. Checking contacts GitHub, which is a third party, so what is contacted is
+    /// named in the settings screen and in the README rather than being left for someone to discover
+    /// in a packet capture. Turning it off stops every request; nothing else here talks to a network
+    /// the user did not ask for.
     /// </remarks>
-    public bool CheckForUpdates { get; set; }
+    public bool CheckForUpdates { get; set; } = true;
 
     /// <summary>
     /// The repository to check, in the form owner/name. Empty means no check is made.
     /// </summary>
-    public string? UpdateRepository { get; set; }
+    /// <remarks>
+    /// The project's own repository by default, so turning the check on is a switch rather than an
+    /// invitation to type a name correctly. A fork changes it to its own and the check follows.
+    /// </remarks>
+    public string? UpdateRepository { get; set; } = "Schecher1/OpenVpnPilot";
 
     public AdvancedSettings Clone() => (AdvancedSettings)MemberwiseClone();
 }

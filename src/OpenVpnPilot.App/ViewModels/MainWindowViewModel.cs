@@ -6,6 +6,7 @@ using OpenVpnPilot.App.Services;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.Core.Settings;
+using OpenVpnPilot.Core.Updates;
 using OpenVpnPilot.Core.Vpn;
 using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.OpenVpn.Runtime;
@@ -29,6 +30,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly ISettingsService settings;
     private readonly ISecretStore secrets;
     private readonly EnvironmentGate environment;
+    private readonly UpdateCoordinator updates;
     private readonly ILocalizer localizer;
     private readonly TimeProvider timeProvider;
 
@@ -44,6 +46,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         ISettingsService settings,
         ISecretStore secrets,
         EnvironmentGate environment,
+        UpdateCoordinator updates,
         ILocalizer localizer,
         TimeProvider timeProvider)
     {
@@ -53,6 +56,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(secrets);
         ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(updates);
         ArgumentNullException.ThrowIfNull(localizer);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
@@ -62,6 +66,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         this.settings = settings;
         this.secrets = secrets;
         this.environment = environment;
+        this.updates = updates;
         this.localizer = localizer;
         this.timeProvider = timeProvider;
 
@@ -196,6 +201,28 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// </summary>
     [ObservableProperty]
     public partial string EnvironmentProblems { get; set; } = string.Empty;
+
+    /// <summary>
+    /// True while a newer release has been found and the notice has not been dismissed.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsUpdateAvailable { get; set; }
+
+    /// <summary>
+    /// The sentence naming the new version.
+    /// </summary>
+    [ObservableProperty]
+    public partial string UpdateMessage { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Where to read about the release and get it. Empty when there is nothing to offer.
+    /// </summary>
+    /// <remarks>
+    /// A link rather than a download. Replacing a running installation is a different feature, and
+    /// one that has to answer what happens to the tunnels that are up while it does.
+    /// </remarks>
+    [ObservableProperty]
+    public partial string UpdateUrl { get; set; } = string.Empty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ActiveSummary))]
@@ -824,6 +851,39 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             StatusMessage = localizer["environment.ready"];
         }
     }
+
+    /// <summary>
+    /// Looks for a newer release, if the user asked for that to happen.
+    /// </summary>
+    /// <remarks>
+    /// Only a release that is actually newer is shown. Being up to date, a check that could not be
+    /// made and a check that was switched off all produce the same thing here, which is silence: an
+    /// application that announces having found nothing is an application interrupting for no reason.
+    /// The settings screen is where a check reports every outcome, because there somebody asked.
+    /// </remarks>
+    public async Task CheckForUpdatesAsync(CancellationToken cancellationToken = default)
+    {
+        UpdateCheckResult result = await updates.CheckIfEnabledAsync(cancellationToken);
+
+        if (result.Outcome != UpdateOutcome.UpdateAvailable || result.LatestVersion is not { } version)
+        {
+            return;
+        }
+
+        UpdateMessage = localizer.Translate(
+            "update.available",
+            version.ToString(),
+            UpdateCoordinator.CurrentVersion.ToString());
+
+        UpdateUrl = result.ReleaseUrl ?? string.Empty;
+        IsUpdateAvailable = true;
+    }
+
+    /// <summary>
+    /// Puts the notice away for this run. It comes back on the next start while it still applies.
+    /// </summary>
+    [RelayCommand]
+    private void DismissUpdate() => IsUpdateAvailable = false;
 
     /// <summary>
     /// The pull filters that stop a server from taking over the host routing table and DNS.

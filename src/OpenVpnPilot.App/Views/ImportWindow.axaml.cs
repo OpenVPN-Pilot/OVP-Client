@@ -69,7 +69,7 @@ public partial class ImportWindow : Window
                 [
                     // Archives and packages are picked here too. A separate button for each was one
                     // more decision for something the picker can simply offer.
-                    new FilePickerFileType("OpenVpnPilot") { Patterns = ["*.ovpn", "*.zip", "*.ovppkg"] },
+                    new FilePickerFileType("OpenVPN Pilot") { Patterns = ["*.ovpn", "*.zip", "*.ovppkg"] },
                     new FilePickerFileType("OpenVPN configuration") { Patterns = ["*.ovpn"] },
                     new FilePickerFileType("ZIP archive") { Patterns = ["*.zip"] },
                     new FilePickerFileType("OpenVpnPilot package") { Patterns = ["*.ovppkg"] },

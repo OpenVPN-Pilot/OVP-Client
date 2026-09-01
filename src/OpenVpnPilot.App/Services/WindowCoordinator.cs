@@ -25,6 +25,8 @@ public sealed class WindowCoordinator
     private readonly MainWindowViewModel viewModel;
     private readonly IClassicDesktopStyleApplicationLifetime desktop;
     private readonly Dictionary<AppScreen, Window> open = [];
+    private readonly List<string> pendingImports = [];
+    private bool importQueued;
 
     public WindowCoordinator(
         IServiceProvider services,
@@ -51,7 +53,7 @@ public sealed class WindowCoordinator
     public void Attach()
     {
         viewModel.ScreenRequested += (_, screen) => Open(screen);
-        mainWindow.FilesDropped += (_, paths) => OpenImport(paths);
+        mainWindow.FilesDropped += (_, paths) => QueueImport(paths);
         mainWindow.ProfilesDroppedOnTag += async (_, drop) =>
             await viewModel.AssignTagAsync(drop.ProfileIds, drop.TagName);
 
@@ -196,6 +198,44 @@ public sealed class WindowCoordinator
             default:
                 break;
         }
+    }
+
+    /// <summary>
+    /// Collects files to import and opens the wizard once, with all of them.
+    /// </summary>
+    /// <remarks>
+    /// Several files arrive as several requests. The shell sends one process, or one command, per
+    /// file when more than one is opened at a time, and examining a selection replaces the previous
+    /// one, so handling each as it arrives would import only the last. They are therefore gathered
+    /// and handed over together on the next turn of the dispatcher, by which time the whole batch
+    /// has landed.
+    /// </remarks>
+    public void QueueImport(IReadOnlyList<string> paths)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+
+        pendingImports.AddRange(paths);
+
+        if (importQueued || pendingImports.Count == 0)
+        {
+            return;
+        }
+
+        importQueued = true;
+
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                importQueued = false;
+                string[] batch = [.. pendingImports];
+                pendingImports.Clear();
+
+                if (batch.Length > 0)
+                {
+                    OpenImport(batch);
+                }
+            },
+            DispatcherPriority.Background);
     }
 
     /// <summary>

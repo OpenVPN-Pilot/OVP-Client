@@ -1,12 +1,15 @@
-# OpenVpnPilot
+# OpenVPN Pilot
 
 A desktop client for OpenVPN built for people who manage a lot of profiles.
 
 The stock OpenVPN GUI on Windows is a tray icon with a flat, unsearchable list. That works for two or
-three connections. It stops working somewhere around twenty. OpenVpnPilot keeps the proven OpenVPN
+three connections. It stops working somewhere around twenty. OpenVPN Pilot keeps the proven OpenVPN
 process doing the tunnelling and replaces the interface around it.
 
-> **Status: version 1.0.0.** The integration layer and the interface are proven end to end against
+The compact form stays where a name has to be one word: the executable is `OpenVpnPilot.exe`, the
+installation directory and the data directory are `OpenVpnPilot`, and the companion command is `ovp`.
+
+> **Status: version 1.2.0.** The integration layer and the interface are proven end to end against
 > OpenVPN Community 2.7.6 and against the ten server lab in this repository. Builds are unsigned by
 > choice. See [Roadmap](#roadmap).
 
@@ -29,6 +32,7 @@ process doing the tunnelling and replaces the interface around it.
 **How it works**
 [What reaches OpenVPN](#what-reaches-openvpn) ·
 [Where things are kept](#where-things-are-kept) ·
+[Looking for a newer release](#looking-for-a-newer-release) ·
 [Architecture](#architecture)
 
 **Working on it**
@@ -56,6 +60,8 @@ process doing the tunnelling and replaces the interface around it.
 - A live log window carrying both this application's own record and OpenVPN's, filterable by source,
   level and text, written to one file per day and kept for as long as you say
 - Bulk import from files, folders and ZIP archives, plus watched folders that keep profiles in sync
+- Opening a `.ovpn` file from the shell brings up the import wizard with it, once you have picked
+  this application in the Open with menu
 - Export as plain configurations, or as an encrypted `.ovppkg` package for another machine, which
   can carry the saved sign ins so a whole set arrives ready to connect
 - A command line on both the application and `ovp`, so other software can bring a tunnel up before
@@ -63,6 +69,7 @@ process doing the tunnelling and replaces the interface around it.
 - Notifications for connected, lost, reconnecting and failed, suppressible per event
 - A check at startup and before every connection that says which dependency is missing, rather than
   failing when a tunnel is asked for
+- An optional check for a newer release, which reads a GitHub release list and nothing else
 - The quick menus open on the display you left them on, and move between displays with alt and an
   arrow key
 - Dark, light and system themes, autostart, bounded auto reconnect
@@ -297,6 +304,7 @@ The registry holds settings that have nowhere else to go:
 | --- | --- | --- |
 | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` | the application | The autostart entry, only while "start with Windows" is on. Removing it turns autostart off. |
 | `HKCU\Software\Classes\AppUserModelId\OpenVpnPilot` | the application | The name and icon Windows shows above a notification. Without it the notification centre labels every message with a generated identifier. |
+| `HKLM\Software\Classes\OpenVpnPilot.ovpn` and `.ovppkg` | the installer | The program identifiers that put the application in the Open with menu for a configuration, and make it the handler for its own package format. The default for `.ovpn` is deliberately left alone. |
 | `HKLM\Software\OpenVpnPilot` | the installer | Two markers so the Start menu entry and the PATH entry can be removed again. |
 | `HKLM\...\Uninstall\<product code>` | Windows | The entry under Apps and features. |
 | `HKLM\SOFTWARE\OpenVPN` | nobody, it is only read | Where OpenVPN Community says it is installed, and which group the interactive service authorises. |
@@ -304,6 +312,21 @@ The registry holds settings that have nowhere else to go:
 Nothing else is written to the registry. Removing the product removes the two keys the installer
 made; the profile store and the credentials are deliberately left alone, because uninstalling an
 application is not the same as asking it to forget everything.
+
+## Looking for a newer release
+
+The application can ask GitHub whether a newer release exists. It is the only thing here that
+contacts a network nobody asked it to, so it is worth saying exactly what it does:
+
+- It reads `https://api.github.com/repos/<owner>/<name>/releases/latest`, without credentials.
+- It compares the release tag with the running version and reports the result.
+- It downloads nothing and installs nothing. A newer release is a notice with a link.
+
+The repository defaults to the one this project is published from, and the check is on. Both are
+under **Settings, Advanced**: clearing the repository, or turning the check off, stops every request.
+
+Release tags are `v<version>`, for example `v1.2.0`. Tags written as `version-<version>`, which is
+what this project published up to 1.2.0, are read as well.
 
 ## Architecture
 

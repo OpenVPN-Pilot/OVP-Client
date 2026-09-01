@@ -6,7 +6,7 @@
   },
   "strings": {
     "app": {
-      "name": "OpenVpnPilot"
+      "name": "OpenVPN Pilot"
     },
     "common": {
       "cancel": "Cancel",
@@ -129,8 +129,8 @@
       "show": "Show window",
       "disconnectAll": "Disconnect all",
       "quit": "Quit",
-      "tooltipIdle": "OpenVpnPilot",
-      "tooltipActive": "OpenVpnPilot - {0} connection(s) active",
+      "tooltipIdle": "OpenVPN Pilot",
+      "tooltipActive": "OpenVPN Pilot - {0} connection(s) active",
       "quickSwitcher": "Quick switcher",
       "settings": "Settings"
     },
@@ -235,7 +235,12 @@
       "notifyConnecting": "Connecting",
       "diagnosticsPrivacy": "A bundle is not anonymous. It contains profile names, remote host names and ports, file paths that include your Windows user name, and log lines that mention the same. It never contains configurations, private keys or credentials. Read it before sending it on.",
       "logRetention": "Keep log files for, in days",
-      "logRetentionHint": "Zero keeps them until they are removed by hand. A log names profiles, hosts and file paths that include your user name, so a short retention is the safer default."
+      "logRetentionHint": "Zero keeps them until they are removed by hand. A log names profiles, hosts and file paths that include your user name, so a short retention is the safer default.",
+      "checkForUpdates": "Look for a newer release when the application starts",
+      "checkForUpdatesHint": "This is the only thing here that contacts a network you did not ask it to. It reads the release list of the repository below from api.github.com, without credentials, and reports what it found. Nothing is downloaded and nothing is installed.",
+      "updateRepository": "Repository to check, as owner/name",
+      "updateRepositoryHint": "Leave empty to check nothing",
+      "checkNow": "Check now"
     },
     "hotkey": {
       "unbound": "Not set",
@@ -409,6 +414,15 @@
       "clearView": "Clear view",
       "viewCleared": "The view was cleared. The files are untouched.",
       "retentionHint": "One file per day, named for that day, kept for as long as the settings say."
+    },
+    "update": {
+      "checking": "Checking...",
+      "available": "Version {0} has been released. This is {1}.",
+      "upToDate": "Version {0} is the newest release.",
+      "notConfigured": "No repository is named, so nothing was contacted.",
+      "failed": "The check could not be made. {0}",
+      "download": "Get it",
+      "dismiss": "Not now"
     }
   }
 }

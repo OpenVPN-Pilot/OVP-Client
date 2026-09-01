@@ -63,6 +63,30 @@ public partial class MainWindow : Window
         // view model that would then be untestable and would be starting processes besides.
         this.FindControl<Button>("OpenVpnDownloadButton")!.Click += async (_, _) =>
             await OpenDownloadPageAsync();
+
+        this.FindControl<Button>("UpdateDownloadButton")!.Click += async (_, _) =>
+            await OpenReleasePageAsync();
+    }
+
+    /// <summary>
+    /// Opens the release the update notice found.
+    /// </summary>
+    /// <remarks>
+    /// The release page rather than the file. It carries what changed alongside the download, and
+    /// fetching an installer in the background is a thing a client should not do quietly.
+    /// </remarks>
+    private async Task OpenReleasePageAsync()
+    {
+        if (ViewModel?.UpdateUrl is not { Length: > 0 } url
+            || !Uri.TryCreate(url, UriKind.Absolute, out Uri? release))
+        {
+            return;
+        }
+
+        if (TopLevel.GetTopLevel(this)?.Launcher is { } launcher)
+        {
+            await launcher.LaunchUriAsync(release);
+        }
     }
 
     /// <summary>

@@ -280,3 +280,24 @@ internal sealed class ReadyEnvironmentProbe : IOpenVpnEnvironmentProbe
         TimeProvider.System,
         Microsoft.Extensions.Logging.Abstractions.NullLogger<EnvironmentGate>.Instance);
 }
+
+/// <summary>
+/// An update coordinator that contacts nothing, because the settings name no repository.
+/// </summary>
+/// <remarks>
+/// A test must never reach the network. The check is skipped when no repository is configured, so
+/// leaving that empty is enough and no stand in for the release list is needed.
+/// </remarks>
+internal static class SilentUpdates
+{
+    public static UpdateCoordinator Coordinator()
+    {
+        FakeSettingsService settings = new();
+        settings.Current.Advanced.CheckForUpdates = false;
+        settings.Current.Advanced.UpdateRepository = null;
+
+        return new UpdateCoordinator(
+            settings,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<UpdateCoordinator>.Instance);
+    }
+}

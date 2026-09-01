@@ -30,4 +30,10 @@ internal static partial class SettingsLog
         Level = LogLevel.Warning,
         Message = "Settings could not be written to {Path}. The change applies to this run only.")]
     public static partial void SaveFailed(ILogger logger, string path, Exception exception);
+
+    [LoggerMessage(
+        EventId = 1304,
+        Level = LogLevel.Information,
+        Message = "The settings file was brought up to layout {Version}.")]
+    public static partial void Migrated(ILogger logger, int version);
 }

@@ -133,7 +133,7 @@ internal sealed class Program
     {
         if (OperatingSystem.IsWindows())
         {
-            Platform.Windows.Shell.WindowsAppIdentity.Apply("OpenVpnPilot");
+            Platform.Windows.Shell.WindowsAppIdentity.Apply("OpenVPN Pilot");
         }
     }
 

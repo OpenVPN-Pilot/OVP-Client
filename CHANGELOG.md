@@ -6,7 +6,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
 Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
-version heading when one is tagged.
+version heading when one is tagged. A release tag is `v<version>`, for example `v1.2.0`.
+
+## [Unreleased]
+
+### Added
+
+- A configuration opened from the shell is imported. The application registers itself as a handler
+  for `.ovpn` and appears in the Open with menu; the default handler is deliberately not taken,
+  because the OpenVPN GUI is usually it and Windows would ask the user in any case. Its own
+  `.ovppkg` package format is claimed outright. A file arrives as a bare argument, which the option
+  parser used to refuse: opening a configuration started the application and immediately ended it,
+  reporting an unknown option nobody had typed.
+- An optional check for a newer release, on by default and switchable under Settings, Advanced,
+  with the repository it asks about beside it. It reads one GitHub release list without credentials,
+  reports what it found, and downloads nothing. A newer release appears as a notice with a link to
+  it. The checker and its tests already existed and had never been wired to anything.
+- A settings file records which layout it was written by, so that the default of an existing setting
+  can change without overruling a value somebody chose. The first step adopts the update check
+  defaults, which is legitimate exactly once: until now neither setting had a switch, a field or a
+  caller, so no stored value can have been an answer anybody gave.
+
+### Changed
+
+- The application is called OpenVPN Pilot. The compact form stays wherever a name has to be one
+  word and wherever changing it would strand something: the executable, the installation directory,
+  the data directory, the autostart entry and the application identity that labels the
+  notifications are all still `OpenVpnPilot`.
+- Release tags are `v<version>` rather than `version-<version>`. The update check reads both, so the
+  tags published up to 1.2.0 are still understood.
 
 ## [1.2.0] - 2026-09-01
 

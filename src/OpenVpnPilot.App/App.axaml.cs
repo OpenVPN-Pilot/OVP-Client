@@ -100,6 +100,12 @@ public partial class App : Application
             // The companion command drives the tunnels this copy owns rather than starting its own.
             RemoteCommandHandler remote = host.Services.GetRequiredService<RemoteCommandHandler>();
             remote.ShutdownRequested += (_, _) => desktop.Shutdown();
+
+            // A configuration opened from the shell while a copy is already running arrives here,
+            // because the second process hands its arguments over and exits.
+            remote.ImportRequested += (_, path) =>
+                Dispatcher.UIThread.Post(() => windows!.QueueImport([path]));
+
             InstanceGuard.CommandHandler = remote.HandleAsync;
         }
 
@@ -197,11 +203,18 @@ public partial class App : Application
     private async Task LoadAndAnnounceAsync(MainWindowViewModel viewModel)
     {
         await viewModel.LoadAsync();
-        host!.Services.GetRequiredService<RemoteCommandHandler>().IsReady = true;
+
+        RemoteCommandHandler handler = host!.Services.GetRequiredService<RemoteCommandHandler>();
+        handler.HasWindows = !Startup.Headless;
+        handler.IsReady = true;
 
         // After the list, not before it. The window should appear at once; whether OpenVPN is
         // installed is worth knowing a moment later and is not worth waiting for a pipe to answer.
         await viewModel.RefreshEnvironmentAsync();
+
+        // Last, because it leaves the machine. It reports only a release that is actually newer, so
+        // the ordinary outcome of this line is that nothing at all happens.
+        await viewModel.CheckForUpdatesAsync();
     }
 
     /// <summary>

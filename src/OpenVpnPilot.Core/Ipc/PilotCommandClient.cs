@@ -112,6 +112,16 @@ public static class PilotCommands
     public const string AllMarker = "--all";
 
     /// <summary>
+    /// Followed by the path of a configuration, an archive or a package to import.
+    /// </summary>
+    /// <remarks>
+    /// One path per command rather than a list. A path may contain anything a file name may contain,
+    /// including whatever separator a list would need, and a command that cannot be parsed back
+    /// unambiguously is a command that will eventually import the wrong file.
+    /// </remarks>
+    public const string Import = "import ";
+
+    /// <summary>
     /// Reports what is connected, one line per tunnel.
     /// </summary>
     public const string Status = "status";

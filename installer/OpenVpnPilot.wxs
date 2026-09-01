@@ -16,7 +16,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
-  <Package Name="OpenVpnPilot"
+  <Package Name="OpenVPN Pilot"
            Manufacturer="Schecher_1"
            Version="$(var.ProductVersion)"
            UpgradeCode="8f1c4a52-6d2e-4a1b-9a3f-2c5d7e8b4016"
@@ -24,7 +24,7 @@
            Compressed="yes"
            InstallerVersion="500">
 
-    <SummaryInformation Description="OpenVpnPilot, a desktop client for OpenVPN" />
+    <SummaryInformation Description="OpenVPN Pilot, a desktop client for OpenVPN" />
 
     <!-- Installing a newer version replaces the old one rather than sitting beside it. -->
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
@@ -47,10 +47,11 @@
 
     <StandardDirectory Id="ProgramMenuFolder" />
 
-    <Feature Id="Main" Title="OpenVpnPilot" Level="1">
+    <Feature Id="Main" Title="OpenVPN Pilot" Level="1">
       <ComponentGroupRef Id="ApplicationFiles" />
       <ComponentRef Id="StartMenuShortcut" />
       <ComponentRef Id="CommandOnPath" />
+      <ComponentRef Id="FileTypes" />
     </Feature>
 
     <!--
@@ -69,7 +70,7 @@
     -->
     <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder" Guid="1a7b9c30-5e84-42d7-b1f6-9c0a3d5e7f21">
       <Shortcut Id="ApplicationShortcut"
-                Name="OpenVpnPilot"
+                Name="OpenVPN Pilot"
                 Description="Manage and connect OpenVPN profiles"
                 Target="[INSTALLFOLDER]OpenVpnPilot.exe"
                 WorkingDirectory="INSTALLFOLDER"
@@ -78,6 +79,47 @@
       </Shortcut>
       <RegistryValue Root="HKLM" Key="Software\OpenVpnPilot" Name="StartMenu"
                      Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <!--
+      File types.
+
+      A configuration is offered rather than claimed. The OpenVPN GUI installs itself as the handler
+      for .ovpn and a great many people want it to stay that way, so this writes a program identifier
+      and adds it to OpenWithProgids, which puts the application in the Open with list and leaves the
+      default alone. Windows 10 and later would not let an installer take the default silently in any
+      case; it asks the user once, which is the right person to ask.
+
+      A package is a different matter. The .ovppkg format belongs to this application and nothing
+      else reads it, so that one is claimed outright.
+    -->
+    <Component Id="FileTypes" Directory="INSTALLFOLDER" Guid="2e5a17b8-9c34-4f61-8b0d-6a7e1f2c94d5">
+      <RegistryValue Root="HKLM" Key="Software\Classes\OpenVpnPilot.ovpn"
+                     Value="OpenVPN configuration" Type="string" />
+      <RegistryValue Root="HKLM" Key="Software\Classes\OpenVpnPilot.ovpn\DefaultIcon"
+                     Value="[INSTALLFOLDER]OpenVpnPilot.exe,0" Type="string" />
+      <RegistryValue Root="HKLM" Key="Software\Classes\OpenVpnPilot.ovpn\shell\open"
+                     Value="Import with OpenVPN Pilot" Type="string" />
+      <RegistryValue Root="HKLM" Key="Software\Classes\OpenVpnPilot.ovpn\shell\open\command"
+                     Value="&quot;[INSTALLFOLDER]OpenVpnPilot.exe&quot; &quot;%1&quot;" Type="string" />
+
+      <!-- Offered, not taken: the default value of the extension key is deliberately not written. -->
+      <RegistryValue Root="HKLM" Key="Software\Classes\.ovpn\OpenWithProgids"
+                     Name="OpenVpnPilot.ovpn" Value="" Type="string" />
+
+      <RegistryValue Root="HKLM" Key="Software\Classes\OpenVpnPilot.ovppkg"
+                     Value="OpenVPN Pilot profile package" Type="string" />
+      <RegistryValue Root="HKLM" Key="Software\Classes\OpenVpnPilot.ovppkg\DefaultIcon"
+                     Value="[INSTALLFOLDER]OpenVpnPilot.exe,0" Type="string" />
+      <RegistryValue Root="HKLM" Key="Software\Classes\OpenVpnPilot.ovppkg\shell\open"
+                     Value="Import with OpenVPN Pilot" Type="string" />
+      <RegistryValue Root="HKLM" Key="Software\Classes\OpenVpnPilot.ovppkg\shell\open\command"
+                     Value="&quot;[INSTALLFOLDER]OpenVpnPilot.exe&quot; &quot;%1&quot;" Type="string" />
+
+      <RegistryValue Root="HKLM" Key="Software\Classes\.ovppkg"
+                     Value="OpenVpnPilot.ovppkg" Type="string" KeyPath="yes" />
+      <RegistryValue Root="HKLM" Key="Software\Classes\.ovppkg\OpenWithProgids"
+                     Name="OpenVpnPilot.ovppkg" Value="" Type="string" />
     </Component>
 
     <!--

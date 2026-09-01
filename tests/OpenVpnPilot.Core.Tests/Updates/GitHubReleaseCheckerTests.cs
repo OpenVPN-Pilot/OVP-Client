@@ -87,6 +87,10 @@ public sealed class GitHubReleaseCheckerTests
     [InlineData("V2.0", "2.0")]
     [InlineData("v1.2.3-beta.1", "1.2.3")]
     [InlineData("v1.2.3+build7", "1.2.3")]
+    // The shape this project published before the convention changed. Stripping a single leading v
+    // leaves "ersion-1.2.3", which is truncated at the hyphen and read as no version at all.
+    [InlineData("version-1.2.3", "1.2.3")]
+    [InlineData("version-1.1.0", "1.1.0")]
     public void TryParseVersion_ReadsTheUsualTagShapes(string tag, string expected)
     {
         Assert.True(GitHubReleaseChecker.TryParseVersion(tag, out Version? version));

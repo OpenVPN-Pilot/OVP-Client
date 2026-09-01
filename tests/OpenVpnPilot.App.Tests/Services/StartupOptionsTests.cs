@@ -113,6 +113,51 @@ public sealed class StartupOptionsTests
         Assert.Contains("--tunnel-everything", options.Error, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A file named without an option is what a double click arrives as.
+    /// </summary>
+    /// <remarks>
+    /// This used to be refused as an unknown option, so opening a configuration from the shell
+    /// started the application and immediately ended it, reporting an option the user never typed.
+    /// </remarks>
+    [Fact]
+    public void ABareFileName_IsSomethingToImport()
+    {
+        StartupOptions options = StartupOptions.Parse([@"C:\profiles\example-site.ovpn"]);
+
+        Assert.Null(options.Error);
+        Assert.Equal([@"C:\profiles\example-site.ovpn"], options.FilesToImport);
+        Assert.True(options.HasActions);
+    }
+
+    [Fact]
+    public void SeveralFiles_AreAllKept()
+    {
+        StartupOptions options = StartupOptions.Parse(["one.ovpn", "two.ovpn", "--background"]);
+
+        Assert.Null(options.Error);
+        Assert.Equal(["one.ovpn", "two.ovpn"], options.FilesToImport);
+        Assert.True(options.Background);
+    }
+
+    /// <summary>
+    /// A mistyped option must not be read as a file name, or the mistake disappears.
+    /// </summary>
+    [Fact]
+    public void AMistypedOption_IsStillRefusedRatherThanTakenForAFile()
+    {
+        Assert.NotNull(StartupOptions.Parse(["-headless"]).Error);
+        Assert.NotNull(StartupOptions.Parse(["--tunnel-everything"]).Error);
+    }
+
+    [Fact]
+    public void AFile_IsHandedOverAsAnImportCommand()
+    {
+        StartupOptions options = StartupOptions.Parse(["example-site.ovpn"]);
+
+        Assert.Equal(["import example-site.ovpn"], options.ToCommands());
+    }
+
     [Fact]
     public void Help_IsRecognisedInEveryFormWindowsUsersExpect()
     {

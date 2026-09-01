@@ -104,15 +104,26 @@ public sealed class GitHubReleaseChecker : IUpdateChecker
     }
 
     /// <summary>
-    /// Reads a release tag such as v1.2.3 or 1.2.3 as a version.
+    /// Reads a release tag such as v1.2.3, version-1.2.3 or 1.2.3 as a version.
     /// </summary>
+    /// <remarks>
+    /// The longer prefix is tested first and it has to be. Stripping a single leading v from
+    /// "version-1.2.3" leaves "ersion-1.2.3", which is then truncated at the hyphen and read as a
+    /// tag that is not a version at all. That is not hypothetical: it is the shape of every tag this
+    /// project published before the convention changed, and the check reported each of them as a
+    /// failure rather than as a release.
+    /// </remarks>
     internal static bool TryParseVersion(string tag, out Version? version)
     {
         ArgumentNullException.ThrowIfNull(tag);
 
         string trimmed = tag.Trim();
 
-        if (trimmed.StartsWith('v') || trimmed.StartsWith('V'))
+        if (trimmed.StartsWith("version-", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed["version-".Length..];
+        }
+        else if (trimmed.StartsWith('v') || trimmed.StartsWith('V'))
         {
             trimmed = trimmed[1..];
         }

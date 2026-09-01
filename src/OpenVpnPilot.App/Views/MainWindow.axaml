@@ -13,7 +13,7 @@
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource SurfaceWindow}"
         Icon="/Assets/openvpnpilot.ico"
-        Title="OpenVpnPilot">
+        Title="{loc:Translate app.name}">
 
   <Grid RowDefinitions="Auto,Auto,*,Auto">
 
@@ -79,7 +79,9 @@
       the process the moment somebody presses connect is not reporting a missing dependency, it is
       hiding one.
     -->
-    <Border Grid.Row="1" Padding="18,12"
+    <StackPanel Grid.Row="1">
+
+    <Border Padding="18,12"
             Background="{DynamicResource StateFailedSoft}"
             BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1"
             IsVisible="{Binding IsEnvironmentBlocked}">
@@ -102,6 +104,29 @@
         </StackPanel>
       </Grid>
     </Border>
+
+    <!--
+      A newer release, when the user asked to be told. Dismissible, because being told once is
+      enough until the next start.
+    -->
+    <Border Padding="18,12"
+            Background="{DynamicResource AccentSoft}"
+            BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1"
+            IsVisible="{Binding IsUpdateAvailable}">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+        <TextBlock Grid.Column="0" Text="{Binding UpdateMessage}" FontSize="12.5"
+                   TextWrapping="Wrap" VerticalAlignment="Center"
+                   Foreground="{DynamicResource Accent}" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Button Name="UpdateDownloadButton" Content="{loc:Translate update.download}"
+                  MinWidth="130" HorizontalContentAlignment="Center" />
+          <Button Content="{loc:Translate update.dismiss}" Classes="quiet"
+                  Command="{Binding DismissUpdateCommand}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    </StackPanel>
 
     <!--
       The detail column can be dragged wider. It is a fixed width by default because that is the
