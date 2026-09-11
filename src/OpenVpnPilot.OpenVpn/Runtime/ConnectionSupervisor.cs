@@ -1,5 +1,3 @@
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -21,6 +19,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
     private readonly IOpenVpnLauncher launcher;
     private readonly IManagementChannelFactory channelFactory;
     private readonly ICredentialProvider credentialProvider;
+    private readonly IOpenVpnProcessTerminator terminator;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<ConnectionSupervisor> logger;
     private readonly SemaphoreSlim transition = new(1, 1);
@@ -66,7 +65,8 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
         IManagementChannelFactory channelFactory,
         ICredentialProvider credentialProvider,
         TimeProvider? timeProvider = null,
-        ILogger<ConnectionSupervisor>? logger = null)
+        ILogger<ConnectionSupervisor>? logger = null,
+        IOpenVpnProcessTerminator? terminator = null)
     {
         ArgumentNullException.ThrowIfNull(launcher);
         ArgumentNullException.ThrowIfNull(channelFactory);
@@ -77,6 +77,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
         this.credentialProvider = credentialProvider;
         this.timeProvider = timeProvider ?? TimeProvider.System;
         this.logger = logger ?? NullLogger<ConnectionSupervisor>.Instance;
+        this.terminator = terminator ?? new LocalProcessTerminator(this.logger);
     }
 
     /// <summary>
@@ -705,63 +706,15 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
     }
 
     /// <summary>
-    /// Confirms the OpenVPN process actually ended, and ends it if it did not.
+    /// Confirms the OpenVPN process actually ended, and has it ended if it did not.
     /// </summary>
     /// <remarks>
     /// A signal is a request, not a guarantee. With auth-retry set to interact, a process whose
     /// credentials were refused keeps waiting for new ones instead of exiting, which would leave an
-    /// orphaned tunnel behind.
-    ///
-    /// This is a best effort backstop, not a guarantee of its own. The process was created by the
-    /// interactive service, so querying or terminating it can be refused with access denied. That is
-    /// reported and accepted rather than propagated: a tunnel that outlives a disconnect is a fault
-    /// worth logging, but it must never take the application down with it.
-    ///
-    /// Only a positive identifier names a single process. On Unix zero addresses the caller's own
-    /// process group and minus one every process the caller may signal, and looking either of them
-    /// up succeeds, so terminating what the lookup returned would end this application or
-    /// everything its user is running. Measured on macOS: a launcher reporting zero took the test
-    /// host, the test runner and the shell that started them down in one signal.
+    /// orphaned tunnel behind. Who may end it depends on the platform, which is why it is handed on.
     /// </remarks>
-    private async Task EnsureProcessExitedAsync(int processId)
-    {
-        if (processId <= 0)
-        {
-            return;
-        }
-
-        try
-        {
-            using Process process = Process.GetProcessById(processId);
-
-            try
-            {
-                using CancellationTokenSource grace = new(ProcessExitGrace);
-                await process.WaitForExitAsync(grace.Token);
-                return;
-            }
-            catch (OperationCanceledException)
-            {
-                // The signal was ignored, so the process is ended below.
-            }
-
-            ConnectionSupervisorLog.ProcessDidNotExit(logger, processId);
-            process.Kill(entireProcessTree: false);
-        }
-        catch (ArgumentException)
-        {
-            // Already gone, which is the normal outcome.
-        }
-        catch (InvalidOperationException)
-        {
-            // It exited while being inspected.
-        }
-        catch (Win32Exception exception)
-        {
-            // The service created the process, so this client may not be allowed to query or end it.
-            ConnectionSupervisorLog.ProcessCheckDenied(logger, processId, exception);
-        }
-    }
+    private Task EnsureProcessExitedAsync(int processId) =>
+        terminator.EnsureExitedAsync(processId, ProcessExitGrace, CancellationToken.None);
 
     public async ValueTask DisposeAsync()
     {

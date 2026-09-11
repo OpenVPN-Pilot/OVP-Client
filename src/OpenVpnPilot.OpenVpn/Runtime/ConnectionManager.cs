@@ -27,6 +27,7 @@ public sealed class ConnectionManager : IAsyncDisposable
     private readonly ICredentialProvider credentialProvider;
     private readonly IProfileMaterializer materializer;
     private readonly IPortAllocator portAllocator;
+    private readonly IOpenVpnProcessTerminator? terminator;
     private readonly ILogger<ConnectionManager> logger;
 
     private readonly ConcurrentDictionary<Guid, ActiveConnection> active = new();
@@ -38,7 +39,8 @@ public sealed class ConnectionManager : IAsyncDisposable
         ICredentialProvider credentialProvider,
         IProfileMaterializer materializer,
         IPortAllocator? portAllocator = null,
-        ILogger<ConnectionManager>? logger = null)
+        ILogger<ConnectionManager>? logger = null,
+        IOpenVpnProcessTerminator? terminator = null)
     {
         ArgumentNullException.ThrowIfNull(launcher);
         ArgumentNullException.ThrowIfNull(channelFactory);
@@ -51,6 +53,10 @@ public sealed class ConnectionManager : IAsyncDisposable
         this.materializer = materializer;
         this.portAllocator = portAllocator ?? new LoopbackPortAllocator();
         this.logger = logger ?? NullLogger<ConnectionManager>.Instance;
+
+        // Null leaves each supervisor to end processes itself, which is what a platform that lets
+        // this client signal them wants.
+        this.terminator = terminator;
     }
 
     /// <summary>
@@ -161,7 +167,8 @@ public sealed class ConnectionManager : IAsyncDisposable
         ConnectionSupervisor supervisor = new(
             launcher,
             channelFactory,
-            credentialProvider);
+            credentialProvider,
+            terminator: terminator);
 
         ActiveConnection connection = new(supervisor, materialised);
 

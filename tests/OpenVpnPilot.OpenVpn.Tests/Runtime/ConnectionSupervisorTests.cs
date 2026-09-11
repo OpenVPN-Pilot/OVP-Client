@@ -293,6 +293,35 @@ public sealed class ConnectionSupervisorTests
         Assert.DoesNotContain(logger.EventIds, id => id is 2003 or 2004);
     }
 
+    /// <summary>
+    /// Ending a process is the platform's business, so the supervisor hands it on.
+    /// </summary>
+    /// <remarks>
+    /// On macOS the process runs as root and the client may not signal it. A supervisor that ended
+    /// it itself would fail there and leave the tunnel running.
+    /// </remarks>
+    [Fact]
+    public async Task DisconnectAsync_HandsTheProcessToTheTerminator()
+    {
+        Harness harness = new();
+
+        // No process has this identifier on any system, and nothing here would end it anyway.
+        harness.Launcher.Result = OpenVpnLaunchResult.Started(int.MaxValue);
+        RecordingTerminator terminator = new();
+
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor(terminator: terminator);
+        await harness.ConnectAsync(supervisor);
+
+        Task disconnect = supervisor.DisconnectAsync();
+
+        Assert.Equal("signal SIGTERM", await harness.Transport.ReceiveLineAsync());
+        harness.Transport.SendLine("SUCCESS: signal SIGTERM thrown");
+
+        await disconnect.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal([int.MaxValue], terminator.ProcessIds);
+    }
+
     [Fact]
     public async Task DisconnectAsync_WithNothingRunning_DoesNothing()
     {
@@ -495,8 +524,10 @@ public sealed class ConnectionSupervisorTests
 
         public string? AuthenticatedWith { get; private set; }
 
-        public ConnectionSupervisor CreateSupervisor(ILogger<ConnectionSupervisor>? logger = null) =>
-            new(Launcher, new FakeChannelFactory(Transport), Credentials, logger: logger);
+        public ConnectionSupervisor CreateSupervisor(
+            ILogger<ConnectionSupervisor>? logger = null,
+            IOpenVpnProcessTerminator? terminator = null) =>
+            new(Launcher, new FakeChannelFactory(Transport), Credentials, logger: logger, terminator: terminator);
 
         /// <summary>
         /// Drives the password handshake and the session opening commands the supervisor issues.

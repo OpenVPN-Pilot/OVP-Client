@@ -111,3 +111,19 @@ internal sealed class RecordingLogger<T> : ILogger<T>
         Exception? exception,
         Func<TState, Exception?, string> formatter) => eventIds.Enqueue(eventId.Id);
 }
+
+/// <summary>
+/// Records which processes it was asked to end, and ends none of them.
+/// </summary>
+internal sealed class RecordingTerminator : IOpenVpnProcessTerminator
+{
+    private readonly ConcurrentQueue<int> processIds = new();
+
+    public IReadOnlyCollection<int> ProcessIds => processIds;
+
+    public Task EnsureExitedAsync(int processId, TimeSpan grace, CancellationToken cancellationToken = default)
+    {
+        processIds.Enqueue(processId);
+        return Task.CompletedTask;
+    }
+}
