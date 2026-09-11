@@ -716,9 +716,20 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
     /// interactive service, so querying or terminating it can be refused with access denied. That is
     /// reported and accepted rather than propagated: a tunnel that outlives a disconnect is a fault
     /// worth logging, but it must never take the application down with it.
+    ///
+    /// Only a positive identifier names a single process. On Unix zero addresses the caller's own
+    /// process group and minus one every process the caller may signal, and looking either of them
+    /// up succeeds, so terminating what the lookup returned would end this application or
+    /// everything its user is running. Measured on macOS: a launcher reporting zero took the test
+    /// host, the test runner and the shell that started them down in one signal.
     /// </remarks>
     private async Task EnsureProcessExitedAsync(int processId)
     {
+        if (processId <= 0)
+        {
+            return;
+        }
+
         try
         {
             using Process process = Process.GetProcessById(processId);

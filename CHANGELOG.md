@@ -17,6 +17,11 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   receive the values themselves and format them only when the line is written. The lines read as
   before, except that an update check which found no release reports its latest version as `(null)`
   rather than `-`.
+- Tearing a connection down no longer looks up a process identifier of zero or below. On Unix such
+  an identifier addresses a whole process group, or every process the user may signal, and the
+  lookup succeeds; a launcher that reported zero had the test suite end itself, its runner and the
+  shell that started them. A test fake that reported an arbitrary identifier, which on a system
+  that hands them out in sequence can belong to anything, reports zero as well.
 
 ## [1.3.0] - 2026-09-01
 

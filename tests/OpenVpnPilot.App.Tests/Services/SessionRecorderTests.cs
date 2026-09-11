@@ -331,12 +331,17 @@ public sealed class SessionRecorderTests
         public string? EndDetail { get; set; }
     }
 
+    /// <remarks>
+    /// Reports zero, which names no process. Tearing a connection down ends the process it was
+    /// given, and on a system that hands out identifiers in sequence any plausible number may well
+    /// belong to something the person running the tests has open.
+    /// </remarks>
     private sealed class FakeLauncher : IOpenVpnLauncher
     {
         public Task<OpenVpnLaunchResult> LaunchAsync(
             OpenVpnLaunchRequest request,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(OpenVpnLaunchResult.Started(4242));
+            Task.FromResult(OpenVpnLaunchResult.Started(0));
     }
 
     private sealed class FakeChannelFactory : IManagementChannelFactory
