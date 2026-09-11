@@ -30,10 +30,7 @@ public static class PilotCommandClient
     /// </summary>
     public static bool IsApplicationRunning(string? identity = null)
     {
-        using Mutex probe = new(
-            initiallyOwned: false,
-            $"Local\\OpenVpnPilot.Instance.{identity ?? Environment.UserName}",
-            out bool created);
+        using Mutex probe = ApplicationInstance.CreateClaim(initiallyOwned: false, identity, out bool created);
 
         return !created;
     }
