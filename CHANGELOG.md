@@ -15,7 +15,7 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
 - The solution builds with the .NET SDK 10.0.400, whose analysers refuse a log call that formats its
   arguments before knowing whether the line will be written. The source generated log methods now
   receive the values themselves and format them only when the line is written. The lines read as
-  before, except that an update check which found no release reports its latest version as `(null)`
+  before, except that an update check which found no release reports its latest version as `null`
   rather than `-`.
 - Tearing a connection down no longer looks up a process identifier of zero or below. On Unix such
   an identifier addresses a whole process group, or every process the user may signal, and the
