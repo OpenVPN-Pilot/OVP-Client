@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using OpenVpnPilot.Core.Localization;
 
@@ -19,8 +20,13 @@ public sealed class ShippedCatalogueTests
     private static readonly string LanguageDirectory =
         Path.Combine(AppContext.BaseDirectory, "lang");
 
-    private static IReadOnlyList<LanguageCatalogue> Load() =>
-        new JsonLanguageCatalogueSource([LanguageDirectory]).Load();
+    /// <summary>
+    /// Every platform whose wording the files carry, with null standing for the neutral wording.
+    /// </summary>
+    public static TheoryData<string?> Platforms { get; } = new() { null, "macos" };
+
+    private static IReadOnlyList<LanguageCatalogue> Load(string? platform = null) =>
+        new JsonLanguageCatalogueSource([LanguageDirectory], platform: platform).Load();
 
     [Fact]
     public void Catalogues_AreDiscoveredBesideTheApplication()
@@ -31,10 +37,11 @@ public sealed class ShippedCatalogueTests
         Assert.Contains(catalogues, catalogue => catalogue.Code == "de");
     }
 
-    [Fact]
-    public void EveryLanguage_CoversTheSameKeysAsEnglish()
+    [Theory]
+    [MemberData(nameof(Platforms))]
+    public void EveryLanguage_CoversTheSameKeysAsEnglish(string? platform)
     {
-        IReadOnlyList<LanguageCatalogue> catalogues = Load();
+        IReadOnlyList<LanguageCatalogue> catalogues = Load(platform);
         LanguageCatalogue english = catalogues.Single(catalogue => catalogue.Code == "en");
 
         foreach (LanguageCatalogue catalogue in catalogues.Where(item => item.Code != "en"))
@@ -52,10 +59,11 @@ public sealed class ShippedCatalogueTests
         }
     }
 
-    [Fact]
-    public void NoTranslation_IsEmpty()
+    [Theory]
+    [MemberData(nameof(Platforms))]
+    public void NoTranslation_IsEmpty(string? platform)
     {
-        foreach (LanguageCatalogue catalogue in Load())
+        foreach (LanguageCatalogue catalogue in Load(platform))
         {
             foreach ((string key, string value) in catalogue.Strings)
             {
@@ -66,10 +74,11 @@ public sealed class ShippedCatalogueTests
         }
     }
 
-    [Fact]
-    public void EveryLanguage_UsesTheSamePlaceholdersAsEnglish()
+    [Theory]
+    [MemberData(nameof(Platforms))]
+    public void EveryLanguage_UsesTheSamePlaceholdersAsEnglish(string? platform)
     {
-        IReadOnlyList<LanguageCatalogue> catalogues = Load();
+        IReadOnlyList<LanguageCatalogue> catalogues = Load(platform);
         LanguageCatalogue english = catalogues.Single(catalogue => catalogue.Code == "en");
 
         foreach (LanguageCatalogue catalogue in catalogues.Where(item => item.Code != "en"))
@@ -84,6 +93,59 @@ public sealed class ShippedCatalogueTests
                 // A translation that drops a placeholder loses information, and one that invents an
                 // extra placeholder throws at format time. Both are caught by comparing the sets.
                 Assert.Equal(Placeholders(original), Placeholders(translated));
+            }
+        }
+    }
+
+    /// <summary>
+    /// A platform's wording replaces a key the other platforms also show, with the same values.
+    /// </summary>
+    /// <remarks>
+    /// The code asks for the neutral key and passes the same arguments everywhere. A variant with no
+    /// neutral key would leave every other platform showing the key itself, and a variant with other
+    /// placeholders would lose a value or throw when it is formatted.
+    /// </remarks>
+    [Fact]
+    public void EveryPlatformVariant_ReplacesAKeyWithTheSamePlaceholders()
+    {
+        foreach (string path in Directory.EnumerateFiles(LanguageDirectory, "*.json"))
+        {
+            Dictionary<string, string> strings = new(StringComparer.Ordinal);
+
+            using (JsonDocument document = JsonDocument.Parse(File.ReadAllText(path)))
+            {
+                Flatten(string.Empty, document.RootElement.GetProperty("strings"), strings);
+            }
+
+            foreach ((string key, string text) in strings)
+            {
+                if (!JsonLanguageCatalogueSource.TrySplitPlatformKey(key, out string neutral, out _))
+                {
+                    continue;
+                }
+
+                Assert.True(
+                    strings.TryGetValue(neutral, out string? original),
+                    $"{Path.GetFileName(path)} words {key} for one platform, but {neutral} does not exist.");
+
+                Assert.Equal(Placeholders(original!), Placeholders(text));
+            }
+        }
+    }
+
+    private static void Flatten(string prefix, JsonElement node, Dictionary<string, string> target)
+    {
+        foreach (JsonProperty property in node.EnumerateObject())
+        {
+            string key = prefix.Length == 0 ? property.Name : $"{prefix}.{property.Name}";
+
+            if (property.Value.ValueKind == JsonValueKind.Object)
+            {
+                Flatten(key, property.Value, target);
+            }
+            else if (property.Value.ValueKind == JsonValueKind.String)
+            {
+                target[key] = property.Value.GetString() ?? string.Empty;
             }
         }
     }
