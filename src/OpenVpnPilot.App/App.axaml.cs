@@ -133,10 +133,10 @@ public partial class App : Application
         services.GetRequiredService<LogSettingsApplier>().Attach();
         services.GetRequiredService<OpenVpnLogRelay>().Attach();
 
-        AppLog.Started(
-            services.GetRequiredService<ILogger<App>>(),
-            typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown",
-            Environment.OSVersion.VersionString);
+        ILogger<App> logger = services.GetRequiredService<ILogger<App>>();
+        Version? version = typeof(App).Assembly.GetName().Version;
+
+        AppLog.Started(logger, version, Environment.OSVersion.VersionString);
 
         services.GetRequiredService<SessionRecorder>().Attach();
         services.GetRequiredService<PingMonitor>().Start();
@@ -228,12 +228,13 @@ public partial class App : Application
     private async Task RunStartupActionsAsync(MainWindowViewModel viewModel)
     {
         RemoteCommandHandler handler = host!.Services.GetRequiredService<RemoteCommandHandler>();
+        ILogger<App> logger = host.Services.GetRequiredService<ILogger<App>>();
 
         foreach (string command in Startup.ToCommands())
         {
             string reply = await handler.HandleAsync(command);
             viewModel.StatusMessage = reply;
-            AppLog.StartupActionRan(host.Services.GetRequiredService<ILogger<App>>(), command, reply);
+            AppLog.StartupActionRan(logger, command, reply);
         }
     }
 
@@ -249,7 +250,8 @@ public partial class App : Application
 
         if (abandoned > 0)
         {
-            AppLog.AbandonedSessionsClosed(services.GetRequiredService<ILogger<App>>(), abandoned);
+            ILogger<App> logger = services.GetRequiredService<ILogger<App>>();
+            AppLog.AbandonedSessionsClosed(logger, abandoned);
         }
 
         WatchedFolderMonitor watched = services.GetRequiredService<WatchedFolderMonitor>();
@@ -287,7 +289,8 @@ public partial class App : Application
 
         if (removed > 0)
         {
-            AppLog.StaleRuntimeFilesRemoved(host.Services.GetRequiredService<ILogger<App>>(), removed);
+            ILogger<App> logger = host.Services.GetRequiredService<ILogger<App>>();
+            AppLog.StaleRuntimeFilesRemoved(logger, removed);
         }
     }
 
@@ -336,7 +339,8 @@ public partial class App : Application
         RunStep(logger, "log relay", () => services.GetRequiredService<OpenVpnLogRelay>().Dispose());
         RunStep(logger, "log settings", () => services.GetRequiredService<LogSettingsApplier>().Dispose());
 
-        AppLog.ShutdownCompleted(logger, (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        long elapsed = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        AppLog.ShutdownCompleted(logger, elapsed);
 
         // After the last line worth writing, and before the container that owns the file handle goes.
         RunStep(logger, started, "log", async () => await services.GetRequiredService<LogHub>().DisposeAsync());

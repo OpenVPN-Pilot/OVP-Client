@@ -8,6 +8,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged. A release tag is `v<version>`, for example `v1.2.0`.
 
+## [Unreleased]
+
+### Fixed
+
+- The solution builds with the .NET SDK 10.0.400, whose analysers refuse a log call that formats its
+  arguments before knowing whether the line will be written. The source generated log methods now
+  receive the values themselves and format them only when the line is written. The lines read as
+  before, except that an update check which found no release reports its latest version as `(null)`
+  rather than `-`.
+
 ## [1.3.0] - 2026-09-01
 
 ### Added
