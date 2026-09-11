@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
@@ -97,6 +98,12 @@ public partial class QuickSwitcherWindow : Window
         }
     }
 
+    /// <summary>
+    /// The modifier the platform uses for application shortcuts.
+    /// </summary>
+    private static KeyModifiers CommandModifier =>
+        Application.Current?.PlatformSettings?.HotkeyConfiguration.CommandModifiers ?? KeyModifiers.Control;
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         ArgumentNullException.ThrowIfNull(e);
@@ -110,8 +117,9 @@ public partial class QuickSwitcherWindow : Window
 
             case Key.Enter:
                 // Return connects and leaves you where you were, which is the whole point of a
-                // palette. Control and return says you want to watch it happen.
-                if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+                // palette. The command modifier and return says you want to watch it happen: control
+                // on Windows, command on macOS, as the platform defines it for every shortcut.
+                if (e.KeyModifiers.HasFlag(CommandModifier))
                 {
                     ViewModel?.AcceptAndShowCommand.Execute(null);
                 }

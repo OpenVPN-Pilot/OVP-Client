@@ -6,7 +6,9 @@
   },
   "strings": {
     "app": {
-      "name": "OpenVPN Pilot"
+      "name": "OpenVPN Pilot",
+      "menuAbout": "About OpenVPN Pilot",
+      "menuSettings": "Settings…"
     },
     "common": {
       "cancel": "Cancel",
