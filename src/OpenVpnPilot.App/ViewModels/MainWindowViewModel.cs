@@ -203,6 +203,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     public partial string EnvironmentProblems { get; set; } = string.Empty;
 
     /// <summary>
+    /// Where the banner's button leads: the place the platform named for what is missing, or the
+    /// OpenVPN Community download page when it named none.
+    /// </summary>
+    public string EnvironmentSetupUrl => environment.Report?.SetupUrl ?? OpenVpnDownloadUrl;
+
+    /// <summary>
     /// True while a newer release has been found and the notice has not been dismissed.
     /// </summary>
     [ObservableProperty]

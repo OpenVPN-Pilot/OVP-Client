@@ -90,13 +90,15 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Opens the page OpenVPN Community is downloaded from.
+    /// Opens the page that what the banner reports as missing is obtained from.
     /// </summary>
     private async Task OpenDownloadPageAsync()
     {
+        string url = ViewModel?.EnvironmentSetupUrl ?? MainWindowViewModel.OpenVpnDownloadUrl;
+
         if (TopLevel.GetTopLevel(this)?.Launcher is { } launcher)
         {
-            await launcher.LaunchUriAsync(new Uri(MainWindowViewModel.OpenVpnDownloadUrl));
+            await launcher.LaunchUriAsync(new Uri(url));
         }
     }
 
