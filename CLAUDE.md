@@ -2,9 +2,10 @@
 
 A desktop client for OpenVPN that is built for managing many profiles: search, folders, favourites,
 bulk import, global hotkeys, live telemetry and session history. The application drives the `openvpn`
-process through the interactive service and the management interface. It does not reimplement OpenVPN.
+process through a privileged component and the management interface. It does not reimplement OpenVPN.
 
-Target platform for the current version is Windows. macOS is prepared for but not implemented.
+The target platforms are Windows and macOS. On Windows the privileged component is OpenVPN's own
+interactive service; on macOS it is this project's helper, because macOS has no equivalent.
 
 ---
 
@@ -28,10 +29,13 @@ Target platform for the current version is Windows. macOS is prepared for but no
 
 ## Platform rules
 
-- The target platform is Windows, but `Core`, `OpenVpn`, `Data` and `App` stay platform neutral:
-  no P/Invoke, no `Microsoft.Win32`, no path or separator assumptions outside `Platform.Windows`.
-- Every platform dependent capability gets an interface in `Core`. Adding macOS later must mean adding
-  a project that implements those interfaces, never restructuring existing code.
+- `Core`, `OpenVpn`, `Data` and `App` stay platform neutral: no P/Invoke, no `Microsoft.Win32`, no
+  path or separator assumptions outside `Platform.Windows` and `Platform.MacOS`.
+- Every platform dependent capability gets an interface in `Core`. A platform is a project that
+  implements those interfaces, never a change to the shared code.
+- `Platform.MacOS.Helper` is the only part that runs as root, and `Platform.MacOS.Protocol` is the
+  only thing the two sides share. The helper depends on nothing else of this repository, so what runs
+  with privileges stays small enough to read in one sitting.
 
 ## Neutrality
 
@@ -270,6 +274,107 @@ the model.
   verification failure, `CRV1:<flags>:<state>:<base64 user>:<text>`, and is answered in the next
   attempt with a password of `CRV1::<state>::<response>`. A dynamic challenge is a request for a
   code, not a wrong password, so it must not be reported to the user as a rejected credential.
+
+---
+
+## Verified macOS integration facts
+
+Measured on macOS 26 on arm64 with .NET 10. These are test results, not assumptions. Do not
+re-derive them, and correct this section if a measurement ever contradicts it.
+
+### Why there is a helper, and why it is built this way
+
+macOS has nothing like OpenVPN's interactive service. Only root can open a tun device, install
+routes and change the name servers, so `openvpn` runs as root and something privileged has to start
+it. Two requirements decided the shape of that something: a person must be able to use this like any
+other application, and nothing may be left permanently changed when a tunnel ends badly.
+
+- **A launchd daemon with socket activation, installed once by a package.** The application talks to
+  it over a Unix socket in `/var/run`. launchd starts it on the first connection and it exits when it
+  has been idle, so nothing of it runs while the application is closed. The alternative of asking for
+  the password at every connection was rejected because that is not how a normal program behaves, and
+  a setuid binary was rejected because it would inherit the whole environment of whoever ran it.
+- **`SMAppService` cannot be used.** Measured: registering a daemon from inside the bundle is refused
+  without a Developer ID signature, and this is distributed without one. The package therefore
+  installs the job definition, and the helper package is the one part a person installs with a
+  password.
+- **The caller sends values, never options.** The protocol carries a configuration, a management port,
+  a password and pull filters; the helper builds the command line itself. Nothing a caller sends can
+  become an option, so no caller can turn a launch into `--up /tmp/mine`.
+- **The configuration is part of the attack surface and is rewritten, not forwarded.** It is parsed
+  with a port of OpenVPN's own `parse_line`, checked against a list of what may appear, and written
+  out again canonically. Anything that runs a program, reads a file the caller chose, or changes what
+  the root process is, is refused with the reason. `--script-security 1` is placed after `--config`,
+  so the configuration cannot raise it.
+- **`setenv` is refused except for `UV_*` and `FORWARD_COMPATIBLE`.** The name server script runs as
+  root, and `setenv` would put `PATH`, `BASH_ENV` or `dns_vars_file` into its environment.
+- **The configuration travels as content, not as a path.** The helper writes its own copy into a
+  root owned directory with mode 0700 and the file 0600, so between the check and the launch there is
+  nothing left for anyone to swap.
+- **A tunnel belongs to the session that started it.** When the connection ends, however it ends, its
+  tunnels are ended too: an application that is gone can no longer answer credential prompts or the
+  stop signal, and nobody else knows the management password.
+- **The name server state is written down before it is changed.** What a tunnel changed is restored
+  when it ends, and leftovers from a tunnel that was killed are restored when the helper starts,
+  which is checked against the boot time so a stale record cannot undo a newer setting. This is the
+  requirement that nothing stays broken, made explicit.
+- **Who may start what mirrors the Windows rule.** Members of the administrators group, or of a group
+  the package creates when the console user is not an administrator, may start their own
+  configuration; everyone else may start only what an administrator installed.
+
+### Variadic C functions cannot be reached through P/Invoke here
+
+Apple's arm64 ABI passes the variadic arguments of a C function on the stack, while a declaration
+with a fixed parameter list passes them in registers, so the callee reads something that was never
+written. Measured with `fcntl(fd, F_DUPFD_CLOEXEC, 10)`: the same call succeeds in C and returns the
+descriptor, and fails through `LibraryImport` with three `int` parameters. `fcntl(fd, F_GETFD)`, which
+needs no variadic argument, succeeds, and so does the non variadic `dup`.
+
+Nothing in this repository may declare a variadic libc function. `SpawnedProcess` therefore moves its
+descriptors with `dup`, taking the lowest free number until one is high enough.
+
+### What the child of a spawn inherits
+
+`POSIX_SPAWN_CLOEXEC_DEFAULT` does what it says, so close on exec on the parent's own descriptors is
+not needed. Measured by asking the child which descriptors it has, with a shell loop that opens
+nothing: a spawned process sees exactly standard input, standard output, standard error and the
+descriptor the management password arrives on, both for a single launch and for four at once.
+
+That is why the password can be handed over on an inherited pipe. On Unix, OpenVPN reads a password
+from standard input only when standard input is a terminal, so the pipe is named to it as
+`/dev/fd/3` instead. It never touches a disk.
+
+### A process can be gone while its last words are still in the pipe
+
+Reading what a process said as soon as it has exited reads nothing at all: the thread draining the
+pipe has not necessarily run yet. Measured through the helper's version probe, which reported OpenVPN
+as missing although it had printed its version and exited cleanly. `SpawnedProcess` therefore
+completes an `OutputDrained` task when the pipe ends, and anything that explains an exit by what was
+said waits for that rather than for the exit.
+
+### Serialisation compiled ahead of time does not run property initialisers
+
+The helper is compiled ahead of time and therefore serialises through generated code. Measured: a
+member a sender leaves out arrives as null or zero, whatever default the record declares, while the
+reflection based serialiser keeps the declared default. A `LaunchSpecification` with no `verbosity`
+arrives with zero and not with three, and one with no `pullFilters` arrives with null and not with an
+empty list.
+
+Nothing that comes off the socket may be assumed to be present, including the type of the message
+itself. This is not a detail of style: the first version of the helper dereferenced a list it had
+declared as empty, and the request died in an exception that ended the session without an answer.
+
+### Every request is answered
+
+A caller that hears nothing waits for a tunnel that was never started, and a service that stops
+talking cannot be diagnosed from outside. The session loop therefore answers a request whose handling
+threw, with a refusal that says the helper failed, and writes the exception to the helper's log.
+
+### A Unix socket path is short
+
+`sockaddr_un` holds 104 characters on macOS. The per user temporary directory alone is longer than
+that with a name after it, so anything that binds a socket under a temporary directory has to keep
+the path short. The helper's own socket lives at `/var/run/org.openvpnpilot.helper.sock`.
 
 ---
 
