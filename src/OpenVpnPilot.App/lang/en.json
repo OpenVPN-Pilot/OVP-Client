@@ -150,10 +150,10 @@
       "noMatch": "No profile matches",
       "disconnectPlaceholder": "Type to search what is connected",
       "nothingConnected": "Nothing is connected",
-      "disconnectHint": "Space ticks   Enter disconnects   Ctrl+Enter also shows the window   Escape closes",
-      "disconnectHint@macos": "Space ticks   Return disconnects   Command+Return also shows the window   Escape closes",
-      "hint": "Enter connects   Ctrl+Enter connects and shows the window   Arrow keys move   Escape closes",
-      "hint@macos": "Return connects   Command+Return connects and shows the window   Arrow keys move   Escape closes"
+      "disconnectHint": "Space ticks   Enter disconnects   Ctrl+Enter shows too   ↑↓ moves selection   Alt+←/→ switches display   Esc closes",
+      "disconnectHint@macos": "Space ticks   ↩ disconnects   ⌘↩ shows too   ↑↓ moves selection   ⌥+←/→ switches display   ⎋ closes",
+      "hint": "Enter connects   Ctrl+Enter shows too   ↑↓ moves selection   Alt+←/→ switches display   Esc closes",
+      "hint@macos": "↩ connects   ⌘↩ shows too   ↑↓ moves selection   ⌥+←/→ switches display   ⎋ closes"
     },
     "notify": {
       "connectingTitle": "Connecting",

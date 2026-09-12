@@ -150,10 +150,10 @@
       "noMatch": "Kein Profil passt",
       "disconnectPlaceholder": "Verbundene durchsuchen",
       "nothingConnected": "Nichts ist verbunden",
-      "disconnectHint": "Leertaste wählt   Eingabe trennt   Strg+Eingabe zeigt zusätzlich das Fenster   Escape schließt",
-      "disconnectHint@macos": "Leertaste wählt   Zeilenschalter trennt   Befehlstaste+Zeilenschalter zeigt zusätzlich das Fenster   Escape schließt",
-      "hint": "Eingabe verbindet   Strg+Eingabe verbindet und zeigt das Fenster   Pfeiltasten bewegen   Escape schließt",
-      "hint@macos": "Zeilenschalter verbindet   Befehlstaste+Zeilenschalter verbindet und zeigt das Fenster   Pfeiltasten bewegen   Escape schließt"
+      "disconnectHint": "Leertaste wählt   Eingabetaste trennt   Strg+Eingabetaste zeigt zusätzlich   ↑↓ bewegt Auswahl   Alt+←/→ wechselt Bildschirm   Esc schließt",
+      "disconnectHint@macos": "Leertaste wählt   ↩ trennt   ⌘↩ zeigt zusätzlich   ↑↓ bewegt Auswahl   ⌥+←/→ wechselt Bildschirm   ⎋ schließt",
+      "hint": "Eingabetaste verbindet   Strg+Eingabetaste zeigt zusätzlich   ↑↓ bewegt Auswahl   Alt+←/→ wechselt Bildschirm   Esc schließt",
+      "hint@macos": "↩ verbindet   ⌘↩ zeigt zusätzlich   ↑↓ bewegt Auswahl   ⌥+←/→ wechselt Bildschirm   ⎋ schließt"
     },
     "notify": {
       "connectingTitle": "Verbindung wird aufgebaut",
