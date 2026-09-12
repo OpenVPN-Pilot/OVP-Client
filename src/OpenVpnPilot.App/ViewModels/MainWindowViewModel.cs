@@ -892,6 +892,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void DismissUpdate() => IsUpdateAvailable = false;
 
     /// <summary>
+    /// How long a tunnel is given to come up, or null when it may take as long as it likes.
+    /// </summary>
+    private TimeSpan? ConnectTimeout => settings.Current.Connections.ConnectTimeoutSeconds > 0
+        ? TimeSpan.FromSeconds(settings.Current.Connections.ConnectTimeoutSeconds)
+        : null;
+
+    /// <summary>
     /// The pull filters that stop a server from taking over the host routing table and DNS.
     /// </summary>
     /// <remarks>
@@ -899,13 +906,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// traffic needs the pushed default route while one that reaches a single network must not take
     /// the host's routing with it.
     /// </remarks>
-    /// <summary>
-    /// How long a tunnel is given to come up, or null when it may take as long as it likes.
-    /// </summary>
-    private TimeSpan? ConnectTimeout => settings.Current.Connections.ConnectTimeoutSeconds > 0
-        ? TimeSpan.FromSeconds(settings.Current.Connections.ConnectTimeoutSeconds)
-        : null;
-
     private string[] RouteProtectionFor(ProfileItemViewModel profile) =>
         profile.ProtectRoutes ?? settings.Current.Connections.ProtectRoutes
             ? RouteProtection
