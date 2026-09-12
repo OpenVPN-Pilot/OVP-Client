@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The privileged helper. It runs as root, so it is small, compiled ahead of time into one binary
+    that loads nothing but system libraries, and references nothing but the protocol it speaks. The
+    package installs it root owned under /Library/PrivilegedHelperTools.
+
+    It has to be published with the Microsoft build of the .NET SDK: a source built SDK, such as the
+    one Homebrew ships, links the ahead of time runtime against Homebrew's OpenSSL and brotli, which
+    would put libraries a user can replace into a process that runs as root.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>org.openvpnpilot.helper</AssemblyName>
+    <RootNamespace>OpenVpnPilot.Platform.MacOS.Helper</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <StripSymbols>true</StripSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenVpnPilot.Platform.MacOS.Protocol\OpenVpnPilot.Platform.MacOS.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenVpnPilot.Platform.MacOS.Tests" />
+  </ItemGroup>
+
+</Project>

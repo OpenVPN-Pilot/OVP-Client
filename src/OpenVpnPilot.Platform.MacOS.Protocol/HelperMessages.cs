@@ -97,12 +97,21 @@ public static class HelperRefusal
     /// OpenVPN could not be started.
     /// </summary>
     public const string LaunchFailed = "launch-failed";
+
+    /// <summary>
+    /// The helper itself failed while carrying out the request. The reason is in its log.
+    /// </summary>
+    /// <remarks>
+    /// A request is always answered, including when answering it went wrong, because a caller that
+    /// is told nothing waits for a tunnel that does not exist.
+    /// </remarks>
+    public const string Failed = "failed";
 }
 
 /// <summary>
 /// One request from the application or the companion command.
 /// </summary>
-public sealed class HelperRequest
+public sealed record HelperRequest
 {
     public string Type { get; init; } = string.Empty;
 
@@ -145,8 +154,12 @@ public sealed class HelperRequest
 /// only root can read it, which rules out a file being swapped between the check and the use, and
 /// means root never opens a path a caller chose.
 /// </remarks>
-public sealed class LaunchSpecification
+public sealed record LaunchSpecification
 {
+    // Every member here can arrive absent, and absent is null or zero: the serialisation the helper
+    // is compiled with does not run property initialisers, so a default written as one would be a
+    // default the helper never sees. Nothing in this record may be assumed to be present.
+
     /// <summary>
     /// The configuration itself, for a caller authorised to start its own.
     /// </summary>
@@ -166,17 +179,17 @@ public sealed class LaunchSpecification
     /// <summary>
     /// The management password. Handed to OpenVPN through a pipe and never written anywhere.
     /// </summary>
-    public string ManagementPassword { get; init; } = string.Empty;
+    public string? ManagementPassword { get; init; }
 
     /// <summary>
-    /// What OpenVPN is asked to report, from 0 to 11.
+    /// What OpenVPN is asked to report, from 0 to 11. Absent means zero, not the client's default.
     /// </summary>
-    public int Verbosity { get; init; } = 3;
+    public int Verbosity { get; init; }
 
     /// <summary>
     /// Pushed options to accept, ignore or reject, which is how route protection is applied.
     /// </summary>
-    public IReadOnlyList<PullFilterSpecification> PullFilters { get; init; } = [];
+    public IReadOnlyList<PullFilterSpecification>? PullFilters { get; init; }
 }
 
 /// <summary>
@@ -187,7 +200,7 @@ public sealed record PullFilterSpecification(string Action, string Text);
 /// <summary>
 /// One answer from the helper.
 /// </summary>
-public sealed class HelperResponse
+public sealed record HelperResponse
 {
     public string Type { get; init; } = string.Empty;
 

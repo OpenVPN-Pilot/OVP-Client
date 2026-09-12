@@ -1,5 +1,4 @@
 using System.Runtime.Versioning;
-using System.Xml.Linq;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenVpnPilot.Core.Abstractions;
@@ -81,7 +80,7 @@ public sealed class LaunchAgentAutoStartManager : IAutoStartManager
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(agentPath)!);
-            File.WriteAllText(agentPath, BuildDefinition(arguments));
+            File.WriteAllText(agentPath, LoginAgent.BuildDefinition(Label, BundleIdentifier, arguments));
             return true;
         }
         catch (IOException exception)
@@ -94,38 +93,6 @@ public sealed class LaunchAgentAutoStartManager : IAutoStartManager
             AutoStartLog.WriteFailed(logger, enabled, exception);
             return false;
         }
-    }
-
-    /// <summary>
-    /// The launchd job definition, written as a property list.
-    /// </summary>
-    internal static string BuildDefinition(IReadOnlyList<string> arguments)
-    {
-        XElement Key(string name) => new("key", name);
-        XElement Text(string value) => new("string", value);
-
-        XDocument document = new(
-            new XDeclaration("1.0", "UTF-8", null),
-            new XDocumentType("plist", "-//Apple//DTD PLIST 1.0//EN", "http://www.apple.com/DTDs/PropertyList-1.0.dtd", null),
-            new XElement(
-                "plist",
-                new XAttribute("version", "1.0"),
-                new XElement(
-                    "dict",
-                    Key("Label"),
-                    Text(Label),
-                    Key("ProgramArguments"),
-                    new XElement("array", arguments.Select(Text)),
-                    Key("RunAtLoad"),
-                    new XElement("true"),
-                    Key("LimitLoadToSessionType"),
-                    Text("Aqua"),
-                    Key("ProcessType"),
-                    Text("Interactive"),
-                    Key("AssociatedBundleIdentifiers"),
-                    new XElement("array", Text(BundleIdentifier)))));
-
-        return document.Declaration + Environment.NewLine + document.ToString() + Environment.NewLine;
     }
 
     /// <summary>
@@ -145,29 +112,13 @@ public sealed class LaunchAgentAutoStartManager : IAutoStartManager
             return null;
         }
 
-        string? bundle = BundleOf(executable);
+        string? bundle = LoginAgent.BundleOf(executable);
 
         return bundle is null
             ? [executable, BackgroundFlag]
             : ["/usr/bin/open", "-g", "-a", bundle, "--args", BackgroundFlag];
     }
 
-    /// <summary>
-    /// The application bundle an executable sits in, when it sits in one.
-    /// </summary>
-    internal static string? BundleOf(string executable)
-    {
-        DirectoryInfo? macOs = new FileInfo(executable).Directory;
-        DirectoryInfo? contents = macOs?.Parent;
-        DirectoryInfo? bundle = contents?.Parent;
-
-        return macOs?.Name == "MacOS"
-            && contents?.Name == "Contents"
-            && bundle is not null
-            && bundle.Name.EndsWith(".app", StringComparison.OrdinalIgnoreCase)
-                ? bundle.FullName
-                : null;
-    }
 }
 
 /// <summary>
