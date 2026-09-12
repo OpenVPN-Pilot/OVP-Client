@@ -119,16 +119,28 @@ libraries, and one of the two things shipped here runs as root.
 
 ### The artwork
 
-The application icon and the background of the disk image window are drawn from geometry rather than
-kept as images somebody once exported, so both are sharp at every size the system asks for:
+Everything visual comes out of one folder, `assets/artwork`, and one command draws all of it from
+geometry rather than from images somebody once exported, so each is sharp at every size the system
+asks for:
 
 ```bash
-swift installer/make-art.swift
+swift assets/make-artwork.swift
 ```
 
-It writes `installer/OpenVpnPilot.icns` and `installer/dmg-background.png`, both of which are
-committed. It is deliberately not part of `installer/build-macos.sh`: building an installer should
-not also need a Swift compiler, and artwork changes on a different schedule from code.
+| | |
+| --- | --- |
+| `OpenVpnPilot.icns` | The macOS application icon: the mark on a light tile, in the ten representations an icns is expected to carry |
+| `OpenVpnPilot.ico` | The same icon for Windows, in eight sizes, which the executable and the windows both use |
+| `status-item.png` | The menu bar entry on macOS: black shapes on transparency, which the menu bar tints itself |
+| `dmg-background.png` | The background of the disk image window |
+
+All four are committed, and the projects link them from there rather than keeping copies. Below 32
+points the tile is dropped and the mark is drawn on its own: a tile and a mark inside it at 16 points
+leave the mark ten points across and the dot in its middle two, and what survives at that size is the
+mark filling the square.
+
+The command is deliberately not part of any build. Producing an installer should not also need a
+Swift compiler, and artwork changes on a different schedule from code.
 
 The positions the disk image window places its two icons at are in `installer/build-macos.sh` and the
 background is drawn for those positions, so changing one means changing the other. Arranging that

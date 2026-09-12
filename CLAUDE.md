@@ -403,8 +403,9 @@ macOS 26, and each of these cost a build to find:
   same name already mounted pushes the new one aside to a name with a number after it, and the rest
   of the build then arranges, decorates and checks the wrong disk without saying so.
 
-The artwork both halves of this need is drawn by `installer/make-art.swift`, which is run by hand and
-whose output is committed.
+The artwork both halves of this need is drawn by `assets/make-artwork.swift`, which is run by hand
+and whose output is committed. Everything visual comes out of `assets/artwork`, and nothing else in
+the repository holds a copy of it.
 
 ---
 

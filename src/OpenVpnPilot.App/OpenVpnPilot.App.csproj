@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>Assets\openvpnpilot.ico</ApplicationIcon>
+    <ApplicationIcon>..\..\assets\artwork\OpenVpnPilot.ico</ApplicationIcon>
     <AssemblyName>OpenVpnPilot</AssemblyName>
     <!-- Required by the LibraryImport source generator used for the window handover. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -12,6 +12,12 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+
+    <!--
+      The icon comes from assets/artwork, which is the one place any of the artwork is drawn, and is
+      linked to the path the windows already name so nothing in the XAML depends on where it lives.
+    -->
+    <AvaloniaResource Include="..\..\assets\artwork\OpenVpnPilot.ico" Link="Assets\openvpnpilot.ico" />
   </ItemGroup>
 
   <ItemGroup>
@@ -19,7 +25,7 @@
       The icon also ships as a file. The shell reads it from disk when it looks up the application
       identity that labels the notifications, and it cannot reach one embedded in the assembly.
     -->
-    <Content Include="Assets\openvpnpilot.ico" Link="openvpnpilot.ico"
+    <Content Include="..\..\assets\artwork\OpenVpnPilot.ico" Link="openvpnpilot.ico"
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

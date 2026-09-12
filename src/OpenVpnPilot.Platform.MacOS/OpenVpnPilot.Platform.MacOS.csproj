@@ -16,7 +16,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AvaloniaResource Include="Assets\**" />
+    <!--
+      The menu bar template comes from assets/artwork, which is the one place any of the artwork is
+      drawn, and is linked to the path MacStatusItem names.
+    -->
+    <AvaloniaResource Include="..\..\assets\artwork\status-item.png" Link="Assets\status-item.png" />
   </ItemGroup>
 
   <PropertyGroup>

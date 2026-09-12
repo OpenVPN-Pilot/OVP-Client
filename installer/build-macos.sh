@@ -179,10 +179,10 @@ build_application() {
 
     cp -R "${publish}/." "${app}/Contents/MacOS/"
 
-    [[ -f "${repository}/installer/OpenVpnPilot.icns" ]] \
-        || fail 'installer/OpenVpnPilot.icns is missing.'
+    [[ -f "${repository}/assets/artwork/OpenVpnPilot.icns" ]] \
+        || fail 'assets/artwork/OpenVpnPilot.icns is missing. Run: swift assets/make-artwork.swift'
 
-    cp "${repository}/installer/OpenVpnPilot.icns" "${app}/Contents/Resources/"
+    cp "${repository}/assets/artwork/OpenVpnPilot.icns" "${app}/Contents/Resources/"
 
     write_information_plist "${app}/Contents/Info.plist"
 
@@ -207,7 +207,7 @@ build_application() {
 # the Finder, and only then compressed. This is the same sequence every tool that does this uses, for
 # the same reason.
 #
-# Positions and the window size are the ones installer/make-art.swift drew the background for. Change
+# Positions and the window size are the ones assets/make-artwork.swift drew the background for. Change
 # one and the other has to change with it.
 readonly WINDOW_WIDTH=640
 readonly WINDOW_HEIGHT=400
@@ -230,13 +230,13 @@ build_disk_image() {
     local writable="${staging}/OpenVpnPilot-rw.dmg"
     local mounted="/Volumes/${volume}"
 
-    [[ -f "${repository}/installer/dmg-background.png" ]] \
-        || fail 'installer/dmg-background.png is missing. Run: swift installer/make-art.swift'
+    [[ -f "${repository}/assets/artwork/dmg-background.png" ]] \
+        || fail 'assets/artwork/dmg-background.png is missing. Run: swift assets/make-artwork.swift'
 
     rm -rf "$room"
     mkdir -p "${room}/.background"
     cp -R "$app" "${room}/"
-    cp "${repository}/installer/dmg-background.png" "${room}/.background/background.png"
+    cp "${repository}/assets/artwork/dmg-background.png" "${room}/.background/background.png"
 
     # The link is the whole gesture: the window opens, the application is dragged onto it.
     ln -s /Applications "${room}/Applications"
@@ -298,7 +298,7 @@ build_disk_image() {
     # And it goes on after the Finder has finished, not before. Measured on macOS 26: opening the
     # window deletes the file and clears the attribute again, every time, so an icon set first is an
     # icon that is gone by the time the image is compressed.
-    cp "${repository}/installer/OpenVpnPilot.icns" "${mounted}/.VolumeIcon.icns"
+    cp "${repository}/assets/artwork/OpenVpnPilot.icns" "${mounted}/.VolumeIcon.icns"
     SetFile -a C "$mounted" || fail 'The volume icon attribute could not be set.'
 
     # Checked rather than assumed, because both halves of it are quiet when they fail: a missing file
