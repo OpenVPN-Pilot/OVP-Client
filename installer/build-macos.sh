@@ -184,25 +184,215 @@ build_application() {
     say '  signing'
     sign_bundle "$app"
 
+    build_disk_image "$app"
+}
+
+# The window a disk image opens is the first thing anyone sees of this, and a window that opens as a
+# plain list of two items reads as something half finished. What makes it look like every other
+# application's is not decoration: a fixed window size, no toolbar, the two icons at fixed positions
+# with a background drawn to match, and a volume icon.
+#
+# None of that lives in the disk image as data anyone can write directly. The Finder keeps it in a
+# .DS_Store that only the Finder writes, so the image is built writable, mounted, arranged through
+# the Finder, and only then compressed. This is the same sequence every tool that does this uses, for
+# the same reason.
+#
+# Positions and the window size are the ones installer/make-art.swift drew the background for. Change
+# one and the other has to change with it.
+readonly WINDOW_WIDTH=640
+readonly WINDOW_HEIGHT=400
+
+# The bounds the Finder is given describe the whole window, title bar included, while the background
+# fills only what is below it. Measured on macOS 26: a window asked for 400 shows 372 of the picture
+# and cuts the rest off the bottom. The title bar is therefore added to what is asked for.
+readonly TITLE_BAR_HEIGHT=28
+readonly ICON_SIZE=128
+readonly APPLICATION_POSITION_X=170
+readonly APPLICATION_POSITION_Y=205
+readonly APPLICATIONS_POSITION_X=470
+readonly APPLICATIONS_POSITION_Y=205
+
+build_disk_image() {
+    local app="$1"
     local image="${output}/OpenVpnPilot-${version}-${runtime}.dmg"
+    local volume="OpenVPN Pilot ${version}"
     local room="${staging}/image"
+    local writable="${staging}/OpenVpnPilot-rw.dmg"
+    local mounted="/Volumes/${volume}"
+
+    [[ -f "${repository}/installer/dmg-background.png" ]] \
+        || fail 'installer/dmg-background.png is missing. Run: swift installer/make-art.swift'
 
     rm -rf "$room"
-    mkdir -p "$room"
+    mkdir -p "${room}/.background"
     cp -R "$app" "${room}/"
+    cp "${repository}/installer/dmg-background.png" "${room}/.background/background.png"
 
     # The link is the whole gesture: the window opens, the application is dragged onto it.
     ln -s /Applications "${room}/Applications"
 
-    rm -f "$image"
+    # Room for the payload and for what the Finder writes on top of it. A writable image that runs
+    # out of space mid-arrangement fails in ways that are hard to read.
+    local kilobytes
+    kilobytes=$(du -sk "$room" | cut -f1)
+    local megabytes=$(( kilobytes / 1024 + 60 ))
+
+    # A volume of this name already mounted would push this one aside to a name with a number after
+    # it, and everything below would then be done to the wrong disk.
+    [[ -d "$mounted" ]] && hdiutil detach "$mounted" -quiet 2> /dev/null
+
+    rm -f "$writable"
     hdiutil create \
-        -volname "OpenVpnPilot ${version}" \
+        -volname "$volume" \
         -srcfolder "$room" \
-        -format UDZO \
+        -fs HFS+ \
+        -format UDRW \
+        -size "${megabytes}m" \
         -quiet \
-        "$image"
+        "$writable" \
+        || fail 'The writable disk image could not be created.'
+
+    # Where it actually landed, read back rather than assumed. The name a volume is given and the
+    # path it is mounted at are not the same thing whenever something else is already using that
+    # name, and doing the rest of this to the wrong path is how an image ends up without the parts
+    # that were copied onto something else.
+    local attached
+    attached=$(hdiutil attach "$writable" -readwrite -noverify -noautoopen -plist) \
+        || fail 'The writable disk image could not be mounted.'
+
+    mounted=$(printf '%s' "$attached" \
+        | awk '/<key>mount-point<\/key>/ { getline; gsub(/.*<string>|<\/string>.*/, ""); print; exit }')
+
+    [[ -n "$mounted" && -d "$mounted" ]] \
+        || fail 'The writable disk image reported no mount point.'
+
+    # The Finder is told which disk to arrange by name, so the name it actually got is read back too.
+    volume=$(basename "$mounted")
+
+    say "  mounted at ${mounted}"
+
+    say '  arranging the window'
+    arrange_window "$volume" || fail 'The Finder could not arrange the disk image window. It needs permission to be controlled by whatever runs this script, which macOS asks for once, under System Settings, Privacy & Security, Automation.'
+
+    # Everything in the image belongs to whoever mounts it, so nothing carries a group or other write
+    # bit out of this build.
+    chmod -Rf go-w "$mounted" 2> /dev/null || true
+    sync
+
+    # The icon the disk itself shows, on the desktop, in the sidebar and in its own title bar. Two
+    # things about it were measured rather than assumed.
+    #
+    # It goes on the mounted volume and not into the folder the image was made from: hdiutil does
+    # something of its own with a .VolumeIcon.icns it finds there, and the file was not in the result.
+    #
+    # And it goes on after the Finder has finished, not before. Measured on macOS 26: opening the
+    # window deletes the file and clears the attribute again, every time, so an icon set first is an
+    # icon that is gone by the time the image is compressed.
+    cp "${repository}/installer/OpenVpnPilot.icns" "${mounted}/.VolumeIcon.icns"
+    SetFile -a C "$mounted" || fail 'The volume icon attribute could not be set.'
+
+    # Checked rather than assumed, because both halves of it are quiet when they fail: a missing file
+    # leaves the attribute pointing at nothing, and an attribute that was not set leaves the file
+    # unread. Either way the disk shows the generic icon and nothing says why.
+    [[ -f "${mounted}/.VolumeIcon.icns" ]] || fail 'The volume icon did not survive onto the image.'
+    [[ "$(GetFileInfo -aC "$mounted")" == '1' ]] || fail 'The volume icon attribute did not stay set.'
+
+    detach_volume "$mounted"
+
+    rm -f "$image"
+    hdiutil convert "$writable" -format UDZO -imagekey zlib-level=9 -o "$image" -quiet \
+        || fail 'The disk image could not be compressed.'
+
+    rm -f "$writable"
 
     say "  wrote ${image}"
+}
+
+# The Finder holds a volume it has open for a moment after it is told to close it, so the first
+# detach can be refused by something that is about to let go anyway.
+detach_volume() {
+    local mounted="$1" attempt
+
+    for attempt in 1 2 3 4 5; do
+        if hdiutil detach "$mounted" -quiet 2> /dev/null; then
+            return 0
+        fi
+
+        sleep 2
+    done
+
+    hdiutil detach "$mounted" -force -quiet 2> /dev/null \
+        || fail "The disk image stayed mounted at ${mounted}."
+}
+
+# Told to the Finder rather than written into the image, because the Finder is the only thing that
+# writes the file these settings live in.
+#
+# Two things this got wrong first. Every command is inside a longer timeout than the two minutes an
+# AppleEvent is given by default: the Finder is not always quick to answer while it is opening a
+# volume, and the default expiring leaves the window half arranged, which is worse than not arranged
+# at all. And the waiting is outside the block that talks to the Finder, because `delay` inside it is
+# a command the Finder is asked to carry out and counts against the same timeout.
+arrange_window() {
+    local volume="$1"
+
+    osascript <<APPLESCRIPT
+with timeout of 600 seconds
+    tell application "Finder"
+        tell disk "${volume}"
+            open
+        end tell
+    end tell
+end timeout
+
+delay 1
+
+with timeout of 600 seconds
+    tell application "Finder"
+        tell disk "${volume}"
+            set current view of container window to icon view
+            set toolbar visible of container window to false
+            set statusbar visible of container window to false
+            set the bounds of container window to {180, 140, ${WINDOW_WIDTH} + 180, ${WINDOW_HEIGHT} + ${TITLE_BAR_HEIGHT} + 140}
+
+            set options to the icon view options of container window
+            set arrangement of options to not arranged
+            set icon size of options to ${ICON_SIZE}
+            set text size of options to 13
+            set background picture of options to file ".background:background.png"
+
+            set position of item "OpenVpnPilot.app" of container window to {${APPLICATION_POSITION_X}, ${APPLICATION_POSITION_Y}}
+            set position of item "Applications" of container window to {${APPLICATIONS_POSITION_X}, ${APPLICATIONS_POSITION_Y}}
+
+            update without registering applications
+        end tell
+    end tell
+end timeout
+
+delay 3
+
+-- Closed and opened again, so what is written down is what the window reopens with rather than what
+-- it happened to be showing while it was being arranged.
+with timeout of 600 seconds
+    tell application "Finder"
+        tell disk "${volume}"
+            close
+            open
+            update without registering applications
+        end tell
+    end tell
+end timeout
+
+delay 3
+
+with timeout of 600 seconds
+    tell application "Finder"
+        tell disk "${volume}"
+            close
+        end tell
+    end tell
+end timeout
+APPLESCRIPT
 }
 
 write_information_plist() {
@@ -213,10 +403,17 @@ write_information_plist() {
 <dict>
     <key>CFBundleIdentifier</key>
     <string>${BUNDLE_IDENTIFIER}</string>
+    <!--
+        The spaced form, because this is the name the system shows people: under the icon in the
+        Finder, above a notification, and in the menu bar. It is the same name Windows is given
+        through SetCurrentProcessExplicitAppUserModelID, so one application is called one thing on
+        both. The compact form stays where a name has to be one word, which is the bundle on disk,
+        the bundle identifier and the data directory.
+    -->
     <key>CFBundleName</key>
-    <string>OpenVpnPilot</string>
+    <string>OpenVPN Pilot</string>
     <key>CFBundleDisplayName</key>
-    <string>OpenVpnPilot</string>
+    <string>OpenVPN Pilot</string>
     <key>CFBundleExecutable</key>
     <string>OpenVpnPilot</string>
     <key>CFBundleIconFile</key>
@@ -531,8 +728,14 @@ rm -rf "$SUPPORT_DIRECTORY"
 pkgutil --forget "$HELPER_IDENTIFIER" > /dev/null 2>&1 || true
 
 echo 'The helper is removed. The application and your profiles are untouched.'
-echo 'To remove the application as well: drag OpenVpnPilot out of Applications, and delete'
-echo '~/Library/Application Support/OpenVpnPilot for its profiles and settings.'
+echo ''
+echo 'To remove the application as well, as the account that used it:'
+echo '  rm -rf /Applications/OpenVpnPilot.app'
+echo '  rm -rf ~/Library/Application\ Support/OpenVpnPilot'
+echo '  rm -f ~/Library/LaunchAgents/org.openvpnpilot.app.login.plist'
+echo ''
+echo 'The last one exists only while "start with the system" was on, and the saved sign ins are in'
+echo 'the login keychain under the service OpenVpnPilot, where Keychain Access can delete them.'
 exit 0
 SCRIPT
 }

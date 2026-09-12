@@ -379,6 +379,33 @@ threw, with a refusal that says the helper failed, and writes the exception to t
 that with a name after it, so anything that binds a socket under a temporary directory has to keep
 the path short. The helper's own socket lives at `/var/run/org.openvpnpilot.helper.sock`.
 
+### How the disk image window is arranged
+
+What a disk image window looks like is not data anyone can write into the image. The Finder keeps it
+in a `.DS_Store` that only the Finder writes, so `installer/build-macos.sh` builds a writable image,
+mounts it, tells the Finder what the window should be, and only then compresses it. Measured on
+macOS 26, and each of these cost a build to find:
+
+- **An AppleEvent gets two minutes by default, and the Finder does not always answer inside it.**
+  What expires is one command, not the script, so the window ends up half arranged: sized, with no
+  background and the icons where they fell. Every command is therefore inside `with timeout of 600
+  seconds`, and every `delay` is outside the block that talks to the Finder, because `delay` inside
+  one is a command the Finder is asked to carry out and counts against the same timeout.
+- **The bounds the Finder is given include the title bar.** A window asked for 400 shows 372 of the
+  background and cuts the rest off the bottom, so the title bar is added to what is asked for.
+- **The Finder deletes `.VolumeIcon.icns` and clears the custom icon attribute when it opens the
+  volume**, every time. The volume icon is therefore set after the window has been arranged and
+  closed, not before, and the build checks that both the file and the attribute are still there
+  before it compresses. `hdiutil` also does something of its own with that file when it is in the
+  folder an image is created from, and it was not in the result, so it is copied onto the mounted
+  volume instead.
+- **The mount point is read back from `hdiutil attach -plist` rather than assumed.** A volume of the
+  same name already mounted pushes the new one aside to a name with a number after it, and the rest
+  of the build then arranges, decorates and checks the wrong disk without saying so.
+
+The artwork both halves of this need is drawn by `installer/make-art.swift`, which is run by hand and
+whose output is committed.
+
 ---
 
 ## Windows notification identity
