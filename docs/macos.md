@@ -36,7 +36,7 @@ different moments:
 
 | | |
 | --- | --- |
-| `OpenVpnPilot-<version>-<rid>.dmg` | the application. Open it and drag OpenVpnPilot to Applications. No password. |
+| `OpenVpnPilot-<version>-<rid>.dmg` | the application. Open it and drag OpenVPN Pilot to Applications. No password. |
 | `OpenVpnPilot-Helper-<version>-<rid>.pkg` | the privileged helper and the OpenVPN it runs. Asks for a password. |
 
 Install the application first, then the helper:
@@ -65,10 +65,14 @@ privileged part is not the same as asking the application to forget everything. 
 well, as the account that used it:
 
 ```bash
-rm -rf /Applications/OpenVpnPilot.app
+rm -rf /Applications/OpenVPN\ Pilot.app
 rm -rf ~/Library/Application\ Support/OpenVpnPilot
 rm -f ~/Library/LaunchAgents/org.openvpnpilot.app.login.plist
 ```
+
+The bundle was called `OpenVpnPilot.app` up to 1.3.0. Both names are looked for, so an installation
+made before the rename keeps working, but only one of them should be in Applications: drag the older
+one out after installing the newer.
 
 The last of those exists only while "start with the system" was on. The saved sign ins are in the
 login keychain under the service `OpenVpnPilot`, which Keychain Access deletes.

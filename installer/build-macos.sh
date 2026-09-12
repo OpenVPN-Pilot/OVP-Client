@@ -19,6 +19,16 @@
 set -euo pipefail
 
 readonly BUNDLE_IDENTIFIER='org.openvpnpilot.app'
+
+# What the bundle is called on disk. The Finder labels an application with its file name and with
+# nothing else: CFBundleDisplayName, a localized InfoPlist.strings and LSHasLocalizedDisplayName were
+# all tried and the Finder went on showing the file name, so a bundle that is to read as
+# "OpenVPN Pilot" in the disk image, in Applications and in the Dock has to be called that. The
+# compact form stays where a name has to be one word: the executable inside, the bundle identifier,
+# the data directory and the command.
+# It was OpenVpnPilot.app up to 1.3.0; the package scripts look for both so an installation made
+# before the rename keeps working.
+readonly BUNDLE_NAME='OpenVPN Pilot.app'
 readonly HELPER_IDENTIFIER='org.openvpnpilot.helper'
 readonly MINIMUM_MACOS='13.0'
 
@@ -163,7 +173,7 @@ build_application() {
     find "$publish" -name '*.pdb' -delete
     find "$publish" -name '*.dsym' -prune -exec rm -rf {} + 2> /dev/null || true
 
-    local app="${staging}/OpenVpnPilot.app"
+    local app="${staging}/${BUNDLE_NAME}"
     rm -rf "$app"
     mkdir -p "${app}/Contents/MacOS" "${app}/Contents/Resources"
 
@@ -361,7 +371,7 @@ with timeout of 600 seconds
             set text size of options to 13
             set background picture of options to file ".background:background.png"
 
-            set position of item "OpenVpnPilot.app" of container window to {${APPLICATION_POSITION_X}, ${APPLICATION_POSITION_Y}}
+            set position of item "${BUNDLE_NAME}" of container window to {${APPLICATION_POSITION_X}, ${APPLICATION_POSITION_Y}}
             set position of item "Applications" of container window to {${APPLICATIONS_POSITION_X}, ${APPLICATIONS_POSITION_Y}}
 
             update without registering applications
@@ -617,7 +627,17 @@ readonly HELPER_IDENTIFIER='org.openvpnpilot.helper'
 readonly SUPPORT_DIRECTORY='/Library/Application Support/OpenVpnPilot'
 readonly COMMAND_LINK='/usr/local/bin/ovp'
 readonly AUTHORISED_GROUP='openvpnpilot'
-readonly APPLICATION='/Applications/OpenVpnPilot.app'
+
+# The bundle carried the compact name until 1.3.0, so both are looked for and whichever is there is
+# the one ovp is linked into. An installation made before the rename keeps working.
+application=''
+
+for candidate in '/Applications/OpenVPN Pilot.app' '/Applications/OpenVpnPilot.app'; do
+    if [ -x "${candidate}/Contents/MacOS/ovp" ]; then
+        application="$candidate"
+        break
+    fi
+done
 
 # Owned by root and writable by nobody else, because the helper runs what is in here as root. The
 # directories above it are shared with other software and are left exactly as they are.
@@ -648,13 +668,14 @@ fi
 
 # ovp on PATH. A link rather than a copy, so it is the one inside the application and cannot fall
 # behind it. /usr/local/bin is on the default PATH and is where a command like this belongs.
-if [ -x "${APPLICATION}/Contents/MacOS/ovp" ]; then
+if [ -n "$application" ]; then
     mkdir -p "$(dirname "$COMMAND_LINK")"
-    ln -sf "${APPLICATION}/Contents/MacOS/ovp" "$COMMAND_LINK"
-    echo "Linked ${COMMAND_LINK}."
+    ln -sf "${application}/Contents/MacOS/ovp" "$COMMAND_LINK"
+    echo "Linked ${COMMAND_LINK} to ${application}."
 else
-    echo "OpenVpnPilot.app was not found in /Applications, so ${COMMAND_LINK} was not created."
-    echo "Install the application, then run: sudo ln -sf '${APPLICATION}/Contents/MacOS/ovp' '${COMMAND_LINK}'"
+    echo "OpenVPN Pilot.app was not found in /Applications, so ${COMMAND_LINK} was not created."
+    echo "Install the application, then run:"
+    echo "  sudo ln -sf '/Applications/OpenVPN Pilot.app/Contents/MacOS/ovp' '${COMMAND_LINK}'"
 fi
 
 # Replacing a job definition means the old one has to go first, and launchctl is told to forget it
@@ -713,7 +734,7 @@ rm -rf '/Library/PrivilegedHelperTools/openvpnpilot'
 rm -f "/var/run/${HELPER_IDENTIFIER}.sock"
 
 # Only the link this package made, and only when it still points into the application.
-if [ -L "$COMMAND_LINK" ] && readlink "$COMMAND_LINK" | grep -q 'OpenVpnPilot.app'; then
+if [ -L "$COMMAND_LINK" ] && readlink "$COMMAND_LINK" | grep -q -E 'OpenVPN Pilot\.app|OpenVpnPilot\.app'; then
     rm -f "$COMMAND_LINK"
 fi
 
@@ -730,7 +751,7 @@ pkgutil --forget "$HELPER_IDENTIFIER" > /dev/null 2>&1 || true
 echo 'The helper is removed. The application and your profiles are untouched.'
 echo ''
 echo 'To remove the application as well, as the account that used it:'
-echo '  rm -rf /Applications/OpenVpnPilot.app'
+echo '  rm -rf /Applications/OpenVPN\ Pilot.app'
 echo '  rm -rf ~/Library/Application\ Support/OpenVpnPilot'
 echo '  rm -f ~/Library/LaunchAgents/org.openvpnpilot.app.login.plist'
 echo ''

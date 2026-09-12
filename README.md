@@ -10,9 +10,10 @@ It runs on Windows and on macOS. Both drive the same `openvpn` through its manag
 differs is the privileged part that starts it, which on Windows is OpenVPN's own interactive service
 and on macOS is this project's helper, because macOS has no equivalent.
 
-The compact form stays where a name has to be one word: the executable is `OpenVpnPilot.exe` or
-`OpenVpnPilot.app`, the installation directory and the data directory are `OpenVpnPilot`, and the
-companion command is `ovp`.
+The compact form stays where a name has to be one word: the executable is `OpenVpnPilot.exe`, the
+installation directory and the data directory are `OpenVpnPilot`, and the companion command is
+`ovp`. On macOS the bundle is `OpenVPN Pilot.app`, because the Finder labels an application with its
+file name and with nothing else.
 
 > **Status: version 1.3.0.** The integration layer and the interface are proven end to end against
 > OpenVPN Community 2.7.6 and against the ten server lab in this repository. Builds are unsigned by

@@ -17,14 +17,20 @@ namespace OpenVpnPilot.Cli;
 internal static class ApplicationLauncher
 {
     /// <summary>
-    /// What the application is called where it is installed.
+    /// What the application is called where it is installed, newest name first.
     /// </summary>
     /// <remarks>
     /// On macOS it is a bundle, which is a directory, and it is started through the bundle rather
     /// than by the executable inside it: that is what registers the application with the window
     /// server, gives it its name and icon, and lets the Dock and the Finder see it as one thing.
+    ///
+    /// Two names there, because the bundle used to carry the compact one. The Finder labels an
+    /// application with its file name and with nothing else, so a bundle that is to read as
+    /// "OpenVPN Pilot" has to be called that; an installation made before that is still found.
     /// </remarks>
-    private static string InstalledName => OperatingSystem.IsMacOS() ? "OpenVpnPilot.app" : "OpenVpnPilot.exe";
+    private static IReadOnlyList<string> InstalledNames => OperatingSystem.IsMacOS()
+        ? ["OpenVPN Pilot.app", "OpenVpnPilot.app"]
+        : ["OpenVpnPilot.exe"];
 
     /// <summary>
     /// The executable itself, which is what a development tree has and what sits inside a bundle.
@@ -74,11 +80,17 @@ internal static class ApplicationLauncher
                     IsBundle: true);
             }
 
-            yield return new ApplicationTarget($"/Applications/{InstalledName}", IsBundle: true);
+            foreach (string name in InstalledNames)
+            {
+                yield return new ApplicationTarget($"/Applications/{name}", IsBundle: true);
+            }
 
-            yield return new ApplicationTarget(
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Applications", InstalledName),
-                IsBundle: true);
+            foreach (string name in InstalledNames)
+            {
+                yield return new ApplicationTarget(
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Applications", name),
+                    IsBundle: true);
+            }
 
             // A development tree, where the executable is built on its own without a bundle.
             yield return new ApplicationTarget(beside, IsBundle: false);
@@ -126,7 +138,7 @@ internal static class ApplicationLauncher
         if (target is null)
         {
             Console.Error.WriteLine(
-                $"{InstalledName} could not be found beside this command, where applications are "
+                $"{InstalledNames[0]} could not be found beside this command, where applications are "
                 + "installed, or on PATH.");
             Console.Error.WriteLine("Install OpenVpnPilot, or run the command from the directory it lives in.");
             return false;
