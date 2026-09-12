@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenVpnPilot.App.Services;
@@ -99,7 +100,15 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     [ObservableProperty]
     public partial bool IsConfirmingDelete { get; set; }
 
-    public string SlotLabel(int slot) => slot == 0 ? localizer["common.none"] : slot.ToString();
+    /// <summary>
+    /// The label for a favourite slot, which is its number or the word for having none.
+    /// </summary>
+    /// <remarks>
+    /// The reader's own culture, because this is a number shown to a person, and the slots the
+    /// shortcuts use are the digits on the keyboard either way.
+    /// </remarks>
+    public string SlotLabel(int slot) =>
+        slot == 0 ? localizer["common.none"] : slot.ToString(CultureInfo.CurrentCulture);
 
     public string TagsHelp => localizer["tags.help"];
 

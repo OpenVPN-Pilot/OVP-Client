@@ -8,8 +8,15 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
-    <InvariantGlobalization>true</InvariantGlobalization>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!--
+      Globalization is deliberately not switched off here, and it was. InvariantGlobalization leaves
+      CultureInfo.CurrentUICulture as the invariant culture whose name is the empty string, so the
+      language setting "follow the system" resolved to English on a German system, on both platforms,
+      and every date and number was formatted the invariant way rather than the reader's. Both
+      Windows 10 and macOS carry ICU, so nothing is bundled for this. The helper switches it back on
+      for itself: it is a root daemon that formats nothing for anyone.
+    -->
     <NeutralLanguage>en</NeutralLanguage>
   </PropertyGroup>
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using OpenVpnPilot.App.Services;
 
 namespace OpenVpnPilot.App.Tests.Services;
@@ -69,11 +70,11 @@ public sealed class LogHubTests : IAsyncLifetime
     {
         string stale = Path.Combine(
             directory,
-            DateTime.Now.AddDays(-9).ToString("yyyy-MM-dd") + ".log");
+            DateTime.Now.AddDays(-9).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".log");
 
         string recent = Path.Combine(
             directory,
-            DateTime.Now.AddDays(-2).ToString("yyyy-MM-dd") + ".log");
+            DateTime.Now.AddDays(-2).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".log");
 
         await File.WriteAllTextAsync(stale, "old");
         await File.WriteAllTextAsync(recent, "recent");
@@ -103,7 +104,7 @@ public sealed class LogHubTests : IAsyncLifetime
         Assert.True(File.Exists(ancient));
     }
 
-    private static string Today => DateTime.Now.ToString("yyyy-MM-dd") + ".log";
+    private static string Today => DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".log";
 
     /// <summary>
     /// Waits for the background writer, which is what makes the file appear and what applies the
