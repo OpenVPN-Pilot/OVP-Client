@@ -40,8 +40,13 @@ internal static class CompletionCommand
                     ? Install("ovp-completion.bash", BashScript, BashProfiles(), "source \"{0}\"")
                     : Print(BashScript);
 
+            case "zsh":
+                return install
+                    ? Install("ovp-completion.zsh", ZshScript, ZshProfiles(), "source \"{0}\"")
+                    : Print(ZshScript);
+
             default:
-                Console.Error.WriteLine("Name a shell: powershell or bash.");
+                Console.Error.WriteLine("Name a shell: powershell, bash or zsh.");
                 Console.Error.WriteLine("Add --install to write it into the shell profile.");
                 return 1;
         }
@@ -150,6 +155,12 @@ internal static class CompletionCommand
         [Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".bashrc")];
 
     /// <summary>
+    /// Where an interactive zsh reads its configuration from, which on macOS is the default shell.
+    /// </summary>
+    private static List<string> ZshProfiles() =>
+        [Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".zshrc")];
+
+    /// <summary>
     /// Offers the commands, and the stored profile names wherever a command takes one.
     /// </summary>
     /// <remarks>
@@ -205,5 +216,41 @@ internal static class CompletionCommand
             esac
         }
         complete -F _ovp_complete ovp
+        """;
+
+    /// <summary>
+    /// The same offer for zsh, written in its own completion system rather than through bash's.
+    /// </summary>
+    /// <remarks>
+    /// zsh can run a bash completion through bashcompinit, and the result quotes names with spaces
+    /// in them wrongly. This one is native: compadd takes the names as separate words, so a profile
+    /// called "site alpha" completes as one argument.
+    /// </remarks>
+    private const string ZshScript = """
+        _ovp_complete() {
+            local -a commands names
+            commands=(doctor start stop list status connect disconnect import export pack unpack favourite remove completion help)
+
+            if (( CURRENT == 2 )); then
+                compadd -a commands
+                return
+            fi
+
+            case "${words[2]}" in
+                connect|con|conn|disconnect|dis|favourite|fav|remove|rm)
+                    names=("${(@f)$(ovp list --names 2>/dev/null)}")
+                    compadd -a names
+                    ;;
+            esac
+        }
+
+        # compdef needs the completion system, which a shell that has not called compinit does not
+        # have. Loaded here rather than assumed, because a profile that never set it up would
+        # otherwise fail with compdef not found on every new shell.
+        if ! whence compdef > /dev/null; then
+            autoload -Uz compinit && compinit -u
+        fi
+
+        compdef _ovp_complete ovp
         """;
 }

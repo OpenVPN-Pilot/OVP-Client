@@ -75,14 +75,14 @@ public sealed class HelperServerTests : IAsyncLifetime, IDisposable
 
         foreach (int processId in launched)
         {
+            // Ended outright rather than asked. These are stand ins with nothing to save, the
+            // helper's own graceful path has tests of its own, and waiting for each one to notice a
+            // signal it may be written to ignore would add seconds to every test that starts one.
+            _ = Libc.kill(processId, Libc.SigKill);
+
             for (int attempt = 0; attempt < 100 && IsRunning(processId); attempt++)
             {
-                if (attempt == 20)
-                {
-                    _ = Libc.kill(processId, Libc.SigKill);
-                }
-
-                await Task.Delay(50, CancellationToken.None);
+                await Task.Delay(20, CancellationToken.None);
             }
         }
 
@@ -115,7 +115,7 @@ public sealed class HelperServerTests : IAsyncLifetime, IDisposable
                 break;
             }
 
-            await Task.Delay(50, CancellationToken.None);
+            await Task.Delay(20, CancellationToken.None);
         }
 
         for (int attempt = 0; attempt < 10; attempt++)

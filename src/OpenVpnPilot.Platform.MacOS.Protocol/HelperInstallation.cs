@@ -53,6 +53,33 @@ public static class HelperInstallation
     public const string DnsScriptPath = SupportDirectory + "/openvpn/libexec/dns-updown";
 
     /// <summary>
+    /// The name server hook the OpenVPN build calls, which is the helper under another name.
+    /// </summary>
+    /// <remarks>
+    /// Compiled into that build as its default rather than passed on the command line, and that is
+    /// the whole point: OpenVPN runs a command named by --dns-updown as a user script, which needs
+    /// script security 2, while it runs the default at level 1. The helper forces level 1, so the
+    /// only name server command that can run is this one, and no configuration can name another.
+    ///
+    /// The directory is free of spaces because the path goes through a Makefile and a compiler
+    /// command line during that build, and it is ours rather than shared, so no other product can
+    /// install a file of this name over it. It must match SCRIPT_DIRECTORY in
+    /// installer/build-openvpn-macos.sh; the tests hold the two together.
+    /// </remarks>
+    public const string DnsHookPath = "/Library/PrivilegedHelperTools/openvpnpilot/dns-updown";
+
+    /// <summary>
+    /// The OpenVPN release the policy was written against and the package builds.
+    /// </summary>
+    /// <remarks>
+    /// The configuration policy decides what may reach a root process by what this release of
+    /// OpenVPN does with it, which is something that was read in its source. A different release may
+    /// treat an option differently, so the version the package installs and the version the policy
+    /// was audited against have to be the same one, and a test says so.
+    /// </remarks>
+    public const string OpenVpnVersion = "2.7.7";
+
+    /// <summary>
     /// Configurations an administrator installed. The only ones an account that is not authorised
     /// may start, which is the same rule the Windows interactive service applies to its
     /// configuration directory.

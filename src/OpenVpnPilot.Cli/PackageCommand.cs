@@ -4,7 +4,6 @@ using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.Data.Packaging;
-using OpenVpnPilot.Platform.Windows.Security;
 
 namespace OpenVpnPilot.Cli;
 
@@ -19,7 +18,6 @@ namespace OpenVpnPilot.Cli;
 /// useful rather than half a job. They are read out of the keystore, where they are protected for
 /// one user on one machine, and re-protected by the package's passphrase.
 /// </remarks>
-[SupportedOSPlatform("windows")]
 internal static class PackCommand
 {
     public static async Task<int> RunAsync(string[] args)
@@ -89,7 +87,7 @@ internal static class PackCommand
     private static async Task<IReadOnlyList<PackagedCredential>> ReadCredentialsAsync(
         IReadOnlyCollection<Guid> profileIds)
     {
-        DpapiSecretStore secrets = new(StoreFactory.Paths.SecretsDirectory);
+        ISecretStore secrets = PlatformServices.CreateSecretStore(StoreFactory.Paths);
 
         if (!secrets.IsAvailable)
         {
@@ -153,7 +151,6 @@ internal static class PackCommand
 /// <summary>
 /// Reads a portable package back into the store.
 /// </summary>
-[SupportedOSPlatform("windows")]
 internal static class UnpackCommand
 {
     public static async Task<int> RunAsync(string[] args)
@@ -248,7 +245,7 @@ internal static class UnpackCommand
             return 0;
         }
 
-        DpapiSecretStore secrets = new(StoreFactory.Paths.SecretsDirectory);
+        ISecretStore secrets = PlatformServices.CreateSecretStore(StoreFactory.Paths);
 
         if (!secrets.IsAvailable)
         {

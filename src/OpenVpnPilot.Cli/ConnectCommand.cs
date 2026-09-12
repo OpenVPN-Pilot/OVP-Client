@@ -10,15 +10,12 @@ using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.OpenVpn.Management;
 using OpenVpnPilot.OpenVpn.Runtime;
-using OpenVpnPilot.Platform.Windows.InteractiveService;
-using OpenVpnPilot.Platform.Windows.Runtime;
 
 namespace OpenVpnPilot.Cli;
 
 /// <summary>
 /// Connects using a configuration file and reports live state until the time is up.
 /// </summary>
-[SupportedOSPlatform("windows")]
 internal static class ConnectCommand
 {
     /// <summary>
@@ -84,7 +81,7 @@ internal static class ConnectCommand
             }
 
             profileId = stored.Id;
-            materialised = await new WindowsProfileMaterializer()
+            materialised = await PlatformServices.CreateMaterializer(StoreFactory.Paths)
                 .MaterialiseAsync(stored.Id, stored.Configuration);
 
             configurationPath = materialised.Path;
@@ -155,10 +152,15 @@ internal static class ConnectCommand
             ReadValue(args, "--password"),
             ReadValue(args, "--challenge"));
 
+        // The launcher's own lifetime outlives the supervisor: on macOS it is the session that owns
+        // the tunnel, and closing it is what ends the tunnel this command started.
+        await using PlatformLauncher platform = PlatformServices.CreateLauncher();
+
         await using ConnectionSupervisor supervisor = new(
-            new WindowsOpenVpnLauncher(new InteractiveServicePipeClient()),
+            platform.Launcher,
             new TcpManagementChannelFactory(),
-            credentials);
+            credentials,
+            terminator: platform.Terminator);
 
         supervisor.StateChanged += OnStateChanged;
 

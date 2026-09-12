@@ -5,6 +5,7 @@
     <ProjectReference Include="..\OpenVpnPilot.OpenVpn\OpenVpnPilot.OpenVpn.csproj" />
     <ProjectReference Include="..\OpenVpnPilot.Data\OpenVpnPilot.Data.csproj" />
     <ProjectReference Include="..\OpenVpnPilot.Platform.Windows\OpenVpnPilot.Platform.Windows.csproj" />
+    <ProjectReference Include="..\OpenVpnPilot.Platform.MacOS\OpenVpnPilot.Platform.MacOS.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
