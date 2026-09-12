@@ -40,12 +40,13 @@ internal static class PlatformServices
     /// Where the part that is missing comes from, for a report that says what to do next.
     /// </summary>
     /// <remarks>
-    /// On macOS that is the helper package, which is a release of this project, and the repository it
-    /// comes from is the one the update check reads. On Windows OpenVPN itself is what can be
+    /// On macOS that is the helper package, and the page is the one that says how it is built rather
+    /// than the releases: there is no macOS build to download, because publishing one needs an Apple
+    /// Developer ID to sign it with and a Mac to make it on. On Windows OpenVPN itself is what can be
     /// missing, and that comes from the OpenVPN project.
     /// </remarks>
     public static string SetupUrl => OperatingSystem.IsMacOS()
-        ? $"https://github.com/{new AdvancedSettings().UpdateRepository}/releases/latest"
+        ? $"https://github.com/{new AdvancedSettings().UpdateRepository}/blob/master/docs/macos.md"
         : "https://openvpn.net/community-downloads/";
 
     public static IOpenVpnEnvironmentProbe CreateEnvironmentProbe()

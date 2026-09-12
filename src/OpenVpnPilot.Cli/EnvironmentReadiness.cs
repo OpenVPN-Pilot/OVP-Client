@@ -54,7 +54,10 @@ internal static class EnvironmentReadiness
     {
         if (OperatingSystem.IsMacOS())
         {
-            Console.WriteLine($"The helper package can be installed from {DownloadUrl}");
+            Console.WriteLine("The helper package is built from the source, because a macOS build");
+            Console.WriteLine("cannot be published without an Apple Developer ID to sign it with:");
+            Console.WriteLine("  bash installer/build-macos.sh");
+            Console.WriteLine($"Step by step: {DownloadUrl}");
             Console.WriteLine("It carries the OpenVPN this application runs, and installing it asks for a password.");
             return;
         }

@@ -16,8 +16,9 @@ installation directory and the data directory are `OpenVpnPilot`, and the compan
 file name and with nothing else.
 
 > **Status: version 1.3.0.** The integration layer and the interface are proven end to end against
-> OpenVPN Community 2.7.6 and against the ten server lab in this repository. Builds are unsigned by
-> choice. See [Roadmap](#roadmap).
+> OpenVPN Community 2.7.6 and against the ten server lab in this repository. Windows is released as
+> an unsigned installer. **macOS is built from the source and is not released as a download**, which
+> is one command and is explained in [docs/macos.md](docs/macos.md). See [Roadmap](#roadmap).
 
 ![The profile list with two tunnels up, live figures for the selected one](assets/screenshots/main-window.png)
 
@@ -69,18 +70,39 @@ The rest is one page per subject, so this one stays short:
 - Dark, light and system themes, autostart, bounded auto reconnect
 - English and German, and a new language is a JSON file rather than a new build
 
+## Where it runs
+
+| System | Architecture | State |
+| --- | --- | --- |
+| Windows 11 | x64 | Proven end to end against OpenVPN Community 2.7.6 and the ten server lab |
+| Windows 10 | x64 | Same code and the same interactive service; not measured on 10 itself |
+| macOS 26 | Apple silicon | Proven end to end against the ten server lab, with this project's own helper |
+| macOS 13 to 25 | Apple silicon | The bundle is built for 13.0 and up; not measured below 26 |
+| macOS 13 or newer | Intel | Built and published as `osx-x64`; not measured |
+
+Windows needs [OpenVPN Community](https://openvpn.net/community-downloads/) 2.6 or newer with its
+interactive service. macOS needs nothing installed beforehand: the helper package brings its own
+OpenVPN.
+
+Anything not in that table is not supported. `Core`, `OpenVpn`, `Data` and `App` contain no platform
+specific code, so another system means adding an implementation of the existing interfaces rather
+than restructuring the application.
+
 ## Installing
 
 **Windows.** Install [OpenVPN Community](https://openvpn.net/community-downloads/) with its
-interactive service, then the MSI. It puts the application under Program Files and `ovp` on PATH.
-The details, including deployment with group policy, are in [docs/windows.md](docs/windows.md).
+interactive service, then the MSI from the releases, or build the MSI yourself. It puts the
+application under Program Files and `ovp` on PATH. The details, including deployment with group
+policy, are in [docs/windows.md](docs/windows.md).
 
-**macOS.** Open the disk image, drag the application to Applications, then install the helper
-package, which brings its own OpenVPN and is the only part that asks for a password. The details,
-including what Gatekeeper does with an unsigned build, are in [docs/macos.md](docs/macos.md).
+**macOS.** There is no download, and there will not be one until this can be signed and notarised:
+that needs a paid Apple Developer ID, and building it needs a Mac to build it on. Neither is
+available to this project. What is available is a build script that does the whole thing in one
+command, including the OpenVPN the helper carries. It is written down step by step in
+[docs/macos.md](docs/macos.md).
 
-Both platforms are built from this repository and neither build is code signed. Why, and what that
-means when you open it, is on each platform's page.
+Neither build is code signed. Why, and what each system shows you because of it, is on each
+platform's page.
 
 ## Roadmap
 

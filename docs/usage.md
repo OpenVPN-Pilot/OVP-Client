@@ -82,6 +82,8 @@ contacts a network nobody asked it to, so it is worth saying exactly what it doe
 - It reads `https://api.github.com/repos/<owner>/<name>/releases/latest`, without credentials.
 - It compares the release tag with the running version and reports the result.
 - It downloads nothing and installs nothing. A newer release is a notice with a link.
+- On macOS the notice says so: a release carries no macOS build, and a newer version there means
+  building that release from the source, which is one command.
 
 The repository defaults to the one this project is published from, and the check is on. Both are
 under **Settings, Advanced**: clearing the repository, or turning the check off, stops every request.

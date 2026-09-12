@@ -5,7 +5,8 @@
 ## Requirements
 
 - macOS 13 or newer, on Apple silicon or Intel
-- the helper package from the releases, which brings its own OpenVPN
+- the helper package, built from this repository, which brings its own OpenVPN
+- Xcode's command line tools and the .NET 10 SDK, to build the two of them once
 
 Nothing else is installed and nothing is needed from a package manager. Only root can open a tun
 device, install routes or change the name servers, and macOS has nothing like the interactive
@@ -25,11 +26,24 @@ which of these applies, and so does `ovp doctor`.
 
 ## Installing
 
-There is no signed download, so both installers are built from this repository:
+**There is no macOS download, and this is the one thing to know before starting.** A build that
+another Mac will open without an argument has to be signed and notarised by Apple, which needs a paid
+Developer ID, and making one needs a Mac to make it on. This project has neither, so publishing a
+disk image would be publishing something Gatekeeper refuses and that nobody could check the origin
+of. Windows is different: an unsigned installer there is a warning to click through, and the MSI is
+in the releases.
+
+So macOS is built from the source. That is one command, it needs no decisions, and it produces
+exactly what a release would have:
 
 ```bash
 bash installer/build-macos.sh
 ```
+
+It takes a while the first time, because it also builds the OpenVPN the helper carries, from pinned
+sources. Afterwards `--skip-openvpn` reuses that. A build made on the machine it then runs on carries
+no quarantine flag, so it opens without Gatekeeper saying anything at all, which is the second reason
+this is not as bad as it sounds.
 
 It writes two things under `artifacts/release`, because they are installed by different people at
 different moments:
@@ -39,7 +53,8 @@ different moments:
 | `OpenVpnPilot-<version>-<rid>.dmg` | the application. Open it and drag OpenVPN Pilot to Applications. No password. |
 | `OpenVpnPilot-Helper-<version>-<rid>.pkg` | the privileged helper and the OpenVPN it runs. Asks for a password. |
 
-Install the application first, then the helper:
+Install the application first, then the helper. Open the disk image, drag **OpenVPN Pilot** onto the
+Applications folder, then:
 
 ```bash
 sudo installer -pkg artifacts/release/OpenVpnPilot-Helper-1.3.0-osx-arm64.pkg -target /
@@ -84,16 +99,19 @@ carries an ad-hoc signature, which is enough for macOS to run the code and not e
 to let it through unasked. The package is not signed at all: signing one needs a Developer ID, and
 ad-hoc signatures do not apply to packages.
 
-What that looks like, and what to do:
+**Built and used on the same Mac, none of this happens.** The quarantine flag is what triggers
+Gatekeeper, and it is set when a file arrives from somewhere else. A disk image written by
+`installer/build-macos.sh` on the machine it is then installed on carries no such flag and opens
+without a word. That is the ordinary case here and the reason building it yourself is the
+instruction rather than a fallback.
+
+It matters when the image is carried to another Mac, over a network, a share or a memory stick. Then:
 
 | | |
 | --- | --- |
-| The application, opened from the Finder | "OpenVpnPilot cannot be opened because it is from an unidentified developer." Right click it and choose **Open**, then confirm once. macOS remembers the decision. |
-| The application, on a recent macOS | The first attempt may only offer **Done**. Open **System Settings, Privacy & Security**, scroll to the message naming OpenVpnPilot, and choose **Open Anyway**. |
+| The application, opened from the Finder | "OpenVPN Pilot cannot be opened because it is from an unidentified developer." Right click it and choose **Open**, then confirm once. macOS remembers the decision. |
+| The application, on a recent macOS | The first attempt may only offer **Done**. Open **System Settings, Privacy & Security**, scroll to the message naming OpenVPN Pilot, and choose **Open Anyway**. |
 | The package | The same, through right click, **Open**, which hands it to the Installer. |
-
-The quarantine flag is what triggers all of this, and it is set because the file was downloaded. A
-build made on the machine it runs on carries no such flag and opens without a word.
 
 Nothing here asks you to turn Gatekeeper off, and nothing here should. Allowing one application you
 have the source for is a decision about that application; turning the check off is a decision about

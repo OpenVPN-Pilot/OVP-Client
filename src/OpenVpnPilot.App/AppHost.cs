@@ -35,10 +35,17 @@ namespace OpenVpnPilot.App;
 internal static class AppHost
 {
     /// <summary>
-    /// Where the macOS helper package is obtained: the releases of the project this build came from.
+    /// Where a person is sent to get the macOS helper package.
     /// </summary>
+    /// <remarks>
+    /// The macOS page rather than the releases, because there is nothing to download there. A macOS
+    /// build cannot be published without an Apple Developer ID to sign it with and a Mac to make it
+    /// on, and this project has neither, so both halves are built from the source. That page is
+    /// where the one command to do it is written down; the releases would be a page with nothing on
+    /// it for the reader.
+    /// </remarks>
     private static readonly string HelperSetupUrl =
-        $"https://github.com/{new AdvancedSettings().UpdateRepository}/releases/latest";
+        $"https://github.com/{new AdvancedSettings().UpdateRepository}/blob/master/docs/macos.md";
 
     public static IHost Build()
     {

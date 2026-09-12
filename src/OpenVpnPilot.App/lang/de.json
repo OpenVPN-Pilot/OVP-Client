@@ -399,9 +399,9 @@
     "environment": {
       "title": "OpenVPN ist auf diesem Rechner nicht einsatzbereit",
       "hint": "Installieren Sie OpenVPN Community und achten Sie darauf, die Komponente OpenVPN Interactive Service mit aufzunehmen. Vorher lässt sich kein Tunnel starten.",
-      "hint@macos": "Installieren Sie das Helferpaket von OpenVPN Pilot. Es wird einmal mit Administratorrechten installiert, bringt sein eigenes OpenVPN mit und startet Tunnel, ohne jedes Mal nach einem Passwort zu fragen. Vorher lässt sich kein Tunnel starten.",
+      "hint@macos": "Installieren Sie das Helferpaket von OpenVPN Pilot. Es wird einmal mit Administratorrechten installiert, bringt sein eigenes OpenVPN mit und startet Tunnel, ohne jedes Mal nach einem Passwort zu fragen. Für macOS gibt es keinen Download: Das Paket wird mit einem Befehl aus dem Quelltext gebaut, was die macOS-Seite erklärt. Vorher lässt sich kein Tunnel starten.",
       "download": "OpenVPN holen",
-      "download@macos": "Helfer holen",
+      "download@macos": "So wird er installiert",
       "recheck": "Erneut prüfen",
       "ready": "Alles, was OpenVPN braucht, ist vorhanden.",
       "cannotConnect": "Es kann nichts verbunden werden, solange das im Hinweis Genannte nicht behoben ist.",
@@ -443,10 +443,12 @@
     "update": {
       "checking": "Wird geprüft...",
       "available": "Version {0} ist erschienen. Dies ist {1}.",
+      "available@macos": "Version {0} ist erschienen. Dies ist {1}. Für macOS gibt es keinen Download, es wird aus dem Quelltext dieser Fassung gebaut.",
       "upToDate": "Version {0} ist die neueste Fassung.",
       "notConfigured": "Es ist kein Repository genannt, deshalb wurde nichts kontaktiert.",
       "failed": "Die Prüfung war nicht möglich. {0}",
       "download": "Holen",
+      "download@macos": "Zur Veröffentlichung",
       "dismiss": "Jetzt nicht"
     }
   }

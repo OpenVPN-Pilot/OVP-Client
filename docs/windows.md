@@ -19,7 +19,9 @@ reports which of these applies rather than failing with a generic error.
 
 ## Installing
 
-There is no signed download, so the installer is built from this repository:
+The MSI is in the releases of this project. It is not code signed, so SmartScreen shows "Windows
+protected your PC" the first time: **More info**, then **Run anyway**. Everything below builds the
+same installer from the source instead, which is also how a release is made:
 
 ```powershell
 pwsh installer/build.ps1
