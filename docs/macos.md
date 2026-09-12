@@ -159,6 +159,26 @@ quiet with nothing to read anywhere cannot be told apart from one that is workin
   turn **Allow notifications** on. It appears in that list once it has asked, which it does the first
   time it has something to say, so a first run with nothing to announce leaves the list empty.
 
+## Stored sign ins, and the dialog macOS raises
+
+A sign in you asked to be remembered goes to the login keychain, never to a file. All of them share
+one item, so that macOS asks about one thing rather than about each profile in turn.
+
+It will still ask. The keychain decides who may read an item from the code signature of the program
+asking, and this application is signed ad-hoc, which means its signature changes every time it is
+built. To the keychain a new build is a new program, so the first time one wants a stored sign in
+the system asks whether to allow it. **Always Allow** answers it for good, for every profile at
+once, until the next build you install.
+
+Nothing here can avoid that, and it is worth saying what was tried rather than leaving it as a
+complaint: a stable self-signed certificate, an item every application may read, and the modern
+data protection keychain were each measured, and none of them changes the answer. Only a certificate
+issued by Apple would, because only then does the keychain record a team rather than the exact build,
+and this is not distributed under one.
+
+If you would rather not be asked at all, turn the storing of credentials off in the settings and type
+them when you connect.
+
 ## Where things are kept
 
 Everything the application writes belongs to the user running it, so an installation for the whole
@@ -168,7 +188,7 @@ machine still keeps each person's profiles apart.
 | --- | --- |
 | Profiles, tags and history | `~/Library/Application Support/OpenVpnPilot/pilot.db` |
 | Settings | `~/Library/Application Support/OpenVpnPilot/settings.json`, editable by hand |
-| Credentials | the login keychain, one item per profile under the service `OpenVpnPilot` |
+| Credentials | the login keychain, all of them in one item under the service `OpenVpnPilot` |
 | Logs | `~/Library/Application Support/OpenVpnPilot/logs/`, one `yyyy-MM-dd.log` per day |
 | Added languages | `~/Library/Application Support/OpenVpnPilot/lang/` |
 | Autostart | `~/Library/LaunchAgents/org.openvpnpilot.app.login.plist`, only while "start with the system" is on |

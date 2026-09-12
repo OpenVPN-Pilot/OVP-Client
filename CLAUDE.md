@@ -373,6 +373,34 @@ A caller that hears nothing waits for a tunnel that was never started, and a ser
 talking cannot be diagnosed from outside. The session loop therefore answers a request whose handling
 threw, with a refusal that says the helper failed, and writes the exception to the helper's log.
 
+### The keychain asks again after every build, and once per item
+
+Credentials live in the login keychain, whose access control list hangs on the individual item and
+names the asking program by its code signature. This build is signed ad-hoc, so its hash changes
+every time it is built, and every build is therefore a program the keychain has never seen. Allowing
+one covers one item, so with an item per profile it was one dialog per profile per build.
+
+Measured with a probe that turns the dialog off, so a prompt shows up as a status instead of
+blocking: an item written by one build and read by the next answers -25293, errSecAuthFailed. Three
+ways out were tried and none of them works.
+
+| Attempt | Result |
+| --- | --- |
+| Ad-hoc, as built today | the next build is refused |
+| A stable self-signed certificate | the next build is refused |
+| An access control list naming every application | the next build is refused |
+| The data protection keychain | -34018 without an entitlement, and with one the process is killed at launch |
+
+The certificate is the interesting failure, because it half works. The access control list becomes
+`identifier "..." and certificate leaf = H"..."`, which matches every build signed with it. What does
+not move is the partition, which stays `cdhash:<the build that wrote the item>`: a partition reads
+`teamid:<id>` only for a certificate Apple issued, and a self-signed one has no team. The partition
+alone is enough to refuse.
+
+Nothing in this repository can therefore stop the dialog. What it can decide is how often it appears,
+which is why every sign in lives in one item rather than one per profile: once per build instead of
+once per profile per build. An Apple Developer ID would fix it properly and there is none.
+
 ### A notification that is refused says so
 
 The notification centre answers `requestAuthorizationWithOptions:` with a granted flag and an

@@ -51,6 +51,12 @@ internal static partial class SecurityFramework
     public static readonly nint AttributeAccount = ReadConstant("kSecAttrAccount");
     public static readonly nint AttributeLabel = ReadConstant("kSecAttrLabel");
     public static readonly nint AttributeDescription = ReadConstant("kSecAttrDescription");
+
+    /// <summary>
+    /// An attribute that holds arbitrary data and, unlike the item's value, can be read without the
+    /// keychain asking anybody. Nothing secret may be put here.
+    /// </summary>
+    public static readonly nint AttributeGeneric = ReadConstant("kSecAttrGeneric");
     public static readonly nint ValueData = ReadConstant("kSecValueData");
     public static readonly nint ReturnData = ReadConstant("kSecReturnData");
     public static readonly nint ReturnAttributes = ReadConstant("kSecReturnAttributes");
