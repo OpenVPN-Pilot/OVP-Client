@@ -509,7 +509,7 @@
                     IsVisible="{Binding SelectedProfile.HasFailureMessage}">
               <TextBlock TextWrapping="Wrap" FontSize="12"
                          Foreground="{DynamicResource StateFailed}"
-                         Text="{Binding SelectedProfile.Status.Message}" />
+                         Text="{Binding SelectedProfile.FailureMessage}" />
             </Border>
 
           </StackPanel>

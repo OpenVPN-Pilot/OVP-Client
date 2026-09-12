@@ -125,6 +125,7 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsBusy))]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
     [NotifyPropertyChangedFor(nameof(HasFailureMessage))]
+    [NotifyPropertyChangedFor(nameof(FailureMessage))]
     [NotifyPropertyChangedFor(nameof(LocalAddressDisplay))]
     [NotifyPropertyChangedFor(nameof(ServerDisplay))]
     [NotifyPropertyChangedFor(nameof(UptimeDisplay))]
@@ -169,7 +170,12 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     public string StatusLabel => StatusText.Length == 0 ? localizer["state.disconnected"] : StatusText;
 
     public bool HasFailureMessage =>
-        Status.State == VpnConnectionState.Failed && Status.Message.Length > 0;
+        Status.State == VpnConnectionState.Failed && FailureMessage.Length > 0;
+
+    /// <summary>
+    /// Why the connection failed, translated where this client wrote the reason itself.
+    /// </summary>
+    public string FailureMessage => localizer.Describe(Status);
 
     public string LocalAddressDisplay => Status.LocalAddress ?? "-";
 

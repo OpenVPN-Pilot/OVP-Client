@@ -91,6 +91,13 @@
       "failed": "Fehlgeschlagen",
       "disconnected": "Nicht verbunden"
     },
+    "reason": {
+      "pushedCompressionRefused": "Der Server hat eine Komprimierung vorgegeben, die dieser Client nicht anwenden kann, und hat deshalb alle gesendeten Optionen abgelehnt.",
+      "connectTimedOut": "Der Tunnel kam nicht innerhalb von {0} Sekunden zustande.",
+      "credentialsRejected": "Die Anmeldedaten für „{0}“ wurden vom Server abgelehnt.",
+      "credentialsMissing": "Für „{0}“ wurden keine Anmeldedaten angegeben.",
+      "unknown": "Die Verbindung endete aus einem Grund, den diese Version nicht benennen kann."
+    },
     "empty": {
       "noProfilesTitle": "Noch keine Profile",
       "noProfilesDetail": "Importieren Sie .ovpn Dateien, um die Bibliothek zu füllen.",

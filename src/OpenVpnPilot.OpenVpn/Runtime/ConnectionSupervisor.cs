@@ -394,6 +394,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                         ConnectedSince = null,
                         Message = "The server pushed a compression setting this client cannot apply, "
                             + "so it refused every option the server sent.",
+                        Reason = new VpnStatusReason { Code = VpnStatusReasonCode.PushedCompressionRefused },
                         Failure = VpnFailureKind.Unsupported,
                     });
 
@@ -484,6 +485,11 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
             State = VpnConnectionState.Failed,
             ConnectedSince = null,
             Message = $"The tunnel did not come up within {limit.TotalSeconds:0} seconds.",
+            Reason = new VpnStatusReason
+            {
+                Code = VpnStatusReasonCode.ConnectTimedOut,
+                Arguments = [$"{limit.TotalSeconds:0}"],
+            },
             Failure = VpnFailureKind.ConnectionLost,
         });
 
@@ -545,6 +551,13 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                 Message = credentialRequest.IsRetry
                     ? $"The credentials for '{message.Realm}' were rejected by the server."
                     : $"No credentials were supplied for '{message.Realm}'.",
+                Reason = new VpnStatusReason
+                {
+                    Code = credentialRequest.IsRetry
+                        ? VpnStatusReasonCode.CredentialsRejected
+                        : VpnStatusReasonCode.CredentialsMissing,
+                    Arguments = [message.Realm],
+                },
                 Failure = VpnFailureKind.Authentication,
             });
 

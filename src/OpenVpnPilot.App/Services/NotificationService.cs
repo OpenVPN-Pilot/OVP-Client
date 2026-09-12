@@ -86,7 +86,7 @@ public sealed class NotificationService : IDisposable
         // Fire and forget: a notification is an aside, never something a tunnel waits for.
         _ = presenter.ShowAsync(new NotificationRequest(
             localizer[notice.TitleKey],
-            localizer.Translate(notice.MessageKey, profileName, change.Status.Message),
+            localizer.Translate(notice.MessageKey, profileName, localizer.Describe(change.Status)),
             notice.Severity,
             change.ProfileId.ToString()));
     }

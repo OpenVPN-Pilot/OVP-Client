@@ -91,6 +91,13 @@
       "failed": "Failed",
       "disconnected": "Not connected"
     },
+    "reason": {
+      "pushedCompressionRefused": "The server pushed a compression setting this client cannot apply, so it refused every option the server sent.",
+      "connectTimedOut": "The tunnel did not come up within {0} seconds.",
+      "credentialsRejected": "The credentials for '{0}' were rejected by the server.",
+      "credentialsMissing": "No credentials were supplied for '{0}'.",
+      "unknown": "The connection ended for a reason this version cannot name."
+    },
     "empty": {
       "noProfilesTitle": "No profiles yet",
       "noProfilesDetail": "Import .ovpn files to fill the library.",

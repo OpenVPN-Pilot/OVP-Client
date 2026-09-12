@@ -792,7 +792,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             if (status.State == VpnConnectionState.Failed)
             {
-                StatusMessage = localizer.Translate("status.profileFailed", profile.Name, status.Message);
+                StatusMessage = localizer.Translate("status.profileFailed", profile.Name, localizer.Describe(status));
                 return;
             }
 
@@ -1201,9 +1201,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             VpnConnectionState.Connected => localizer.Translate("status.profileConnected", profile.Name),
             VpnConnectionState.Reconnecting =>
-                localizer.Translate("status.profileReconnecting", profile.Name, status.Message).TrimEnd(),
+                localizer.Translate("status.profileReconnecting", profile.Name, localizer.Describe(status)).TrimEnd(),
             VpnConnectionState.Failed =>
-                localizer.Translate("status.profileFailed", profile.Name, status.Message),
+                localizer.Translate("status.profileFailed", profile.Name, localizer.Describe(status)),
             VpnConnectionState.Disconnected =>
                 localizer.Translate("status.profileDisconnected", profile.Name),
             _ => localizer.Translate("status.profileBusy", profile.Name, profile.StatusLabel),
