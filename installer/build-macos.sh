@@ -66,6 +66,13 @@ fail() { printf '%s\n' "$*" >&2; exit 1; }
 
 [[ "$(uname -s)" == 'Darwin' ]] || fail 'This script builds macOS installers and has to run on macOS.'
 
+# Checked before anything is built, and all of it at once. On a Mac where nothing has been installed
+# the tools below are stubs that open a dialog and fail, so a build that starts anyway gets a long way
+# in before saying something that does not name what is wrong.
+# shellcheck source=installer/preflight.sh
+source "${repository}/installer/preflight.sh"
+preflight_require developer-tools dotnet
+
 if [[ -z "$runtime" ]]; then
     runtime=$([[ "$(uname -m)" == 'arm64' ]] && echo 'osx-arm64' || echo 'osx-x64')
 fi
@@ -88,10 +95,10 @@ staging="${repository}/artifacts/macos"
 # The .NET the release is built with has to be the one from Microsoft. A source build from a package
 # manager links that manager's libraries, which are owned by the account that installed it, and this
 # produces something that runs as root and something that is handed to other people.
-dotnet=$(command -v dotnet) || fail 'No dotnet was found on PATH.'
+dotnet="${HOME}/.dotnet/dotnet"
 
-if [[ -x "${HOME}/.dotnet/dotnet" ]]; then
-    dotnet="${HOME}/.dotnet/dotnet"
+if [[ ! -x "$dotnet" ]]; then
+    dotnet=$(command -v dotnet)
 fi
 
 say "Building OpenVpnPilot ${version} (${configuration}, ${runtime})"

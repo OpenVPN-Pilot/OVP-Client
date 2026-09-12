@@ -48,7 +48,9 @@ dotnet build
 dotnet test
 ```
 
-Requires the .NET 10 SDK. The user interface is built with Avalonia.
+Requires the .NET 10 SDK. The user interface is built with Avalonia. Building the macOS installers
+needs Xcode's command line tools as well, which `installer/build-macos.sh` checks for before it
+starts and which [docs/macos.md](macos.md) explains.
 
 To build and run what you just changed, in one step:
 

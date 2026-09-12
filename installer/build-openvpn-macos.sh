@@ -52,6 +52,12 @@ readonly SCRIPT_DIRECTORY='/Library/PrivilegedHelperTools/openvpnpilot'
 
 repository=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 work="${repository}/artifacts/openvpn"
+# Checked here as well as in build-macos.sh, because this can be run on its own, and before the first
+# line that runs anything. Only the compiler is needed: nothing of .NET goes into what this produces.
+# shellcheck source=installer/preflight.sh
+source "${repository}/installer/preflight.sh"
+preflight_require developer-tools
+
 architectures='arm64 x86_64'
 jobs=$(sysctl -n hw.ncpu)
 force='no'

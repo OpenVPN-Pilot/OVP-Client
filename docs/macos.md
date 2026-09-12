@@ -45,6 +45,28 @@ sources. Afterwards `--skip-openvpn` reuses that. A build made on the machine it
 no quarantine flag, so it opens without Gatekeeper saying anything at all, which is the second reason
 this is not as bad as it sounds.
 
+### What a Mac needs before that works
+
+Two things, and the script checks for both before it builds anything rather than failing halfway
+through. It installs neither: a build script that puts a toolchain on somebody else's machine is
+doing something they did not ask for.
+
+| | |
+| --- | --- |
+| Xcode command line tools | `xcode-select --install`. A dialog, a few minutes, and Xcode itself is not needed. |
+| The .NET 10 SDK | From Microsoft, with the [install script](https://dot.net/v1/dotnet-install.sh): `bash dotnet-install.sh --channel 10.0`. It lands in `~/.dotnet`, which is where the build looks first. |
+
+Not from a package manager, for the .NET at least. A source build from one links libraries owned by
+the account that installed that manager, and one of the two things this produces runs as root.
+
+Nothing else. No package manager, no OpenVPN, no Swift, no Xcode: the artwork is committed, and the
+OpenVPN the helper carries is built from source by the same script.
+
+The check is worth having because of what macOS does when those tools are absent: `cc`, `make`,
+`git`, `lipo`, `otool`, `strip` and `SetFile` all exist at `/usr/bin` on a machine where nothing is
+installed. They are stubs that open the developer tools dialog and fail, so looking for them finds
+every one and the build still cannot run.
+
 It writes two things under `artifacts/release`, because they are installed by different people at
 different moments:
 
