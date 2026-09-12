@@ -373,6 +373,23 @@ A caller that hears nothing waits for a tunnel that was never started, and a ser
 talking cannot be diagnosed from outside. The session loop therefore answers a request whose handling
 threw, with a refusal that says the helper failed, and writes the exception to the helper's log.
 
+### A notification that is refused says so
+
+The notification centre answers `requestAuthorizationWithOptions:` with a granted flag and an
+`NSError`, and answers `addNotificationRequest:` with another. Discarding both is what made a silent
+application indistinguishable from a working one: nothing appeared, nothing was written, and there
+was nowhere to look. Both completion blocks are therefore real and write what they were told, once.
+
+Measured: `UNErrorDomain` code 1, `Notifications are not allowed for this application`, is the switch
+for this application standing off under System Settings, Notifications. The application is listed
+there once it has asked for permission once, and turning the switch on is the whole of the remedy.
+The refusal says nothing about the bundle, the signature or the identifier, and it is not a state of
+the Mac: reading it as one cost an afternoon.
+
+`~/Library/Preferences/com.apple.ncprefs.plist` is not where that switch is kept on macOS 26. It does
+not exist even once notifications are working, so its absence means nothing and it is not worth
+reading.
+
 ### A Unix socket path is short
 
 `sockaddr_un` holds 104 characters on macOS. The per user temporary directory alone is longer than

@@ -191,23 +191,64 @@ internal static unsafe class GlobalBlock
     /// </summary>
     /// <param name="invoke">The function the block runs.</param>
     /// <param name="signature">The Objective-C type encoding of the block, such as v@?B@.</param>
-    public static nint Create(nint invoke, string signature)
+    public static nint Create(nint invoke, string signature) => Create(invoke, signature, 0, false);
+
+    /// <summary>
+    /// Builds a block that carries one pointer, which the invoked function reads back with
+    /// <see cref="Captured"/>.
+    /// </summary>
+    /// <remarks>
+    /// It is marked global like the others, and that is what makes it safe to hand out: the runtime
+    /// neither copies nor frees a global block, so the pointer it carries stays the one that was put
+    /// there. The memory is the caller's to keep for as long as the block may still be called.
+    /// </remarks>
+    public static nint Create(nint invoke, string signature, nint captured) =>
+        Create(invoke, signature, captured, true);
+
+    /// <summary>
+    /// The pointer a block built by the capturing overload carries.
+    /// </summary>
+    public static nint Captured(nint block) => Marshal.ReadIntPtr(block, 3 * IntPtr.Size + 8);
+
+    /// <summary>
+    /// Clears what a block carries, so a callback that arrives later finds nothing rather than a
+    /// pointer whose target has gone.
+    /// </summary>
+    /// <remarks>
+    /// The block itself is not freed. The system may still be holding it, and a global block is the
+    /// size of a handful of pointers, so outliving the object it belonged to costs nothing.
+    /// </remarks>
+    public static void Disown(nint block)
+    {
+        if (block != 0)
+        {
+            Marshal.WriteIntPtr(block, 3 * IntPtr.Size + 8, 0);
+        }
+    }
+
+    private static nint Create(nint invoke, string signature, nint captured, bool carrying)
     {
         nint encoded = Marshal.StringToCoTaskMemUTF8(signature);
+        nint size = 3 * IntPtr.Size + 8 + (carrying ? IntPtr.Size : 0);
 
         // struct { unsigned long reserved; unsigned long size; const char *signature; }
         nint descriptor = Marshal.AllocHGlobal(3 * IntPtr.Size);
         Marshal.WriteIntPtr(descriptor, 0, 0);
-        Marshal.WriteIntPtr(descriptor, IntPtr.Size, 2 * IntPtr.Size + 8 + IntPtr.Size);
+        Marshal.WriteIntPtr(descriptor, IntPtr.Size, size);
         Marshal.WriteIntPtr(descriptor, 2 * IntPtr.Size, encoded);
 
-        // struct { void *isa; int flags; int reserved; void *invoke; void *descriptor; }
-        nint block = Marshal.AllocHGlobal(3 * IntPtr.Size + 8);
+        // struct { void *isa; int flags; int reserved; void *invoke; void *descriptor; void *captured; }
+        nint block = Marshal.AllocHGlobal(size);
         Marshal.WriteIntPtr(block, 0, GlobalBlockClass);
         Marshal.WriteInt32(block, IntPtr.Size, IsGlobal | HasSignature);
         Marshal.WriteInt32(block, IntPtr.Size + 4, 0);
         Marshal.WriteIntPtr(block, IntPtr.Size + 8, invoke);
         Marshal.WriteIntPtr(block, 2 * IntPtr.Size + 8, descriptor);
+
+        if (carrying)
+        {
+            Marshal.WriteIntPtr(block, 3 * IntPtr.Size + 8, captured);
+        }
 
         return block;
     }

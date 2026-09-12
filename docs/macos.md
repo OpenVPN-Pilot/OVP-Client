@@ -139,6 +139,26 @@ Nothing here asks you to turn Gatekeeper off, and nothing here should. Allowing 
 have the source for is a decision about that application; turning the check off is a decision about
 every application you will ever download.
 
+## Notifications
+
+A tunnel coming up, dropping or failing is announced through the user notification centre, which asks
+once whether this application may notify at all. That answer is the user's and is not worked around:
+refuse it and the application stays quiet, and System Settings, Notifications is where it can be
+changed afterwards.
+
+When no message appears and nobody refused one, the log says which of two things happened. Both are
+written to `~/Library/Application Support/OpenVpnPilot/logs/`, because an application that has gone
+quiet with nothing to read anywhere cannot be told apart from one that is working.
+
+- **Nothing is posted at all.** The centre attributes every message to an application bundle and
+  refuses a process that has none, so a copy run straight from the source tree reports itself
+  unavailable and stays silent. Build the bundle and run that.
+- **`The notification centre did not permit notifications`.** macOS refused the request and the
+  reason follows on the same line. `Notifications are not allowed for this application (1)` means the
+  switch for OpenVPN Pilot is off: open **System Settings, Notifications**, find it in the list and
+  turn **Allow notifications** on. It appears in that list once it has asked, which it does the first
+  time it has something to say, so a first run with nothing to announce leaves the list empty.
+
 ## Where things are kept
 
 Everything the application writes belongs to the user running it, so an installation for the whole

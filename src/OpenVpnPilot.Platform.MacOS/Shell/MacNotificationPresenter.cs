@@ -44,6 +44,8 @@ public sealed unsafe class MacNotificationPresenter : INotificationPresenter, ID
     private GCHandle self;
     private nint center;
     private nint centreDelegate;
+    private nint authorisation;
+    private nint delivery;
     private bool disposed;
 
     public MacNotificationPresenter(ILogger<MacNotificationPresenter>? logger = null)
@@ -128,7 +130,7 @@ public sealed unsafe class MacNotificationPresenter : INotificationPresenter, ID
                 notificationCentre,
                 ObjectiveC.Selector("addNotificationRequest:withCompletionHandler:"),
                 notification,
-                0);
+                delivery);
         }
         finally
         {
@@ -172,11 +174,21 @@ public sealed unsafe class MacNotificationPresenter : INotificationPresenter, ID
             centreDelegate = CreateDelegate(GCHandle.ToIntPtr(self));
             ObjectiveC.Send(current, ObjectiveC.Selector("setDelegate:"), centreDelegate);
 
+            authorisation = GlobalBlock.Create(
+                (nint)(delegate* unmanaged<nint, byte, nint, void>)&Authorised,
+                "v@?B@",
+                GCHandle.ToIntPtr(self));
+
+            delivery = GlobalBlock.Create(
+                (nint)(delegate* unmanaged<nint, nint, void>)&Delivered,
+                "v@?@",
+                GCHandle.ToIntPtr(self));
+
             ObjectiveC.Send(
                 current,
                 ObjectiveC.Selector("requestAuthorizationWithOptions:completionHandler:"),
                 AuthorisationOptions,
-                AuthorisationIgnored.Block);
+                authorisation);
 
             center = current;
             return center;
@@ -320,6 +332,14 @@ public sealed unsafe class MacNotificationPresenter : INotificationPresenter, ID
             ObjectiveC.Release(centreDelegate);
             centreDelegate = 0;
 
+            // The handle the blocks carry is freed below, so they are told to stop carrying it first.
+            // A callback that arrives after this finds nothing and logs nowhere, rather than reading
+            // a handle that is no longer allocated.
+            GlobalBlock.Disown(authorisation);
+            GlobalBlock.Disown(delivery);
+            authorisation = 0;
+            delivery = 0;
+
             if (self.IsAllocated)
             {
                 self.Free();
@@ -328,22 +348,92 @@ public sealed unsafe class MacNotificationPresenter : INotificationPresenter, ID
     }
 
     /// <summary>
-    /// The completion block for the permission request, whose answer nothing here needs.
+    /// The answer to the permission request.
     /// </summary>
     /// <remarks>
-    /// Whether the person allowed notifications decides whether they appear, and the centre applies
-    /// that itself. The block exists because the call requires one.
+    /// Whether the person allowed notifications is theirs to decide and is not worked around, but a
+    /// refusal is the whole explanation for an application that has gone quiet, and discarding it
+    /// leaves nothing to read anywhere. It is therefore written to the log, once per run.
     /// </remarks>
-    private static class AuthorisationIgnored
+    [UnmanagedCallersOnly]
+    private static void Authorised(nint block, byte granted, nint error)
     {
-        public static readonly nint Block = GlobalBlock.Create(
-            (nint)(delegate* unmanaged<nint, byte, nint, void>)&Completed,
-            "v@?B@");
+        ILogger logger = LoggerOf(block);
 
-        [UnmanagedCallersOnly]
-        private static void Completed(nint block, byte granted, nint error)
+        try
         {
+            if (granted != 0 && error == 0)
+            {
+                return;
+            }
+
+            ObjectiveC.WithPool(() =>
+            {
+                NotificationLog.NotPermitted(logger, granted != 0, Describe(error));
+                return 0;
+            });
         }
+        catch (Exception exception)
+        {
+            // Deliberately everything: an exception may not cross back into the notification centre.
+            NotificationLog.PostFailed(logger, exception);
+        }
+    }
+
+    /// <summary>
+    /// The answer to a posted message, which says whether the centre accepted it.
+    /// </summary>
+    [UnmanagedCallersOnly]
+    private static void Delivered(nint block, nint error)
+    {
+        ILogger logger = LoggerOf(block);
+
+        try
+        {
+            if (error == 0)
+            {
+                return;
+            }
+
+            ObjectiveC.WithPool(() =>
+            {
+                NotificationLog.Refused(logger, Describe(error));
+                return 0;
+            });
+        }
+        catch (Exception exception)
+        {
+            NotificationLog.PostFailed(logger, exception);
+        }
+    }
+
+    /// <summary>
+    /// The log of the presenter a block belongs to, or a sink, so a callback always has one.
+    /// </summary>
+    private static ILogger LoggerOf(nint block)
+    {
+        nint handle = GlobalBlock.Captured(block);
+        MacNotificationPresenter? owner =
+            handle == 0 ? null : GCHandle.FromIntPtr(handle).Target as MacNotificationPresenter;
+
+        return (ILogger?)owner?.logger ?? NullLogger.Instance;
+    }
+
+    /// <summary>
+    /// What an NSError says, as its code and its localized description.
+    /// </summary>
+    private static string Describe(nint error)
+    {
+        if (error == 0)
+        {
+            return "no reason given";
+        }
+
+        nint code = ObjectiveC.Send(error, ObjectiveC.Selector("code"));
+        string? message = ObjectiveC.ReadString(
+            ObjectiveC.Send(error, ObjectiveC.Selector("localizedDescription")));
+
+        return $"{message ?? "no description"} ({code})";
     }
 }
 
@@ -357,6 +447,18 @@ internal static partial class NotificationLog
         Level = LogLevel.Warning,
         Message = "A notification could not be posted.")]
     public static partial void PostFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 5302,
+        Level = LogLevel.Warning,
+        Message = "The notification centre did not permit notifications. Granted: {Granted}. {Reason}")]
+    public static partial void NotPermitted(ILogger logger, bool granted, string reason);
+
+    [LoggerMessage(
+        EventId = 5303,
+        Level = LogLevel.Warning,
+        Message = "The notification centre refused a message. {Reason}")]
+    public static partial void Refused(ILogger logger, string reason);
 
     [LoggerMessage(
         EventId = 5301,
