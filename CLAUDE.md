@@ -403,9 +403,11 @@ macOS 26, and each of these cost a build to find:
   same name already mounted pushes the new one aside to a name with a number after it, and the rest
   of the build then arranges, decorates and checks the wrong disk without saying so.
 
-The artwork both halves of this need is drawn by `assets/make-artwork.swift`, which is run by hand
-and whose output is committed. Everything visual comes out of `assets/artwork`, and nothing else in
-the repository holds a copy of it.
+The artwork both halves of this need is drawn by `tools/artwork`, which is run by hand and whose
+output is committed. Everything visual comes out of `assets/artwork`, and nothing else in the
+repository holds a copy of it. It draws with Skia and is a .NET program rather than a Swift one, so
+that the Windows icon can be rebuilt from Windows; it writes the `icns` and the `ico` containers
+itself, because `iconutil` is macOS only and nothing draws an `ico` at all.
 
 ---
 

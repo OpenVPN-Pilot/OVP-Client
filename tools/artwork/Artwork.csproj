@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AssemblyName>artwork</AssemblyName>
+    <RootNamespace>OpenVpnPilot.Artwork</RootNamespace>
+    <!--
+      Not in OpenVpnPilot.sln, for the same reason the installers are not: this draws four files that
+      are committed, it is run by hand when the artwork changes, and an ordinary build has no business
+      doing it.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Skia rather than anything of the host system. System.Drawing is Windows only, AppKit is macOS
+      only, and this has to produce the same four files from either. Avalonia already draws the
+      interface with Skia, so the same renderer draws what the interface is labelled with.
+    -->
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="3.119.4" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="3.119.4" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.4" />
+  </ItemGroup>
+
+</Project>

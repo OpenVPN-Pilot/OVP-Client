@@ -124,7 +124,7 @@ geometry rather than from images somebody once exported, so each is sharp at eve
 asks for:
 
 ```bash
-swift assets/make-artwork.swift
+dotnet run --project tools/artwork
 ```
 
 | | |
@@ -139,8 +139,21 @@ points the tile is dropped and the mark is drawn on its own: a tile and a mark i
 leave the mark ten points across and the dot in its middle two, and what survives at that size is the
 mark filling the square.
 
-The command is deliberately not part of any build. Producing an installer should not also need a
-Swift compiler, and artwork changes on a different schedule from code.
+It runs on Windows as well as macOS, which is why it is a .NET program drawing with Skia rather than
+anything of either system: `System.Drawing` is Windows only and AppKit is macOS only, and the same
+four files have to come out of either. Avalonia already draws the interface with Skia, so the same
+renderer draws what the interface is labelled with. Both container formats are written by hand, the
+`icns` because `iconutil` exists only on macOS and the `ico` because nothing in the toolchain draws
+one at all.
+
+The project is deliberately not in the solution, for the same reason the installers are not: an
+ordinary build has no business producing artwork, and what it writes is committed.
+
+One thing about the `icns` is worth not rediscovering. The one point entries for 16 and 32 points,
+`icp4` and `icp5`, are left out. They predate PNG in that format and are read as raw pixels by tools
+that expect the older meaning, `iconutil` among them, which turns them into noise; macOS itself reads
+them correctly, so the file looks right and the tooling looks broken. The system scales the two point
+entries down for a display that does not double, and that is the same drawing.
 
 The positions the disk image window places its two icons at are in `installer/build-macos.sh` and the
 background is drawn for those positions, so changing one means changing the other. Arranging that
