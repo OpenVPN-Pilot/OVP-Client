@@ -10,8 +10,84 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
 
 ## [Unreleased]
 
+### Added
+
+- **macOS.** The application, the companion command and the installers all run there, driving the
+  same `openvpn` through the same management interface as on Windows. What differs is the privileged
+  part that starts it: Windows has OpenVPN's own interactive service and macOS has nothing like it,
+  so this project brings its own helper. `Core`, `OpenVpn`, `Data` and `App` did not change for any
+  of it; macOS is an implementation of the platform interfaces that already existed.
+- A privileged helper, `Platform.MacOS.Helper`, which is the only part that runs as root and depends
+  on nothing else in the repository except the protocol it shares with the application. It is a
+  launchd daemon started by the first connection through socket activation and ending itself when it
+  has been idle, so nothing of it runs while the application is closed, and installing it asks for a
+  password once rather than every time a tunnel comes up. The caller sends values and never options:
+  the helper parses the configuration with a port of OpenVPN's own `parse_line`, refuses anything
+  that would run a program or read a file the caller chose, writes its own root owned copy, and
+  builds the command line itself. What a tunnel changed to the name servers is written down before it
+  is changed and restored when it ends, including after a crash, checked against the boot time so a
+  stale record cannot undo a newer setting.
+- The helper package carries the OpenVPN it runs, built from pinned sources by
+  `installer/build-openvpn-macos.sh` and linked statically against nothing but the system. An OpenVPN
+  from a package manager lives under a directory owned by the account that installed it, together
+  with the libraries it loads, and running that as root would hand root to anything running as that
+  account.
+- Two macOS installers, built by `installer/build-macos.sh`: the application in a disk image, dragged
+  to Applications with no password, and the helper as a package, which asks for one. The disk image
+  opens the window a Mac installer is expected to open, with a background, fixed icon positions and
+  its own volume icon, and the package installs, registers and links `ovp` onto PATH and can be
+  removed again with one script that leaves nothing behind.
+- `scripts/dev.sh`, the macOS counterpart of `scripts/dev.ps1`: stop what is open, build, start what
+  was built. It also names where .NET is, which a build from the source tree needs and an installed
+  build does not.
+- `assets/artwork`, where everything visual now comes from, and `assets/make-artwork.swift`, which
+  draws all of it from geometry: the macOS icon, the Windows icon, the menu bar template and the disk
+  image background. The projects link those files rather than keeping copies.
+
+### Changed
+
+- The README is one page that says what this is and points at `docs/`, which holds one page per
+  subject: Windows, macOS, using it, the `ovp` command, and working on it. It had grown to everything
+  anyone might want to know about two operating systems in one scroll.
+- **macOS is built from the source and is not published as a download.** A build another Mac opens
+  without an argument has to be signed and notarised by Apple, which needs a paid Developer ID, and
+  making one needs a Mac to make it on. The documentation, the banner the application shows when the
+  helper is missing, the note the update check raises and what `ovp doctor` prints all say so, and
+  the link they offer is the page with the one command on it rather than a releases page with nothing
+  on it for the reader. A build made on the machine it then runs on carries no quarantine flag and
+  Gatekeeper says nothing at all, which is what makes this reasonable rather than a chore.
+- The macOS bundle is called `OpenVPN Pilot.app`. The Finder labels an application with its file name
+  and with nothing else: `CFBundleDisplayName`, a localized `InfoPlist.strings` and
+  `LSHasLocalizedDisplayName` were each tried and each ignored, so the disk image, Applications and
+  the Dock all showed the compact form while the window and every notification said the spaced one.
+  The compact form stays where a name has to be one word. Both names are looked for, by `ovp` and by
+  the helper package, so an installation made before this keeps working.
+- The application icon carries a tile of its own rather than leaving one to the system. macOS 26 puts
+  a grey container under an icon that has none, so the same application looked one way there and
+  another on Windows, and neither was chosen. Below 32 points the tile is dropped again, because a
+  tile with a mark inside it at that size leaves the mark ten points across.
+- The companion command asks for each capability through its interface and decides its platform once,
+  the way the application does. It reached for Windows types directly and could only ever run there.
+  Windows keeps the same implementations and the same behaviour; macOS adds zsh completion, which is
+  the default shell there, in zsh's own completion system rather than through bash's.
+- A language file can word a key for one platform, so wording that names a part of one system reads
+  correctly on both without a second catalogue.
+
 ### Fixed
 
+- The language setting set to follow the system came up in English on a German machine, on Windows as
+  well as macOS, however the machine was set up. The repository built with `InvariantGlobalization`,
+  which leaves `CultureInfo.CurrentUICulture` as the invariant culture whose name is the empty
+  string: there was never a language to follow, and every date and number was formatted the invariant
+  way rather than the reader's. Both Windows 10 and macOS carry ICU, so nothing is bundled for this.
+  The helper keeps globalization switched off for itself, being a root daemon that formats nothing
+  for anyone.
+- Press and drag on a profile ended the application on macOS. The drag carried its identifiers in an
+  in process format, which Avalonia documents as never being serialized to a platform drag, and the
+  macOS backend builds the dragging session out of exactly what was serialized: nothing. AppKit
+  refuses a session with no items by raising, and an Objective-C exception raised under the run loop
+  is an abort. Windows keeps its data object inside the process and never noticed.
+- Only one copy of the application runs per user on Unix as well, rather than one per login session.
 - The solution builds with the .NET SDK 10.0.400, whose analysers refuse a log call that formats its
   arguments before knowing whether the line will be written. The source generated log methods now
   receive the values themselves and format them only when the line is written. The lines read as
