@@ -63,7 +63,7 @@ internal static class ConnectCommand
             if (reply is not null)
             {
                 Console.WriteLine(reply);
-                return reply.StartsWith("No stored profile", StringComparison.Ordinal) ? 1 : 0;
+                return reply.StartsWith(PilotCommands.NoSuchProfile, StringComparison.Ordinal) ? 1 : 0;
             }
         }
 

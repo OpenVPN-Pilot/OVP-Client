@@ -145,14 +145,18 @@ public sealed class RemoteCommandHandler
 
         if (active.Count == 0)
         {
-            return "Nothing is connected.";
+            return PilotCommands.NothingConnected;
         }
 
         StringBuilder builder = new();
 
         foreach (ProfileItemViewModel profile in active)
         {
-            builder.Append(CultureInfo.InvariantCulture, $"{profile.Name,-44} {profile.StatusLabel,-14}");
+            // The state by its own name and not the label the interface shows. What goes back over
+            // this channel is read by ovp, which decides an exit code from it and prints it to a
+            // terminal, and both of those have to mean the same thing on a machine set to any
+            // language. The window is where a translated word belongs.
+            builder.Append(CultureInfo.InvariantCulture, $"{profile.Name,-44} {profile.Status.State,-14}");
 
             if (profile.Status.State == VpnConnectionState.Connected)
             {
@@ -172,12 +176,12 @@ public sealed class RemoteCommandHandler
 
         if (profile is null)
         {
-            return $"No stored profile matches '{name}'.";
+            return $"{PilotCommands.NoSuchProfile} '{name}'.";
         }
 
         if (!profile.IsIdle)
         {
-            return $"{profile.Name} is already {profile.StatusLabel.ToLowerInvariant()}.";
+            return $"{profile.Name} is already {profile.Status.State.ToString().ToLowerInvariant()}.";
         }
 
         await viewModel.ConnectByIdAsync(profile.Id);
@@ -197,7 +201,7 @@ public sealed class RemoteCommandHandler
 
         if (profile is null)
         {
-            return $"No stored profile matches '{name}'.";
+            return $"{PilotCommands.NoSuchProfile} '{name}'.";
         }
 
         if (profile.IsIdle)
