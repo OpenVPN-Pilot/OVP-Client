@@ -127,6 +127,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectionSummary))]
     [NotifyPropertyChangedFor(nameof(HasTicked))]
+    [NotifyPropertyChangedFor(nameof(DeleteConfirmation))]
     public partial int TickedCount { get; set; }
 
     /// <summary>

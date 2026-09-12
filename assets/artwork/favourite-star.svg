@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <title>Favourite</title>
+  <!--
+    The fill is currentColor so the marker takes the colour of whatever draws it and stays correct
+    in both the light and the dark palette. The stroke is the same colour and only rounds the tips,
+    which a five point star at fourteen points needs to stop looking like a set of needles.
+  -->
+  <path fill="currentColor" stroke="currentColor" stroke-width="1.1"
+        stroke-linejoin="round" stroke-linecap="round"
+        d="M8.00 1.45 L9.68 5.69 L14.23 5.98 L10.72 8.88 L11.85 13.30 L8.00 10.86 L4.15 13.30 L5.28 8.88 L1.77 5.98 L6.32 5.69 Z" />
+</svg>

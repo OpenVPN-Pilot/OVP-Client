@@ -214,7 +214,7 @@
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ProfileItemViewModel">
               <Border Padding="14,12" CornerRadius="10" Background="Transparent">
-                <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
 
                   <CheckBox Grid.Column="0" Margin="0,0,6,0" VerticalAlignment="Center"
                             IsVisible="{Binding IsSelecting}"
@@ -227,31 +227,26 @@
                   <!--
                     Grids, not stacks. A stack panel measures its children with unlimited width in
                     the direction it stacks, so a name inside one is never trimmed however narrow
-                    the row gets: it simply runs on past the edge. The badges therefore sit in their
-                    own column and the name is what gives.
+                    the row gets: it simply runs on past the edge. The name therefore sits in the
+                    one column that stretches and everything beside it in a column of its own, and
+                    the name is what gives.
                   -->
-                  <StackPanel Grid.Column="2" Spacing="3">
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="7">
-                      <TextBlock Grid.Column="0" Text="{Binding Name}"
-                                 FontSize="13.5" FontWeight="SemiBold"
-                                 Foreground="{DynamicResource TextPrimary}"
-                                 TextTrimming="CharacterEllipsis"
-                                 ToolTip.Tip="{Binding Name}" />
-                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7"
-                                  VerticalAlignment="Center">
-                        <Border Classes="slot" IsVisible="{Binding HasFavouriteSlot}">
-                          <TextBlock Text="{Binding FavouriteSlotDisplay}" />
-                        </Border>
-                        <TextBlock Text="*" FontSize="14" VerticalAlignment="Center"
-                                   Foreground="{DynamicResource StatePending}"
-                                   IsVisible="{Binding IsFavourite}" />
-                        <Border Classes="pill" IsVisible="{Binding IsNew}"
-                                Background="{DynamicResource AccentSoft}">
-                          <TextBlock Text="{loc:Translate nav.new}"
-                                     Foreground="{DynamicResource Accent}" />
-                        </Border>
-                      </StackPanel>
-                    </Grid>
+                  <!--
+                    The point below the text is what centres everything beside it. A line box
+                    reserves room above the capitals for accents and below the baseline for
+                    descenders, and the first line here has more of the one than the last line has of
+                    the other, so the ink of the two lines sits half a point below the middle of the
+                    block that holds them. Centring on the block therefore reads as too high, which
+                    is measurable: the status point and the badges sat a device pixel above the
+                    middle of the text and the star a pixel and a half. The point restores the
+                    balance, and with it they sit on the middle of the text rather than beside it.
+                  -->
+                  <StackPanel Grid.Column="2" Spacing="3" Margin="0,0,0,1">
+                    <TextBlock Text="{Binding Name}"
+                               FontSize="13.5" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimary}"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding Name}" />
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                       <TextBlock Grid.Column="0" Text="{Binding Endpoint}" Classes="muted" />
                       <TextBlock Grid.Column="1" Text="{Binding TagsDisplay}" Classes="muted"
@@ -262,7 +257,39 @@
                     </Grid>
                   </StackPanel>
 
-                  <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8"
+                  <!--
+                    What is said about the entry rather than about its name sits in the row itself,
+                    the way the status dot on the left does, and only there can it be centred on the
+                    two lines instead of on the first of them.
+                  -->
+                  <!--
+                    The gap belongs to each badge rather than to the panel that holds them, so a row
+                    with no badge at all takes no width here and the name keeps it.
+                  -->
+                  <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Classes="slot" Margin="7,0,0,0" IsVisible="{Binding HasFavouriteSlot}">
+                      <TextBlock Text="{Binding FavouriteSlotDisplay}" />
+                    </Border>
+                    <Border Classes="pill" Margin="7,0,0,0" IsVisible="{Binding IsNew}"
+                            Background="{DynamicResource AccentSoft}">
+                      <TextBlock Text="{loc:Translate nav.new}"
+                                 Foreground="{DynamicResource Accent}" />
+                    </Border>
+                  </StackPanel>
+
+                  <!--
+                    The stroke is the marker's own colour and only rounds the tips, which a five
+                    point star at this size needs to stop reading as a set of needles.
+                  -->
+                  <Path Grid.Column="4" Data="{StaticResource FavouriteStar}"
+                        Width="13" Height="13" Stretch="Uniform"
+                        Margin="7,0,8,0" VerticalAlignment="Center"
+                        Fill="{DynamicResource StatePending}"
+                        Stroke="{DynamicResource StatePending}"
+                        StrokeThickness="1.1" StrokeJoin="Round" StrokeLineCap="Round"
+                        IsVisible="{Binding IsFavourite}" />
+
+                  <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="8"
                               VerticalAlignment="Center">
                     <TextBlock Text="!" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"
                                Foreground="{DynamicResource StatePending}"
