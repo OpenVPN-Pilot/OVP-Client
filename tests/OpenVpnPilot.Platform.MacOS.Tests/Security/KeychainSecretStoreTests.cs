@@ -1,5 +1,4 @@
 using System.Runtime.Versioning;
-using System.Text.Json;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Platform.MacOS.Interop;
 using OpenVpnPilot.Platform.MacOS.Security;
@@ -123,92 +122,10 @@ public sealed class KeychainSecretStoreTests : IDisposable
         Assert.Empty(Accounts());
     }
 
-    /// <summary>
-    /// An item written by the version that kept one per profile is still readable, moves into the
-    /// one item, and the old one is gone afterwards.
-    /// </summary>
-    [MacOSFact]
-    public async Task Read_AnItemFromAnEarlierVersion_IsFoldedIn()
-    {
-        WriteItemTheOldWay("profile/old/Auth", "someone", "from-before");
-
-        KeychainSecretStore store = Store();
-        StoredSecret? read = await store.TryReadAsync("profile/old/Auth");
-
-        Assert.NotNull(read);
-        Assert.Equal("someone", read.Username);
-        Assert.Equal("from-before", read.Password);
-
-        // What is left is the one item, and the one it came from is gone.
-        Assert.Equal(["credentials"], Accounts());
-        Assert.Equal("from-before", (await store.TryReadAsync("profile/old/Auth"))?.Password);
-    }
-
-    [MacOSFact]
-    public async Task Read_AnItemFromAnEarlierVersion_LeavesTheOthersAlone()
-    {
-        KeychainSecretStore store = Store();
-        await store.WriteAsync("profile/new/Auth", new StoredSecret("other", "current"));
-        WriteItemTheOldWay("profile/old/Auth", "someone", "from-before");
-
-        Assert.Equal("from-before", (await store.TryReadAsync("profile/old/Auth"))?.Password);
-        Assert.Equal("current", (await store.TryReadAsync("profile/new/Auth"))?.Password);
-    }
-
-    [MacOSFact]
-    public async Task List_WithAnItemFromAnEarlierVersion_ReportsItToo()
-    {
-        KeychainSecretStore store = Store();
-        await store.WriteAsync("profile/new/Auth", new StoredSecret("other", "current"));
-        WriteItemTheOldWay("profile/old/Auth", "someone", "from-before");
-
-        Assert.Equal(["profile/new/Auth", "profile/old/Auth"], await store.ListAsync());
-    }
-
-    [MacOSFact]
-    public async Task Write_ReplacesAnItemFromAnEarlierVersion()
-    {
-        WriteItemTheOldWay("profile/old/Auth", "someone", "from-before");
-
-        KeychainSecretStore store = Store();
-        await store.WriteAsync("profile/old/Auth", new StoredSecret("someone", "now"));
-
-        Assert.Equal(["credentials"], Accounts());
-        Assert.Equal("now", (await store.TryReadAsync("profile/old/Auth"))?.Password);
-    }
-
     [MacOSFact]
     public async Task Read_SomethingNeverStored_IsNull()
     {
         Assert.Null(await Store().TryReadAsync("profile/missing/Auth"));
-    }
-
-    /// <summary>
-    /// An item in the shape the previous version wrote: its own item, the reference as the account.
-    /// </summary>
-    private void WriteItemTheOldWay(string reference, string username, string password)
-    {
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(
-            new KeychainSecretStore.Payload(username, password), KeychainJsonContext.Default.Payload);
-
-        using CoreFoundationHandle item = CoreFoundation.CreateMutableDictionary();
-        using CoreFoundationHandle name = CoreFoundation.CreateString(service);
-        using CoreFoundationHandle account = CoreFoundation.CreateString(reference);
-        using CoreFoundationHandle data = CoreFoundation.CreateData(payload);
-
-        CoreFoundation.CFDictionarySetValue(item.Value, SecurityFramework.Class, SecurityFramework.ClassGenericPassword);
-        CoreFoundation.CFDictionarySetValue(item.Value, SecurityFramework.AttributeService, name.Value);
-        CoreFoundation.CFDictionarySetValue(item.Value, SecurityFramework.AttributeAccount, account.Value);
-        CoreFoundation.CFDictionarySetValue(item.Value, SecurityFramework.ValueData, data.Value);
-
-        int status = SecurityFramework.SecItemAdd(item.Value, out nint added);
-
-        if (added != 0)
-        {
-            CoreFoundation.CFRelease(added);
-        }
-
-        Assert.Equal(SecurityFramework.Success, status);
     }
 
     /// <summary>

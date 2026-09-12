@@ -32,13 +32,7 @@ namespace OpenVpnPilot.Platform.MacOS.Security;
 /// </para>
 /// <para>
 /// Which profiles have a sign in stored is kept in an attribute rather than in the protected data,
-/// so counting them and listing them never raises a prompt. That list is not secret, and it was
-/// readable without one before this, when the reference was the account name of its own item.
-/// </para>
-/// <para>
-/// An item written by an earlier version is folded into this one the first time that profile is
-/// asked for, and removed once it is. Nothing is migrated in bulk: that would ask about every
-/// profile at once, which is the very thing this is here to stop.
+/// so counting them and listing them never raises a prompt. That list names profiles, not secrets.
 /// </para>
 /// <para>
 /// Every call may block on the prompt, so each one runs on the thread pool rather than on whatever
@@ -55,8 +49,7 @@ public sealed class KeychainSecretStore : ISecretStore
     public const string Service = "OpenVpnPilot";
 
     /// <summary>
-    /// The account of the item that holds every sign in. A reference never looks like this, so it
-    /// cannot collide with an item written by an earlier version.
+    /// The account of the one item that holds every sign in.
     /// </summary>
     private const string Vault = "credentials";
 
@@ -109,33 +102,9 @@ public sealed class KeychainSecretStore : ISecretStore
     {
         lock (gate)
         {
-            Vaulted vault = ReadVault();
-
-            if (vault.Entries.TryGetValue(reference, out Payload? stored))
-            {
-                return new StoredSecret(stored.Username, stored.Password);
-            }
-
-            // Refused means the person said no or the keychain would not answer. Falling through to
-            // the older item would be harmless, but writing the vault afterwards would replace
-            // every sign in in it with this one, so nothing is written on that path.
-            if (vault.Outcome == VaultOutcome.Refused)
-            {
-                return null;
-            }
-
-            StoredSecret? legacy = ReadItem(reference);
-
-            if (legacy is null)
-            {
-                return null;
-            }
-
-            vault.Entries[reference] = new Payload(legacy.Username, legacy.Password);
-            WriteVault(vault.Entries);
-            DeleteItem(reference);
-
-            return legacy;
+            return ReadVault().Entries.TryGetValue(reference, out Payload? stored)
+                ? new StoredSecret(stored.Username, stored.Password)
+                : null;
         }
     }
 
@@ -154,9 +123,6 @@ public sealed class KeychainSecretStore : ISecretStore
 
             vault.Entries[reference] = new Payload(secret.Username, secret.Password);
             WriteVault(vault.Entries);
-
-            // Whatever an earlier version wrote for this profile is now a stale duplicate.
-            DeleteItem(reference);
         }
     }
 
@@ -166,19 +132,19 @@ public sealed class KeychainSecretStore : ISecretStore
         {
             Vaulted vault = ReadVault();
 
-            if (vault.Outcome == VaultOutcome.Found && vault.Entries.Remove(reference))
+            if (vault.Outcome != VaultOutcome.Found || !vault.Entries.Remove(reference))
             {
-                if (vault.Entries.Count == 0)
-                {
-                    DeleteItem(Vault);
-                }
-                else
-                {
-                    WriteVault(vault.Entries);
-                }
+                return;
             }
 
-            DeleteItem(reference);
+            if (vault.Entries.Count == 0)
+            {
+                DeleteVault();
+            }
+            else
+            {
+                WriteVault(vault.Entries);
+            }
         }
     }
 
@@ -189,8 +155,7 @@ public sealed class KeychainSecretStore : ISecretStore
     {
         lock (gate)
         {
-            Stored stored = ReadAccounts();
-            List<string> references = [.. stored.Vaulted, .. stored.LegacyAccounts];
+            List<string> references = ReadNames();
 
             references.Sort(StringComparer.Ordinal);
             return references;
@@ -201,16 +166,9 @@ public sealed class KeychainSecretStore : ISecretStore
     {
         lock (gate)
         {
-            Stored stored = ReadAccounts();
-
-            DeleteItem(Vault);
-
-            foreach (string account in stored.LegacyAccounts)
-            {
-                DeleteItem(account);
-            }
-
-            return stored.Vaulted.Count + stored.LegacyAccounts.Count;
+            int count = ReadNames().Count;
+            DeleteVault();
+            return count;
         }
     }
 
@@ -318,55 +276,9 @@ public sealed class KeychainSecretStore : ISecretStore
         }
     }
 
-    /// <summary>
-    /// One item written by a version that kept a separate item per profile.
-    /// </summary>
-    private StoredSecret? ReadItem(string reference)
+    private void DeleteVault()
     {
-        using CoreFoundationHandle query = Query(reference);
-        CoreFoundation.CFDictionarySetValue(query.Value, SecurityFramework.ReturnData, CoreFoundation.BooleanTrue);
-        CoreFoundation.CFDictionarySetValue(query.Value, SecurityFramework.MatchLimit, SecurityFramework.MatchLimitOne);
-
-        int status = SecurityFramework.SecItemCopyMatching(query.Value, out nint result);
-
-        if (status == SecurityFramework.ItemNotFound)
-        {
-            return null;
-        }
-
-        if (status != SecurityFramework.Success)
-        {
-            KeychainLog.ReadRefused(logger, SecurityFramework.DescribeStatus(status));
-            return null;
-        }
-
-        using CoreFoundationHandle data = new(result);
-        byte[]? plain = CoreFoundation.ReadData(data.Value);
-
-        if (plain is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            Payload? payload = JsonSerializer.Deserialize(plain, KeychainJsonContext.Default.Payload);
-            return payload is null ? null : new StoredSecret(payload.Username, payload.Password);
-        }
-        catch (JsonException exception)
-        {
-            KeychainLog.PayloadUnreadable(logger, exception);
-            return null;
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(plain);
-        }
-    }
-
-    private void DeleteItem(string account)
-    {
-        using CoreFoundationHandle query = Query(account);
+        using CoreFoundationHandle query = Query(Vault);
         int status = SecurityFramework.SecItemDelete(query.Value);
 
         if (status is not (SecurityFramework.Success or SecurityFramework.ItemNotFound))
@@ -377,99 +289,52 @@ public sealed class KeychainSecretStore : ISecretStore
     }
 
     /// <summary>
-    /// What the keychain holds under this service, read from attributes alone.
+    /// The references that have a sign in stored, read from the item's attributes alone.
     /// </summary>
-    private Stored ReadAccounts()
+    private List<string> ReadNames()
     {
-        using CoreFoundationHandle query = CoreFoundation.CreateMutableDictionary();
-        using CoreFoundationHandle name = CoreFoundation.CreateString(service);
-
-        CoreFoundation.CFDictionarySetValue(query.Value, SecurityFramework.Class, SecurityFramework.ClassGenericPassword);
-        CoreFoundation.CFDictionarySetValue(query.Value, SecurityFramework.AttributeService, name.Value);
+        using CoreFoundationHandle query = Query(Vault);
         CoreFoundation.CFDictionarySetValue(query.Value, SecurityFramework.ReturnAttributes, CoreFoundation.BooleanTrue);
-        CoreFoundation.CFDictionarySetValue(query.Value, SecurityFramework.MatchLimit, SecurityFramework.MatchLimitAll);
+        CoreFoundation.CFDictionarySetValue(query.Value, SecurityFramework.MatchLimit, SecurityFramework.MatchLimitOne);
 
         int status = SecurityFramework.SecItemCopyMatching(query.Value, out nint result);
 
         if (status == SecurityFramework.ItemNotFound)
         {
-            return new Stored([], []);
+            return [];
         }
 
         if (status != SecurityFramework.Success)
         {
             KeychainLog.ListRefused(logger, SecurityFramework.DescribeStatus(status));
-            return new Stored([], []);
+            return [];
         }
 
-        using CoreFoundationHandle items = new(result);
-        List<string> vaulted = [];
-        List<string> legacy = [];
+        using CoreFoundationHandle attributes = new(result);
 
-        if (CoreFoundation.CFGetTypeID(items.Value) == CoreFoundation.CFArrayGetTypeID())
+        if (CoreFoundation.CFGetTypeID(attributes.Value) != CoreFoundation.CFDictionaryGetTypeID())
         {
-            nint count = CoreFoundation.CFArrayGetCount(items.Value);
-
-            for (nint index = 0; index < count; index++)
-            {
-                Sort(CoreFoundation.CFArrayGetValueAtIndex(items.Value, index), vaulted, legacy);
-            }
-        }
-        else
-        {
-            Sort(items.Value, vaulted, legacy);
-        }
-
-        return new Stored(vaulted, legacy);
-    }
-
-    /// <summary>
-    /// Files one item's attributes under what it is: the one holding every sign in, or one written
-    /// by an earlier version whose account is the reference itself.
-    /// </summary>
-    private void Sort(nint attributes, List<string> vaulted, List<string> legacy)
-    {
-        if (attributes == 0 || CoreFoundation.CFGetTypeID(attributes) != CoreFoundation.CFDictionaryGetTypeID())
-        {
-            return;
-        }
-
-        string? account = CoreFoundation.ReadString(
-            CoreFoundation.CFDictionaryGetValue(attributes, SecurityFramework.AttributeAccount));
-
-        if (string.IsNullOrEmpty(account))
-        {
-            return;
-        }
-
-        if (account != Vault)
-        {
-            legacy.Add(account);
-            return;
+            return [];
         }
 
         byte[]? index = CoreFoundation.ReadData(
-            CoreFoundation.CFDictionaryGetValue(attributes, SecurityFramework.AttributeGeneric));
+            CoreFoundation.CFDictionaryGetValue(attributes.Value, SecurityFramework.AttributeGeneric));
 
         if (index is null || index.Length == 0)
         {
-            return;
+            return [];
         }
 
         try
         {
-            string[]? names = JsonSerializer.Deserialize(index, KeychainJsonContext.Default.StringArray);
-
-            if (names is not null)
-            {
-                vaulted.AddRange(names);
-            }
+            return [.. JsonSerializer.Deserialize(index, KeychainJsonContext.Default.StringArray) ?? []];
         }
         catch (JsonException exception)
         {
             // The list of names is a convenience, not the truth. A damaged one hides profiles from
             // the settings screen until the next write, and must not take the screen down.
             KeychainLog.PayloadUnreadable(logger, exception);
+            return [];
         }
     }
 
@@ -508,14 +373,11 @@ public sealed class KeychainSecretStore : ISecretStore
     }
 
     private sealed record Vaulted(VaultOutcome Outcome, Dictionary<string, Payload> Entries);
-
-    private sealed record Stored(List<string> Vaulted, List<string> LegacyAccounts);
 }
 
 /// <summary>
 /// Serialisation of the protected payload without reflection.
 /// </summary>
-[System.Text.Json.Serialization.JsonSerializable(typeof(KeychainSecretStore.Payload))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(Dictionary<string, KeychainSecretStore.Payload>))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(string[]))]
 internal sealed partial class KeychainJsonContext : System.Text.Json.Serialization.JsonSerializerContext
