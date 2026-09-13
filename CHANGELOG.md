@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged. A release tag is `v<version>`, for example `v1.2.0`.
 
-## [Unreleased]
+## [1.4.0] - 2026-09-13
 
 ### Added
 
@@ -98,6 +98,21 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   lookup succeeds; a launcher that reported zero had the test suite end itself, its runner and the
   shell that started them. A test fake that reported an arbitrary identifier, which on a system
   that hands them out in sequence can belong to anything, reports zero as well.
+- The Windows taskbar and notification area showed the macOS icon: the two platforms share the mark
+  but the `.ico` was drawn with the same rounded-square tile the macOS grid needs, and Windows'
+  32 point and larger icons picked the tiled drawing up. The Windows icon is now the mark on its own
+  at every size.
+- A Windows notification carried a large image nobody asked for: Windows' own stock icon for the
+  severity, a blue circle, an orange triangle or a red circle, in place of the application's. Drawing
+  the application's own icon there instead turned out no better, since the tray's `hIcon` is far
+  smaller than the image wants and every pixel of stretching it up showed. Notifications now carry no
+  large image at all.
+- The small icon the notification centre shows beside the application's name kept showing one from
+  months earlier on a development machine, regardless of how often the registration that names an
+  icon for it was rewritten afterwards or how often the process restarted: Windows resolves it once
+  per application identity, caches it in `wpndatabase.db`, and never rereads it. Confirmed by clearing
+  that cache, which is a whole account's notification history and not something this application
+  reaches into; a fresh installation has no stale entry to begin with and is not expected to need it.
 
 ## [1.3.0] - 2026-09-01
 

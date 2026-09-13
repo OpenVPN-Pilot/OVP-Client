@@ -470,9 +470,34 @@ name and an icon. The installer stamps the same identity onto the start menu sho
 `System.AppUserModel.ID`. All three must say `OpenVpnPilot` and the identifier must not change once
 released, because notification settings the user makes are stored against it.
 
-The registration is confirmed present after a run. The label the notification centre shows has not
-been observed end to end, because raising a notification means completing a connection; verify it the
-next time one is made and correct this if it says otherwise.
+The registration is confirmed present after a run, and the label has now been observed end to end: the
+notification centre does show `DisplayName` above the message. The small icon beside it is a
+different matter.
+
+**That small icon is not read from `IconUri` on every run; Windows resolves it once per AUMID and
+keeps what it first resolved.** Measured on a machine that had run this application, under this
+identifier, since before the current artwork existed: the group header kept showing an icon from
+months earlier, regardless of how many times `IconUri` was rewritten afterwards or how many times the
+process restarted. A brand new identifier that had never appeared on the machine before, with the same
+registration code, came up showing the raw executable name and a generic placeholder instead of
+`DisplayName` and `IconUri` at all, on its first run and its second, which is what a shortcut only
+installed application supplies and a loose executable does not have.
+
+The cache is `%LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db`, and it is not
+process-local: stopping `WpnUserService_<hash>`, deleting `wpndatabase.db` together with its
+`-wal`/`-shm` files, and starting the service again is what made the stale icon disappear and the
+current one appear, confirmed end to end on this machine. It is a whole-account cache, not one this
+application can reach into or reset for the user, and every other application's notification history
+on the account is erased along with it, so this is a one-off unstick for a development machine, not
+something the product does or should do. A fresh installation on a machine that has never seen
+`OpenVpnPilot` before starts with no entry to be stale, and is not expected to show this.
+
+The large image a notification carries is a different mechanism, `dwInfoFlags` on the balloon itself,
+and behaves exactly as documented: `NIIF_INFO`/`WARNING`/`ERROR` draw one of Windows' own stock icons
+regardless of the tray's own; `NIIF_USER` draws the tray's `hIcon` instead, at whatever pixel size that
+icon carries, stretched to the size the toast wants and showing every pixel of the stretch. Neither
+reads well next to a brand mark this simple, so `WindowsTrayIcon.ShowAsync` sends `NIIF_NONE` and shows
+no large image at all.
 
 ---
 

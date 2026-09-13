@@ -121,12 +121,7 @@ public sealed class WindowsTrayIcon : ISystemTrayIcon, INotificationPresenter
             NativeMethods.NotifyIconData data = CreateData(NativeMethods.NifInfo);
             WriteInfo(ref data, request.Title, request.Message);
 
-            data.dwInfoFlags = request.Severity switch
-            {
-                NotificationSeverity.Warning => NativeMethods.NiifWarning,
-                NotificationSeverity.Error => NativeMethods.NiifError,
-                _ => NativeMethods.NiifInfo,
-            };
+            data.dwInfoFlags = NativeMethods.NiifNone;
 
             NativeMethods.ShellNotifyIcon(NativeMethods.NimModify, ref data);
         }

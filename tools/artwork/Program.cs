@@ -44,7 +44,7 @@ void Write(string name, byte[] content)
 }
 
 Write("OpenVpnPilot.icns", AppleIcon.Build(Mark.DrawApplicationIcon));
-Write("OpenVpnPilot.ico", WindowsIcon.Build(Mark.DrawApplicationIcon));
+Write("OpenVpnPilot.ico", WindowsIcon.Build(Mark.DrawMark));
 Write("status-item.png", Mark.MenuBarTemplate());
 Write("dmg-background.png", DiskImageBackground.Render());
 
@@ -157,6 +157,18 @@ namespace OpenVpnPilot.Artwork
         /// </summary>
         public static byte[] MenuBarTemplate() => Canvas.Render(36, canvas =>
             FillMark(canvas, 36, SKColors.Black, 1.0, TemplateOuterRadius, TemplateRingInnerRadius, TemplateDotRadius));
+
+        /// <summary>
+        /// The mark on its own, at any size: the transparent blue ring and dot with no tile behind it.
+        /// </summary>
+        /// <remarks>
+        /// Windows has no convention of the rounded-square tile Apple's grid draws the application
+        /// icon on, so the Windows icon is this at every size rather than <see cref="DrawApplicationIcon"/>,
+        /// which would otherwise put a macOS-style tile behind the mark from 32 pixels up, in the
+        /// taskbar and the notification area among other places.
+        /// </remarks>
+        public static void DrawMark(SKCanvas canvas, int pixels, double shownAt) =>
+            FillMark(canvas, pixels, Blue, 1.0, OuterRadius, RingInnerRadius, DotRadius);
 
         private static void FillMark(
             SKCanvas canvas,

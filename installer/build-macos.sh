@@ -171,12 +171,17 @@ build_application() {
             --output "$publish" \
             --nologo \
             -p:Version="$version" \
+            -p:DebugType=none \
             > "${staging}/publish-$(basename "$project").log" \
             || { tail -20 "${staging}/publish-$(basename "$project").log"; fail "Publishing ${project} failed."; }
     done
 
-    # A publish leaves the debugging symbols behind, which double the size of the package and are of
-    # no use on a machine that only runs the application.
+    # DebugType=none is what keeps this build from saying whose machine it was made on. Without it a
+    # managed assembly carries a debug directory entry naming the absolute path a .pdb would have been
+    # written to, the build machine's home directory and account name included, whether or not a .pdb
+    # ever reaches this output: deleting the file afterwards does not remove the path already written
+    # into the DLL. The finds below are what is left once DebugType=none stops the .pdb itself from
+    # being written, kept as the backstop against a publish that ignores the property.
     find "$publish" -name '*.pdb' -delete
     find "$publish" -name '*.dsym' -prune -exec rm -rf {} + 2> /dev/null || true
 
@@ -521,6 +526,7 @@ build_helper_package() {
         --output "$built" \
         --nologo \
         -p:Version="$version" \
+        -p:DebugType=none \
         > "${staging}/publish-helper.log" \
         || { tail -30 "${staging}/publish-helper.log"; fail 'Publishing the helper failed.'; }
 
