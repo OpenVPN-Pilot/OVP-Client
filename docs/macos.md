@@ -200,7 +200,7 @@ machine still keeps each person's profiles apart.
 | Profiles, tags and history | `~/Library/Application Support/OpenVpnPilot/pilot.db` |
 | Settings | `~/Library/Application Support/OpenVpnPilot/settings.json`, editable by hand |
 | Credentials | the login keychain, all of them in one item under the service `OpenVpnPilot` |
-| Logs | `~/Library/Application Support/OpenVpnPilot/logs/`, one `yyyy-MM-dd.log` per day |
+| Logs | `~/Library/Application Support/OpenVpnPilot/logs/`, one `yyyy-MM-dd_HH.log` per hour, seven days and a gigabyte at most by default |
 | Added languages | `~/Library/Application Support/OpenVpnPilot/lang/` |
 | Autostart | `~/Library/LaunchAgents/org.openvpnpilot.app.login.plist`, only while "start with the system" is on |
 

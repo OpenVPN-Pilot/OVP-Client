@@ -201,6 +201,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public partial int LogRetentionDays { get; set; }
 
     /// <summary>
+    /// How large the log files may be together, in megabytes. Zero sets no limit.
+    /// </summary>
+    [ObservableProperty]
+    public partial int LogMaximumMegabytes { get; set; }
+
+    /// <summary>
     /// Ask GitHub for a newer release when the application starts.
     /// </summary>
     [ObservableProperty]
@@ -313,6 +319,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         OpenVpnVerbosity = draft.Advanced.OpenVpnVerbosity;
         LogLevel = draft.Advanced.LogLevel;
         LogRetentionDays = draft.Advanced.LogRetentionDays;
+        LogMaximumMegabytes = draft.Advanced.LogMaximumMegabytes;
         CheckForUpdates = draft.Advanced.CheckForUpdates;
         UpdateRepository = draft.Advanced.UpdateRepository ?? string.Empty;
     }
@@ -349,6 +356,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         draft.Advanced.OpenVpnVerbosity = Math.Clamp(OpenVpnVerbosity, 0, 11);
         draft.Advanced.LogLevel = LogLevel;
         draft.Advanced.LogRetentionDays = Math.Clamp(LogRetentionDays, 0, 365);
+        draft.Advanced.LogMaximumMegabytes = Math.Clamp(LogMaximumMegabytes, 0, 100_000);
         draft.Advanced.CheckForUpdates = CheckForUpdates;
         draft.Advanced.UpdateRepository =
             string.IsNullOrWhiteSpace(UpdateRepository) ? null : UpdateRepository.Trim();

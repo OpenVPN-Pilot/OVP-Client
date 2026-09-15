@@ -46,7 +46,7 @@
       "recent": "Zuletzt verwendet",
       "history": "Verlauf",
       "log": "Protokoll",
-      "logHint": "Alles, was diese Anwendung und OpenVPN aufzeichnen, während es geschieht. Pro Tag wird eine Datei neben dem Profilspeicher abgelegt."
+      "logHint": "Alles, was diese Anwendung und OpenVPN aufzeichnen, während es geschieht. Pro Stunde wird eine Datei neben dem Profilspeicher abgelegt."
     },
     "profile": {
       "connect": "Verbinden",
@@ -257,7 +257,8 @@
       "diagnosticsPrivacy": "Ein Paket ist nicht anonym. Es enthält Profilnamen, Hostnamen und Ports der Gegenstellen, Dateipfade mit Ihrem Windows-Benutzernamen sowie Protokollzeilen, die dasselbe nennen. Es enthält nie Konfigurationen, private Schlüssel oder Anmeldedaten. Sehen Sie es durch, bevor Sie es weitergeben.",
       "diagnosticsPrivacy@macos": "Ein Paket ist nicht anonym. Es enthält Profilnamen, Hostnamen und Ports der Gegenstellen, Dateipfade mit Ihrem macOS-Benutzernamen sowie Protokollzeilen, die dasselbe nennen. Es enthält nie Konfigurationen, private Schlüssel oder Anmeldedaten. Sehen Sie es durch, bevor Sie es weitergeben.",
       "logRetention": "Protokolldateien aufbewahren, in Tagen",
-      "logRetentionHint": "Null behält sie, bis sie von Hand entfernt werden. Ein Protokoll nennt Profile, Hosts und Dateipfade mit Ihrem Benutzernamen, deshalb ist eine kurze Aufbewahrung die sicherere Voreinstellung.",
+      "logMaximum": "Protokolldateien höchstens, in Megabyte",
+      "logRetentionHint": "Pro Stunde wird eine Datei geschrieben. Dateien, die älter als die obigen Tage sind, werden entfernt, ebenso die ältesten, sobald alle zusammen die obige Größe erreichen. Null schaltet die jeweilige Grenze ab. Ein Protokoll nennt Profile, Hosts und Dateipfade mit Ihrem Benutzernamen, daher ist eine kurze Aufbewahrung die sicherere Voreinstellung.",
       "checkForUpdates": "Beim Start nach einer neueren Version sehen",
       "checkForUpdatesHint": "Das ist das Einzige hier, das ein Netzwerk kontaktiert, ohne dass Sie es verlangt haben. Es liest die Release-Liste des unten genannten Repositorys von api.github.com, ohne Anmeldedaten, und meldet das Ergebnis. Es wird nichts heruntergeladen und nichts installiert.",
       "updateRepository": "Zu prüfendes Repository, als Eigentümer/Name",
@@ -477,7 +478,7 @@
       "openFolder": "Ordner öffnen",
       "clearView": "Ansicht leeren",
       "viewCleared": "Die Ansicht wurde geleert. Die Dateien sind unberührt.",
-      "retentionHint": "Eine Datei pro Tag, benannt nach diesem Tag, aufbewahrt so lange, wie es die Einstellungen sagen."
+      "retentionHint": "Eine Datei pro Stunde, nach dieser Stunde benannt, so lange und so groß aufbewahrt, wie die Einstellungen es vorgeben."
     },
     "update": {
       "checking": "Wird geprüft...",

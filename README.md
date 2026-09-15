@@ -55,7 +55,7 @@ The rest is one page per subject, so this one stays short:
 - One time codes, both the kind presented up front and the kind raised after a refusal
 - Session history with durations and transfer volumes, exportable as CSV and clearable by filter
 - A live log window carrying both this application's own record and OpenVPN's, filterable by source,
-  level and text, written to one file per day and kept for as long as you say
+  level and text, written to one file per hour and kept for as long and as large as you say
 - Bulk import from files, folders and ZIP archives
 - Opening a `.ovpn` file from the shell brings up the import wizard with it, once you have picked
   this application in the Open with menu

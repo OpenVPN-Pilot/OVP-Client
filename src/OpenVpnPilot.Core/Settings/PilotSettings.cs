@@ -311,6 +311,15 @@ public sealed class AdvancedSettings
     public int LogRetentionDays { get; set; } = 7;
 
     /// <summary>
+    /// How large the log files may be together, in megabytes. Zero sets no limit.
+    /// </summary>
+    /// <remarks>
+    /// The retention alone does not bound the directory: a tunnel that logs the same failure for
+    /// every packet wrote more than a gigabyte a day. The oldest files go first when this is reached.
+    /// </remarks>
+    public int LogMaximumMegabytes { get; set; } = 1024;
+
+    /// <summary>
     /// Keep the database, logs and settings beside the executable instead of under the user profile.
     /// </summary>
     public bool PortableMode { get; set; }

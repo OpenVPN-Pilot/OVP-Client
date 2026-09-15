@@ -46,7 +46,7 @@
       "recent": "Recent",
       "history": "History",
       "log": "Log",
-      "logHint": "Everything this application and OpenVPN record, as it happens. One file per day is kept beside the profile store."
+      "logHint": "Everything this application and OpenVPN record, as it happens. One file per hour is kept beside the profile store."
     },
     "profile": {
       "connect": "Connect",
@@ -257,7 +257,8 @@
       "diagnosticsPrivacy": "A bundle is not anonymous. It contains profile names, remote host names and ports, file paths that include your Windows user name, and log lines that mention the same. It never contains configurations, private keys or credentials. Read it before sending it on.",
       "diagnosticsPrivacy@macos": "A bundle is not anonymous. It contains profile names, remote host names and ports, file paths that include your macOS user name, and log lines that mention the same. It never contains configurations, private keys or credentials. Read it before sending it on.",
       "logRetention": "Keep log files for, in days",
-      "logRetentionHint": "Zero keeps them until they are removed by hand. A log names profiles, hosts and file paths that include your user name, so a short retention is the safer default.",
+      "logMaximum": "Keep log files up to, in megabytes",
+      "logRetentionHint": "One file is written per hour. Files older than the days above are removed, and so are the oldest files once all of them together reach the size above. Zero turns either limit off. A log names profiles, hosts and file paths that include your user name, so a short retention is the safer default.",
       "checkForUpdates": "Look for a newer release when the application starts",
       "checkForUpdatesHint": "This is the only thing here that contacts a network you did not ask it to. It reads the release list of the repository below from api.github.com, without credentials, and reports what it found. Nothing is downloaded and nothing is installed.",
       "updateRepository": "Repository to check, as owner/name",
@@ -477,7 +478,7 @@
       "openFolder": "Open folder",
       "clearView": "Clear view",
       "viewCleared": "The view was cleared. The files are untouched.",
-      "retentionHint": "One file per day, named for that day, kept for as long as the settings say."
+      "retentionHint": "One file per hour, named for that hour, kept for as long and as large as the settings say."
     },
     "update": {
       "checking": "Checking...",
