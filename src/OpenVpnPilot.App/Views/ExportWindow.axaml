@@ -96,10 +96,10 @@
         <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Classes="muted"
                    VerticalAlignment="Center" TextWrapping="Wrap" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-          <Button Content="{loc:Translate common.cancel}" MinWidth="96"
+          <Button Content="{loc:Translate common.cancel}" MinWidth="96" IsCancel="True"
                   Command="{Binding CancelCommand}" />
           <Button Name="ExportButton" Content="{loc:Translate export.write}"
-                  Classes="primary" MinWidth="120"
+                  Classes="primary" MinWidth="120" IsDefault="True"
                   IsEnabled="{Binding CanExport}" />
         </StackPanel>
       </Grid>
