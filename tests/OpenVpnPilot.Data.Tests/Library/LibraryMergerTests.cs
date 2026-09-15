@@ -66,6 +66,64 @@ public sealed class LibraryMergerTests : IDisposable
     }
 
     /// <summary>
+    /// A machine that starts using a shared library gives up the library it had, and the shared file
+    /// is not told about any of it.
+    /// </summary>
+    [Fact]
+    public async Task Adopting_ReplacesWhatThisMachineHadAndLeavesTheSharedFileAlone()
+    {
+        Machine source = await CreateMachineAsync("source");
+        Profile alpha = await source.AddAsync("site-alpha", Config(1194), "production");
+        await source.Secrets.WriteAsync(SecretReference.ForProfile(alpha.Id, "Auth"), new StoredSecret("operator", "shared"));
+        ProfilePackageContent shared = await source.Merger.ReadLocalAsync();
+
+        Machine joining = await CreateMachineAsync("joining");
+        Profile own = await joining.AddAsync("my-own-site", Config(1300), "private");
+        await joining.Secrets.WriteAsync(SecretReference.ForProfile(own.Id, "Auth"), new StoredSecret("me", "mine"));
+
+        LibraryMergeResult result = await joining.Merger.AdoptAsync(shared);
+
+        Assert.False(result.SharedChanged);
+        Assert.Equal(["site-alpha"], result.Added);
+        Assert.Equal(["my-own-site"], result.Removed);
+        Assert.Equal(["site-alpha"], await joining.Context.Profiles.Select(profile => profile.Name).ToListAsync());
+        Assert.Equal(["production"], await joining.Context.Tags.Select(tag => tag.Name).ToListAsync());
+        Assert.Null(await joining.Secrets.TryReadAsync(SecretReference.ForProfile(own.Id, "Auth")));
+        Assert.Equal("shared", (await joining.Secrets.TryReadAsync(SecretReference.ForProfile(alpha.Id, "Auth")))?.Password);
+    }
+
+    /// <summary>
+    /// A profile this machine had that the library holds too is the same profile, and what was
+    /// personal about it here is kept.
+    /// </summary>
+    [Fact]
+    public async Task Adopting_KeepsWhatWasPersonalAboutAProfileTheLibraryHoldsToo()
+    {
+        Machine source = await CreateMachineAsync("source");
+        Profile alpha = await source.AddAsync("site-alpha", Config(1194));
+        ProfilePackageContent shared = await source.Merger.ReadLocalAsync();
+
+        Machine joining = await CreateMachineAsync("joining");
+        Profile copy = await joining.AddAsync("alpha-imported-here", Config(1194));
+        await ChangeAsync(joining, copy.Id, profile =>
+        {
+            profile.IsFavourite = true;
+            profile.FavouriteSlot = 2;
+        });
+
+        LibraryMergeResult result = await joining.Merger.AdoptAsync(shared);
+
+        Assert.Empty(result.Added);
+        Assert.Empty(result.Removed);
+
+        Profile kept = await joining.Context.Profiles.AsNoTracking().SingleAsync();
+        Assert.Equal(alpha.Id, kept.Id);
+        Assert.Equal("site-alpha", kept.Name);
+        Assert.True(kept.IsFavourite);
+        Assert.Equal(2, kept.FavouriteSlot);
+    }
+
+    /// <summary>
     /// A colleague renaming a profile and this machine changing its port are not in conflict.
     /// </summary>
     [Fact]

@@ -41,7 +41,9 @@ namespace OpenVpnPilot.App.Services.Library;
 /// </remarks>
 public sealed class SharedLibrarySync : IAsyncDisposable
 {
-    private static readonly TimeSpan LocalCheckInterval = TimeSpan.FromSeconds(10);
+    // Short, so that a change made here shows as being synchronised while it is still in mind. What
+    // is checked is a digest of a few columns, which costs next to nothing.
+    private static readonly TimeSpan LocalCheckInterval = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan RemoteCheckInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan FirstRetry = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan LongestRetry = TimeSpan.FromMinutes(5);
@@ -50,6 +52,11 @@ public sealed class SharedLibrarySync : IAsyncDisposable
     /// How many times a merge is redone because the file changed while it was being merged.
     /// </summary>
     private const int ReconcileAttempts = 3;
+
+    /// <summary>
+    /// How many steps are kept for a person to look back on.
+    /// </summary>
+    private const int ActivityKept = 200;
 
     private static readonly JsonSerializerOptions RecordOptions = new() { WriteIndented = true };
 
@@ -62,6 +69,8 @@ public sealed class SharedLibrarySync : IAsyncDisposable
     private readonly string recordDirectory;
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly CancellationTokenSource lifetime = new();
+    private readonly LinkedList<SharedLibraryActivity> activity = new();
+    private readonly Lock activityGate = new();
 
     private Task? loop;
     private int secretChanges;
@@ -109,6 +118,25 @@ public sealed class SharedLibrarySync : IAsyncDisposable
     /// a conflicting copy the sync client kept.
     /// </summary>
     public event EventHandler<SharedLibraryReport>? Reconciled;
+
+    /// <summary>
+    /// Raised for every step recorded, on whichever thread took it.
+    /// </summary>
+    public event EventHandler<SharedLibraryActivity>? ActivityRecorded;
+
+    /// <summary>
+    /// The steps taken since the application started, oldest first, up to a limit.
+    /// </summary>
+    public IReadOnlyList<SharedLibraryActivity> RecentActivity
+    {
+        get
+        {
+            lock (activityGate)
+            {
+                return [.. activity];
+            }
+        }
+    }
 
     public SharedLibraryStatus Status { get; private set; } = SharedLibraryStatus.NotShared;
 
@@ -225,6 +253,9 @@ public sealed class SharedLibrarySync : IAsyncDisposable
             await CompleteAsync(file, record, encoded, cancellationToken);
             await settings.UpdateAsync(current => current.Library.SharedPath = file.Path, cancellationToken);
 
+            Record(SharedLibraryActivityKind.Created, content.Profiles.Count);
+            Record(SharedLibraryActivityKind.Written, (long)encoded.Length);
+
             return Publish(SharedLibraryCondition.Synchronised, record);
         }
         finally
@@ -234,36 +265,98 @@ public sealed class SharedLibrarySync : IAsyncDisposable
     }
 
     /// <summary>
-    /// Joins an existing shared file. This machine's own profiles are added to it.
+    /// Starts using an existing shared file in place of this machine's own library.
     /// </summary>
+    /// <remarks>
+    /// The profiles this machine had are replaced, not added to the file. A machine uses a shared
+    /// library or its own, and a mixture would put profiles in front of everybody that one person
+    /// kept for themselves. The screen that leads here says so and offers an export first.
+    /// </remarks>
     /// <exception cref="CryptographicException">The passphrase does not open the file.</exception>
     /// <exception cref="PackageTooNewException">A newer version wrote the file.</exception>
+    /// <exception cref="SharedLibraryInUseException">A tunnel is connected.</exception>
     /// <exception cref="InvalidOperationException">The file is not a package.</exception>
     public async Task<SharedLibraryStatus> JoinAsync(string path, string passphrase, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentException.ThrowIfNullOrEmpty(passphrase);
 
+        // A connected profile may be one that is about to be replaced, and a tunnel whose profile is
+        // gone can neither reconnect nor be found in the list to disconnect.
+        if (ActiveProfiles().Count > 0)
+        {
+            throw new SharedLibraryInUseException();
+        }
+
         SharedLibraryFile file = new(path, timeProvider);
 
+        // Taken before reading, so a file written in between reads as changed at the next check.
+        SharedFileStamp? stamp = file.Probe();
+
         // Opened first, so a wrong passphrase is said on the spot and nothing is stored or changed.
-        ProfilePackageFile.Decode(await file.ReadAsync(cancellationToken), passphrase);
+        byte[] bytes = await file.ReadAsync(cancellationToken);
+        ProfilePackageContent remote = ProfilePackageFile.Decode(bytes, passphrase);
 
         await gate.WaitAsync(cancellationToken);
 
         try
         {
+            LibraryMergeResult result;
+
+            await using (PilotDbContext context = await contexts.CreateDbContextAsync(cancellationToken))
+            {
+                reconciling = true;
+
+                try
+                {
+                    result = await new LibraryMerger(context, secrets, timeProvider).AdoptAsync(remote, cancellationToken);
+                }
+                finally
+                {
+                    reconciling = false;
+                }
+            }
+
             await secrets.WriteAsync(SecretReference.LibraryPassphrase, new StoredSecret(null, passphrase), cancellationToken);
             ForgetRecord();
-            await settings.UpdateAsync(current => current.Library.SharedPath = file.Path, cancellationToken);
-            ResetRetry();
 
-            return await SynchroniseAsync(quickCheck: false, cancellationToken);
+            SyncRecord record = new() { Path = file.Path };
+            await CompleteAsync(file, record, bytes, cancellationToken, stamp);
+            secretChangesSynchronised = secretChanges;
+            await settings.UpdateAsync(current => current.Library.SharedPath = file.Path, cancellationToken);
+
+            Record(SharedLibraryActivityKind.Read, (long)bytes.Length);
+            Record(SharedLibraryActivityKind.Joined, remote.Profiles.Count, result.Removed.Count);
+
+            SharedLibraryReport report = new(
+                result.Added,
+                result.Updated,
+                result.Removed,
+                result.CredentialsChanged,
+                [],
+                0,
+                []);
+
+            if (report.IsWorthTelling)
+            {
+                Reconciled?.Invoke(this, report);
+            }
+
+            return Publish(SharedLibraryCondition.Synchronised, record);
         }
         finally
         {
             gate.Release();
         }
+    }
+
+    /// <summary>
+    /// How many profiles this machine holds, which joining a library would replace.
+    /// </summary>
+    public async Task<int> CountLocalProfilesAsync(CancellationToken cancellationToken = default)
+    {
+        await using PilotDbContext context = await contexts.CreateDbContextAsync(cancellationToken);
+        return await context.Profiles.CountAsync(cancellationToken);
     }
 
     /// <summary>
@@ -281,6 +374,7 @@ public sealed class SharedLibrarySync : IAsyncDisposable
 
         await secrets.WriteAsync(SecretReference.LibraryPassphrase, new StoredSecret(null, passphrase), cancellationToken);
         ResetRetry();
+        Record(SharedLibraryActivityKind.PassphraseStored);
 
         return await SyncNowAsync(cancellationToken);
     }
@@ -328,6 +422,7 @@ public sealed class SharedLibrarySync : IAsyncDisposable
                 await file.WriteAsync(encoded, replace: true, cancellationToken);
                 await secrets.WriteAsync(SecretReference.LibraryPassphrase, new StoredSecret(null, passphrase), cancellationToken);
                 await CompleteAsync(file, record, encoded, cancellationToken);
+                Record(SharedLibraryActivityKind.PassphraseChanged);
             }
 
             return Publish(SharedLibraryCondition.Synchronised, record);
@@ -339,18 +434,44 @@ public sealed class SharedLibrarySync : IAsyncDisposable
     }
 
     /// <summary>
-    /// Stops sharing. The profiles stay on this machine; the passphrase and the record go.
+    /// Stops sharing. The passphrase and the record go; the profiles stay or go as asked.
     /// </summary>
-    public async Task LeaveAsync(CancellationToken cancellationToken = default)
+    /// <param name="keepProfiles">
+    /// True to go on with the shared profiles as this machine's own library, false to start again
+    /// with an empty one. The shared file is left alone either way.
+    /// </param>
+    /// <exception cref="SharedLibraryInUseException">Removing was asked for while a tunnel is connected.</exception>
+    public async Task LeaveAsync(bool keepProfiles, CancellationToken cancellationToken = default)
     {
+        if (!keepProfiles && ActiveProfiles().Count > 0)
+        {
+            throw new SharedLibraryInUseException();
+        }
+
         await gate.WaitAsync(cancellationToken);
 
         try
         {
+            int removed = 0;
+
+            if (!keepProfiles)
+            {
+                removed = await RemoveLocalLibraryAsync(cancellationToken);
+            }
+
             await settings.UpdateAsync(current => current.Library.SharedPath = null, cancellationToken);
             await secrets.DeleteAsync(SecretReference.LibraryPassphrase, cancellationToken);
             ForgetRecord();
             ResetRetry();
+
+            if (keepProfiles)
+            {
+                Record(SharedLibraryActivityKind.LeftKeepingProfiles);
+            }
+            else
+            {
+                Record(SharedLibraryActivityKind.LeftRemovingProfiles, removed);
+            }
 
             Status = SharedLibraryStatus.NotShared;
             StatusChanged?.Invoke(this, Status);
@@ -418,6 +539,51 @@ public sealed class SharedLibrarySync : IAsyncDisposable
     }
 
     /// <summary>
+    /// Removes every profile, its sign ins and the tags nothing carries any more.
+    /// </summary>
+    /// <remarks>
+    /// Sign ins first: a sign in left behind by a profile that is gone belongs to nothing that could
+    /// ever use it or clear it.
+    /// </remarks>
+    private async Task<int> RemoveLocalLibraryAsync(CancellationToken cancellationToken)
+    {
+        foreach (string reference in await secrets.ListAsync(cancellationToken))
+        {
+            if (SecretReference.TryParse(reference, out _, out _))
+            {
+                await secrets.DeleteAsync(reference, cancellationToken);
+            }
+        }
+
+        await using PilotDbContext context = await contexts.CreateDbContextAsync(cancellationToken);
+        int removed = await context.Profiles.ExecuteDeleteAsync(cancellationToken);
+        await context.Tags.ExecuteDeleteAsync(cancellationToken);
+
+        return removed;
+    }
+
+    /// <summary>
+    /// Keeps a step for the record, dropping the oldest once there are enough.
+    /// </summary>
+    private void Record(SharedLibraryActivityKind kind, params object[] arguments) =>
+        Record(new SharedLibraryActivity(timeProvider.GetUtcNow(), kind, arguments));
+
+    private void Record(SharedLibraryActivity entry)
+    {
+        lock (activityGate)
+        {
+            activity.AddLast(entry);
+
+            while (activity.Count > ActivityKept)
+            {
+                activity.RemoveFirst();
+            }
+        }
+
+        ActivityRecorded?.Invoke(this, entry);
+    }
+
+    /// <summary>
     /// One synchronisation. The caller holds the gate.
     /// </summary>
     private async Task<SharedLibraryStatus> SynchroniseAsync(bool quickCheck, CancellationToken cancellationToken)
@@ -454,16 +620,23 @@ public sealed class SharedLibrarySync : IAsyncDisposable
             }
 
             int secretsBefore = secretChanges;
+            bool changedThere = record.RemoteHash is null
+                || stamp.Length != record.RemoteLength
+                || stamp.LastWriteUtc != record.RemoteWriteUtc;
+            bool dueHere = await DueHereAsync(record, cancellationToken);
 
-            if (quickCheck
-                && record.RemoteHash is not null
-                && record.WaitingSince is null
-                && stamp.Length == record.RemoteLength
-                && stamp.LastWriteUtc == record.RemoteWriteUtc
-                && !await DueHereAsync(record, cancellationToken))
+            if (quickCheck && !changedThere && record.WaitingSince is null && !dueHere)
             {
                 return Publish(SharedLibraryCondition.Synchronised, record);
             }
+
+            // Only what did something is recorded. A check every few seconds that finds nothing to do
+            // would bury the steps somebody opens the record to find.
+            Record(
+                !quickCheck ? SharedLibraryActivityKind.Checking
+                : dueHere ? SharedLibraryActivityKind.ChangedHere
+                : changedThere ? SharedLibraryActivityKind.ChangedThere
+                : SharedLibraryActivityKind.Checking);
 
             Publish(SharedLibraryCondition.Synchronising, record);
 
@@ -471,6 +644,7 @@ public sealed class SharedLibrarySync : IAsyncDisposable
             {
                 byte[] bytes = await file.ReadAsync(cancellationToken);
                 string hash = Hash(bytes);
+                Record(SharedLibraryActivityKind.Read, (long)bytes.Length);
                 ProfilePackageContent remote = ProfilePackageFile.Decode(bytes, passphrase);
                 ProfilePackageContent? ancestor = record.RemoteHash is null ? null : LoadAncestor(passphrase);
 
@@ -505,11 +679,14 @@ public sealed class SharedLibrarySync : IAsyncDisposable
                         if (!string.Equals(Hash(await file.ReadAsync(cancellationToken)), hash, StringComparison.Ordinal))
                         {
                             SharedLibraryLog.ChangedMeanwhile(logger, path);
+                            Record(SharedLibraryActivityKind.ChangedMeanwhile);
                             continue;
                         }
 
                         await file.WriteAsync(encoded, replace: true, cancellationToken);
                     }
+
+                    Record(SharedLibraryActivityKind.Written, (long)encoded.Length);
 
                     ancestorBytes = encoded;
                 }
@@ -536,6 +713,31 @@ public sealed class SharedLibrarySync : IAsyncDisposable
                     result.Conflicts,
                     result.DeferredDeletions,
                     copies);
+
+                if (result.ChangedHere)
+                {
+                    Record(
+                        SharedLibraryActivityKind.Received,
+                        result.Added.Count,
+                        result.Updated.Count,
+                        result.Removed.Count,
+                        result.CredentialsChanged);
+                }
+
+                if (result.Conflicts.Count > 0)
+                {
+                    Record(SharedLibraryActivityKind.ConflictsResolved, result.Conflicts.Count);
+                }
+
+                if (copies.Count > 0)
+                {
+                    Record(SharedLibraryActivityKind.ConflictCopiesFound, string.Join(", ", copies));
+                }
+
+                if (!result.ChangedHere && !result.SharedChanged)
+                {
+                    Record(SharedLibraryActivityKind.UpToDate);
+                }
 
                 if (report.IsWorthTelling)
                 {
@@ -590,12 +792,21 @@ public sealed class SharedLibrarySync : IAsyncDisposable
     /// <summary>
     /// Records a finished synchronisation: what the file holds now becomes the next ancestor.
     /// </summary>
-    private async Task CompleteAsync(SharedLibraryFile file, SyncRecord record, byte[] ancestor, CancellationToken cancellationToken)
+    /// <param name="readStamp">
+    /// The size and time the file had before it was read, when nothing was written since. Without
+    /// one they are taken now, which is right after a write of this machine's own.
+    /// </param>
+    private async Task CompleteAsync(
+        SharedLibraryFile file,
+        SyncRecord record,
+        byte[] ancestor,
+        CancellationToken cancellationToken,
+        SharedFileStamp? readStamp = null)
     {
         Directory.CreateDirectory(recordDirectory);
         await File.WriteAllBytesAsync(AncestorPath, ancestor, cancellationToken);
 
-        SharedFileStamp? stamp = file.Probe();
+        SharedFileStamp? stamp = readStamp ?? file.Probe();
 
         record.Path = file.Path;
         record.RemoteHash = Hash(ancestor);
@@ -632,12 +843,21 @@ public sealed class SharedLibrarySync : IAsyncDisposable
             SaveRecord(record);
         }
 
-        return Publish(condition, record, detail);
+        SharedLibraryStatus status = Publish(condition, record, detail);
+        Record(new SharedLibraryActivity(timeProvider.GetUtcNow(), SharedLibraryActivityKind.Failed, [], status));
+
+        if (status.RetryAt is { } at)
+        {
+            Record(SharedLibraryActivityKind.RetryScheduled, at);
+        }
+
+        return status;
     }
 
     private SharedLibraryStatus Publish(SharedLibraryCondition condition, SyncRecord record, string? detail = null)
     {
-        SharedLibraryStatus next = new(condition, record.SynchronisedAt, record.WaitingSince, detail);
+        DateTimeOffset? retryAt = retryAfter > timeProvider.GetUtcNow() ? retryAfter : null;
+        SharedLibraryStatus next = new(condition, record.SynchronisedAt, record.WaitingSince, detail, retryAt);
 
         if (next != Status)
         {
@@ -873,6 +1093,27 @@ public sealed class SharedLibrarySync : IAsyncDisposable
         public List<Guid> DeferredProfiles { get; set; } = [];
 
         public List<string> ReportedCopies { get; set; } = [];
+    }
+}
+
+/// <summary>
+/// A tunnel is connected, and what was asked for would replace or remove the profiles it belongs to.
+/// </summary>
+public sealed class SharedLibraryInUseException : InvalidOperationException
+{
+    public SharedLibraryInUseException()
+        : base("Disconnect every tunnel before replacing or removing the profiles on this machine.")
+    {
+    }
+
+    public SharedLibraryInUseException(string message)
+        : base(message)
+    {
+    }
+
+    public SharedLibraryInUseException(string message, Exception innerException)
+        : base(message, innerException)
+    {
     }
 }
 

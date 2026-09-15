@@ -95,7 +95,7 @@ public static class AppConverters
             : null;
     }
 
-    private static string FormatBytes(long bytes)
+    internal static string FormatBytes(long bytes)
     {
         string[] units = ["B", "KB", "MB", "GB", "TB"];
         double value = bytes;

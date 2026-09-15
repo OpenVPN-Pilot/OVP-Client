@@ -267,12 +267,123 @@ public sealed class SharedLibrarySyncTests : IAsyncLifetime
     {
         (Machine first, _, _) = await TwoJoinedMachinesAsync();
 
-        await first.Sync.LeaveAsync();
+        await first.Sync.LeaveAsync(keepProfiles: true);
 
         Assert.Single(await first.NamesAsync());
         Assert.Null(first.Settings.Current.Library.SharedPath);
         Assert.Null(await first.Secrets.TryReadAsync(SecretReference.LibraryPassphrase));
         Assert.Equal(SharedLibraryCondition.NotShared, first.Sync.Status.Condition);
+    }
+
+    /// <summary>
+    /// Starting again with an empty library removes the profiles and their sign ins here, and
+    /// nothing in the shared file.
+    /// </summary>
+    [Fact]
+    public async Task LeavingToStartAgain_RemovesTheProfilesHereAndLeavesTheFile()
+    {
+        (Machine first, Machine second, Guid id) = await TwoJoinedMachinesAsync();
+        await second.Observed.WriteAsync(SecretReference.ForProfile(id, "Auth"), new StoredSecret("operator", "secret"));
+        await second.Sync.SyncNowAsync();
+        byte[] before = await File.ReadAllBytesAsync(LibraryPath);
+
+        await second.Sync.LeaveAsync(keepProfiles: false);
+
+        Assert.Empty(await second.NamesAsync());
+        Assert.Null(await second.Secrets.TryReadAsync(SecretReference.ForProfile(id, "Auth")));
+        Assert.Null(second.Settings.Current.Library.SharedPath);
+        Assert.Equal(before, await File.ReadAllBytesAsync(LibraryPath));
+        Assert.Contains(second.Sync.RecentActivity, entry => entry.Kind == SharedLibraryActivityKind.LeftRemovingProfiles);
+
+        await first.Sync.SyncNowAsync();
+        Assert.Equal(["site-alpha"], await first.NamesAsync());
+    }
+
+    [Fact]
+    public async Task LeavingToStartAgainWhileATunnelRuns_IsRefused()
+    {
+        (_, Machine second, Guid id) = await TwoJoinedMachinesAsync();
+        second.Running.Add(id);
+
+        await Assert.ThrowsAsync<SharedLibraryInUseException>(() => second.Sync.LeaveAsync(keepProfiles: false));
+
+        Assert.Single(await second.NamesAsync());
+        Assert.NotNull(second.Settings.Current.Library.SharedPath);
+    }
+
+    /// <summary>
+    /// A machine joins with profiles of its own. They are replaced, with their sign ins, and none of
+    /// them reaches the shared file or the other machine.
+    /// </summary>
+    [Fact]
+    public async Task Joining_ReplacesTheProfilesHereAndLeavesTheFileAlone()
+    {
+        Machine first = await CreateMachineAsync("first");
+        await first.AddAsync("site-alpha", 1194);
+        await first.Sync.CreateAsync(LibraryPath, Passphrase);
+        byte[] before = await File.ReadAllBytesAsync(LibraryPath);
+
+        Machine second = await CreateMachineAsync("second");
+        Profile own = await second.AddAsync("kept-to-myself", 1300);
+        await second.Secrets.WriteAsync(SecretReference.ForProfile(own.Id, "Auth"), new StoredSecret("me", "mine"));
+
+        List<SharedLibraryReport> reports = [];
+        second.Sync.Reconciled += (_, report) => reports.Add(report);
+
+        SharedLibraryStatus joined = await second.Sync.JoinAsync(LibraryPath, Passphrase);
+
+        Assert.Equal(SharedLibraryCondition.Synchronised, joined.Condition);
+        Assert.Equal(["site-alpha"], await second.NamesAsync());
+        Assert.Null(await second.Secrets.TryReadAsync(SecretReference.ForProfile(own.Id, "Auth")));
+        Assert.Equal(before, await File.ReadAllBytesAsync(LibraryPath));
+        Assert.Equal(["kept-to-myself"], Assert.Single(reports).Removed);
+
+        // The next synchronisation finds nothing to write: the replaced profile is not a deletion.
+        await second.Sync.SyncNowAsync();
+        await first.Sync.SyncNowAsync();
+
+        Assert.Equal(before, await File.ReadAllBytesAsync(LibraryPath));
+        Assert.Equal(["site-alpha"], await first.NamesAsync());
+    }
+
+    [Fact]
+    public async Task JoiningWhileATunnelRuns_IsRefusedAndChangesNothing()
+    {
+        Machine first = await CreateMachineAsync("first");
+        await first.AddAsync("site-alpha", 1194);
+        await first.Sync.CreateAsync(LibraryPath, Passphrase);
+
+        Machine second = await CreateMachineAsync("second");
+        Profile own = await second.AddAsync("in-use-here", 1300);
+        second.Running.Add(own.Id);
+
+        await Assert.ThrowsAsync<SharedLibraryInUseException>(() => second.Sync.JoinAsync(LibraryPath, Passphrase));
+
+        Assert.Equal(["in-use-here"], await second.NamesAsync());
+        Assert.Null(second.Settings.Current.Library.SharedPath);
+    }
+
+    /// <summary>
+    /// The record a person opens says what was done, and a failure says when it is tried again.
+    /// </summary>
+    [Fact]
+    public async Task TheStepsTaken_AreRecordedWithTheNextAttempt()
+    {
+        (Machine first, _, Guid id) = await TwoJoinedMachinesAsync();
+
+        await first.ChangeAsync(id, profile => profile.Name = "site-alpha-renamed");
+        await first.Sync.SyncNowAsync();
+
+        Assert.Contains(first.Sync.RecentActivity, entry => entry.Kind == SharedLibraryActivityKind.Read);
+        Assert.Contains(first.Sync.RecentActivity, entry => entry.Kind == SharedLibraryActivityKind.Written);
+
+        File.Delete(LibraryPath);
+        SharedLibraryStatus failed = await first.Sync.SyncNowAsync();
+
+        Assert.Equal(SharedLibraryCondition.FileMissing, failed.Condition);
+        Assert.NotNull(failed.RetryAt);
+        Assert.Contains(first.Sync.RecentActivity, entry => entry.Kind == SharedLibraryActivityKind.Failed && entry.Status == failed);
+        Assert.Equal(SharedLibraryActivityKind.RetryScheduled, first.Sync.RecentActivity[^1].Kind);
     }
 
     /// <summary>

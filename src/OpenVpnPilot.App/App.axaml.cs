@@ -354,7 +354,13 @@ public partial class App : Application
         SharedLibrarySync library = services.GetRequiredService<SharedLibrarySync>();
         MainWindowViewModel model = services.GetRequiredService<MainWindowViewModel>();
 
+        foreach (SharedLibraryActivity entry in library.RecentActivity)
+        {
+            model.AddLibraryActivity(entry);
+        }
+
         library.StatusChanged += (_, status) => Dispatcher.UIThread.Post(() => model.ShowLibraryStatus(status));
+        library.ActivityRecorded += (_, entry) => Dispatcher.UIThread.Post(() => model.AddLibraryActivity(entry));
 
         library.Reconciled += (_, report) => Dispatcher.UIThread.Post(async () =>
         {

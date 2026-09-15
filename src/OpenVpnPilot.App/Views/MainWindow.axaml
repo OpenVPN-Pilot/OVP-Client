@@ -633,10 +633,50 @@
     <Border Grid.Row="3" Background="{DynamicResource SurfaceSidebar}"
             BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
             Padding="18,8">
-      <Grid ColumnDefinitions="*,Auto">
-        <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Classes="muted"
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+        <!--
+          Where the shared library stands, always in view while there is one, so a change can be
+          seen being synchronised. The whole sentence is in the tooltip.
+        -->
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="7" Margin="0,0,18,0"
+                    VerticalAlignment="Center"
+                    IsVisible="{Binding IsLibraryShared}"
+                    ToolTip.Tip="{Binding LibraryStateDetail}">
+          <StackPanel.Styles>
+            <Style Selector="Border.libraryDot">
+              <Setter Property="Background" Value="{DynamicResource StateConnected}" />
+            </Style>
+            <Style Selector="Border.libraryDot.retrying">
+              <Setter Property="Background" Value="{DynamicResource StatePending}" />
+            </Style>
+            <Style Selector="Border.libraryDot.stuck">
+              <Setter Property="Background" Value="{DynamicResource StateFailed}" />
+            </Style>
+            <Style Selector="Border.libraryDot.syncing">
+              <Setter Property="Background" Value="{DynamicResource Accent}" />
+              <Style.Animations>
+                <Animation Duration="0:0:0.7" IterationCount="Infinite" PlaybackDirection="Alternate">
+                  <KeyFrame Cue="0%">
+                    <Setter Property="Opacity" Value="1" />
+                  </KeyFrame>
+                  <KeyFrame Cue="100%">
+                    <Setter Property="Opacity" Value="0.25" />
+                  </KeyFrame>
+                </Animation>
+              </Style.Animations>
+            </Style>
+          </StackPanel.Styles>
+          <Border Width="7" Height="7" CornerRadius="4" VerticalAlignment="Center"
+                  Classes="libraryDot"
+                  Classes.syncing="{Binding IsLibrarySyncing}"
+                  Classes.retrying="{Binding IsLibraryRetrying}"
+                  Classes.stuck="{Binding IsLibraryStuck}" />
+          <TextBlock Text="{Binding LibraryStateText}" Classes="muted" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" Classes="muted"
                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"
                     IsVisible="{Binding HasActiveConnections}">
           <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
             <TextBlock Text="{loc:Translate profile.received}" Classes="overline"
@@ -656,6 +696,38 @@
             <TextBlock Text="{Binding ActiveSummary}" Classes="muted" />
           </StackPanel>
         </StackPanel>
+
+        <!-- The record of what the shared library did, opened from the far end of the bar. -->
+        <Button Grid.Column="3" Classes="quiet" Margin="14,-4,-8,-4" Padding="8,3"
+                Content="{loc:Translate library.activityButton}"
+                IsVisible="{Binding IsLibraryShared}">
+          <Button.Flyout>
+            <Flyout Placement="TopEdgeAlignedRight">
+              <StackPanel Width="480" Spacing="8">
+                <TextBlock Text="{loc:Translate library.activityTitle}" Classes="overline" />
+                <TextBlock Text="{loc:Translate library.activityEmpty}" Classes="muted"
+                           IsVisible="{Binding !HasLibraryActivity}" />
+                <ScrollViewer MaxHeight="340" IsVisible="{Binding HasLibraryActivity}">
+                  <ItemsControl ItemsSource="{Binding LibraryActivity}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:LibraryActivityViewModel">
+                        <Grid ColumnDefinitions="72,*" Margin="0,2">
+                          <TextBlock Grid.Column="0" Text="{Binding Time}" Classes="muted" FontSize="12" />
+                          <TextBlock Grid.Column="1" Text="{Binding Text}" FontSize="12" TextWrapping="Wrap"
+                                     Foreground="{DynamicResource TextPrimary}"
+                                     IsVisible="{Binding !IsProblem}" />
+                          <TextBlock Grid.Column="1" Text="{Binding Text}" FontSize="12" TextWrapping="Wrap"
+                                     Foreground="{DynamicResource StateFailed}"
+                                     IsVisible="{Binding IsProblem}" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </StackPanel>
+            </Flyout>
+          </Button.Flyout>
+        </Button>
       </Grid>
     </Border>
 

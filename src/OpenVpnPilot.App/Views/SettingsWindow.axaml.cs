@@ -25,12 +25,32 @@ public partial class SettingsWindow : Window
         AddHandler(KeyDownEvent, OnPreviewKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
         this.FindControl<Button>("DiagnosticsButton")!.Click += async (_, _) => await WriteDiagnosticsAsync();
-        this.FindControl<Button>("JoinLibraryButton")!.Click += async (_, _) => await JoinLibraryAsync();
+        this.FindControl<Button>("JoinLibraryButton")!.Click += async (_, _) => await BeginJoinLibraryAsync();
+        this.FindControl<Button>("ContinueJoinButton")!.Click += async (_, _) => await ContinueJoinLibraryAsync();
         this.FindControl<Button>("CreateLibraryButton")!.Click += async (_, _) => await CreateLibraryAsync();
         this.FindControl<Button>("LibraryPassphraseButton")!.Click += async (_, _) => await AskForLibraryPassphraseAsync();
     }
 
     private static readonly FilePickerFileType PackageType = new("OpenVpnPilot package") { Patterns = ["*.ovppkg"] };
+
+    /// <summary>
+    /// Asks first when this machine has profiles that joining would replace.
+    /// </summary>
+    private async Task BeginJoinLibraryAsync()
+    {
+        if (ViewModel is not null && await ViewModel.BeginJoinAsync())
+        {
+            await JoinLibraryAsync();
+        }
+    }
+
+    private async Task ContinueJoinLibraryAsync()
+    {
+        if (ViewModel is not null && ViewModel.CompleteJoinConfirmation())
+        {
+            await JoinLibraryAsync();
+        }
+    }
 
     /// <summary>
     /// Picks a shared file and asks for the passphrase it opens with.

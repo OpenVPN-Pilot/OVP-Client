@@ -36,6 +36,55 @@ public static class SharedLibraryText
     }
 
     /// <summary>
+    /// A few words for the status bar, which has room for a state and not for an explanation.
+    /// </summary>
+    public static string State(SharedLibraryStatus status, ILocalizer localizer)
+    {
+        ArgumentNullException.ThrowIfNull(status);
+        ArgumentNullException.ThrowIfNull(localizer);
+
+        List<string> parts =
+        [
+            status is { Condition: SharedLibraryCondition.Synchronised, SynchronisedAt: { } at }
+                ? localizer.Translate("library.state.Synchronised", ShortTime(at))
+                : localizer["library.state." + status.Condition],
+        ];
+
+        if (status.IsProblem && status.RetryAt is { } retry)
+        {
+            parts.Add(localizer.Translate("library.state.retry", ShortTime(retry)));
+        }
+
+        if (status.WaitingSince is not null)
+        {
+            parts.Add(localizer["library.state.waiting"]);
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    /// <summary>
+    /// One line for a step in the record of what the library did.
+    /// </summary>
+    public static string Activity(SharedLibraryActivity entry, ILocalizer localizer)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        ArgumentNullException.ThrowIfNull(localizer);
+
+        string key = "library.activity." + entry.Kind;
+
+        return entry switch
+        {
+            { Kind: SharedLibraryActivityKind.Failed, Status: { } status } => Describe(status, localizer),
+            { Kind: SharedLibraryActivityKind.Read or SharedLibraryActivityKind.Written, Arguments: [long size, ..] } =>
+                localizer.Translate(key, OpenVpnPilot.App.Converters.AppConverters.FormatBytes(size)),
+            { Kind: SharedLibraryActivityKind.RetryScheduled, Arguments: [DateTimeOffset at, ..] } =>
+                localizer.Translate(key, at.ToLocalTime().ToString("T", CultureInfo.CurrentCulture)),
+            _ => localizer.Translate(key, [.. entry.Arguments]),
+        };
+    }
+
+    /// <summary>
     /// What a synchronisation changed here, in one line for the status bar.
     /// </summary>
     public static string Summarise(SharedLibraryReport report, ILocalizer localizer)
@@ -103,12 +152,16 @@ public static class SharedLibraryText
             System.Security.Cryptography.CryptographicException => localizer["library.passphraseWrong"],
             OpenVpnPilot.Data.Packaging.PackageTooNewException => localizer["library.condition.TooNew"],
             SharedLibraryExistsException => localizer["library.exists"],
+            SharedLibraryInUseException => localizer["library.disconnectFirst"],
             SharedLibraryUnavailableException unavailable => unavailable.Message,
             InvalidOperationException invalid => localizer.Translate("library.notALibrary", invalid.Message),
             IOException or UnauthorizedAccessException => localizer.Translate("library.unreachable", exception.Message),
             _ => null,
         };
     }
+
+    private static string ShortTime(DateTimeOffset value) =>
+        value.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
 
     private static string Time(DateTimeOffset value) =>
         value.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);

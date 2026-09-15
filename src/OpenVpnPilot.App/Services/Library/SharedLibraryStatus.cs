@@ -11,11 +11,13 @@ namespace OpenVpnPilot.App.Services.Library;
 /// When changes made here first could not be written to the shared file, or null when none are waiting.
 /// </param>
 /// <param name="Detail">What the system said, for a condition that has something to add.</param>
+/// <param name="RetryAt">When the next attempt is made on its own, or null when none is planned.</param>
 public sealed record SharedLibraryStatus(
     SharedLibraryCondition Condition,
     DateTimeOffset? SynchronisedAt = null,
     DateTimeOffset? WaitingSince = null,
-    string? Detail = null)
+    string? Detail = null,
+    DateTimeOffset? RetryAt = null)
 {
     public static SharedLibraryStatus NotShared { get; } = new(SharedLibraryCondition.NotShared);
 
@@ -89,6 +91,74 @@ public enum SharedLibraryCondition
     /// Anything else the file system or the store refused.
     /// </summary>
     Failed,
+}
+
+/// <summary>
+/// One step the shared library took, for the record a person can look at while it works.
+/// </summary>
+/// <param name="Arguments">What the sentence for the kind names, in its order.</param>
+/// <param name="Status">The status a failure left behind, for <see cref="SharedLibraryActivityKind.Failed"/>.</param>
+public sealed record SharedLibraryActivity(
+    DateTimeOffset At,
+    SharedLibraryActivityKind Kind,
+    IReadOnlyList<object> Arguments,
+    SharedLibraryStatus? Status = null)
+{
+    public bool IsProblem => Kind is SharedLibraryActivityKind.Failed or SharedLibraryActivityKind.RetryScheduled;
+}
+
+public enum SharedLibraryActivityKind
+{
+    /// <summary>
+    /// A synchronisation began because it was asked for or because the application started.
+    /// </summary>
+    Checking,
+
+    ChangedHere,
+
+    ChangedThere,
+
+    /// <summary>
+    /// The shared file was read. The argument is its size in bytes.
+    /// </summary>
+    Read,
+
+    UpToDate,
+
+    /// <summary>
+    /// What was taken into this machine's library: added, changed, removed, sign ins.
+    /// </summary>
+    Received,
+
+    ConflictsResolved,
+
+    /// <summary>
+    /// The shared file was written. The argument is its size in bytes.
+    /// </summary>
+    Written,
+
+    ChangedMeanwhile,
+
+    ConflictCopiesFound,
+
+    Failed,
+
+    /// <summary>
+    /// The argument is when the next attempt is made.
+    /// </summary>
+    RetryScheduled,
+
+    Created,
+
+    Joined,
+
+    PassphraseStored,
+
+    PassphraseChanged,
+
+    LeftKeepingProfiles,
+
+    LeftRemovingProfiles,
 }
 
 /// <summary>

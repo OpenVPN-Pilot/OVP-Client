@@ -579,10 +579,47 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         localizer[LibraryNeedsPassphrase ? "library.enterPassphrase" : "library.changePassphrase"];
 
     /// <summary>
-    /// Shown after asking to stop sharing, so a click cannot do it by accident.
+    /// Shown after asking to stop sharing, which asks what becomes of the profiles.
     /// </summary>
     [ObservableProperty]
     public partial bool IsConfirmingLeave { get; set; }
+
+    /// <summary>
+    /// Leaving goes on with the shared profiles as this machine's own.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanLeave))]
+    public partial bool LeaveKeepsProfiles { get; set; }
+
+    /// <summary>
+    /// Leaving starts again with an empty library.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanLeave))]
+    public partial bool LeaveRemovesProfiles { get; set; }
+
+    /// <summary>
+    /// Neither answer is chosen in advance, so leaving is always a decision somebody made.
+    /// </summary>
+    public bool CanLeave => LeaveKeepsProfiles || LeaveRemovesProfiles;
+
+    /// <summary>
+    /// Shown before joining when this machine has profiles of its own, which joining replaces.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsConfirmingJoin { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(JoinWarning))]
+    public partial int LocalProfileCount { get; set; }
+
+    /// <summary>
+    /// Ticked by the person to say they understood that the profiles here are replaced.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool JoinAcknowledged { get; set; }
+
+    public string JoinWarning => localizer.Translate("library.joinWarning", LocalProfileCount);
 
     [ObservableProperty]
     public partial bool IsLibraryBusy { get; set; }
@@ -665,8 +702,56 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>
+    /// Begins joining a library, and says whether the file can be chosen straight away.
+    /// </summary>
+    /// <returns>
+    /// True when this machine has no profiles to replace. Otherwise false, and the confirmation is
+    /// shown; choosing the file follows once it has been given.
+    /// </returns>
+    public async Task<bool> BeginJoinAsync()
+    {
+        LocalProfileCount = await library.CountLocalProfilesAsync();
+
+        if (LocalProfileCount == 0)
+        {
+            return true;
+        }
+
+        JoinAcknowledged = false;
+        IsConfirmingJoin = true;
+        return false;
+    }
+
+    /// <summary>
+    /// Puts the confirmation away once it was given and the file is being chosen.
+    /// </summary>
+    public bool CompleteJoinConfirmation()
+    {
+        if (!JoinAcknowledged)
+        {
+            return false;
+        }
+
+        IsConfirmingJoin = false;
+        JoinAcknowledged = false;
+        return true;
+    }
+
     [RelayCommand]
-    private void AskToLeaveLibrary() => IsConfirmingLeave = true;
+    private void CancelJoinLibrary()
+    {
+        IsConfirmingJoin = false;
+        JoinAcknowledged = false;
+    }
+
+    [RelayCommand]
+    private void AskToLeaveLibrary()
+    {
+        LeaveKeepsProfiles = false;
+        LeaveRemovesProfiles = false;
+        IsConfirmingLeave = true;
+    }
 
     [RelayCommand]
     private void CancelLeaveLibrary() => IsConfirmingLeave = false;
@@ -674,9 +759,32 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private async Task LeaveLibraryAsync()
     {
+        if (!CanLeave)
+        {
+            return;
+        }
+
+        bool keep = LeaveKeepsProfiles;
+
+        try
+        {
+            await library.LeaveAsync(keep);
+        }
+        catch (SharedLibraryInUseException)
+        {
+            // Said beside the choice, which stays open: disconnecting and asking again is the way on.
+            StatusMessage = localizer["library.disconnectFirst"];
+            return;
+        }
+
         IsConfirmingLeave = false;
-        await library.LeaveAsync();
-        StatusMessage = localizer["library.left"];
+        StatusMessage = localizer[keep ? "library.left" : "library.leftRemoved"];
+
+        if (!keep)
+        {
+            ProfileReloadRequested?.Invoke(this, EventArgs.Empty);
+        }
+
         RaiseLibrary();
     }
 

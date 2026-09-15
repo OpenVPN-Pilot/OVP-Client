@@ -190,6 +190,60 @@ public sealed class LibraryMerger
         };
     }
 
+    /// <summary>
+    /// Makes this machine's library what the shared file holds, for a machine that starts using it.
+    /// </summary>
+    /// <remarks>
+    /// A machine uses a shared library or a library of its own, never a mixture: the profiles it had
+    /// are removed with their sign ins, and nothing of them reaches the shared file. A profile it had
+    /// with the same configuration as one the file holds is that profile, so its favourite mark, its
+    /// shortcut slot and its history move over to the one arriving instead of being lost with it.
+    /// </remarks>
+    public async Task<LibraryMergeResult> AdoptAsync(ProfilePackageContent remote, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(remote);
+
+        DateTimeOffset now = timeProvider.GetUtcNow();
+
+        List<Profile> localProfiles = await LoadProfilesAsync(tracked: true, cancellationToken);
+        Dictionary<Guid, Profile> localEntities = localProfiles.ToDictionary(profile => profile.Id);
+        Dictionary<Guid, PackagedProfile> result = Index(remote.Profiles);
+
+        Dictionary<string, Guid> arrivingByContent = new(StringComparer.Ordinal);
+
+        foreach (PackagedProfile profile in result.Values.OrderBy(profile => profile.Id))
+        {
+            arrivingByContent.TryAdd(ProfileImporter.ComputeHash(profile.Configuration ?? string.Empty), profile.Id);
+        }
+
+        Dictionary<Guid, Guid> duplicates = [];
+
+        foreach (Profile profile in localProfiles.Where(profile => !result.ContainsKey(profile.Id)))
+        {
+            if (arrivingByContent.TryGetValue(ProfileImporter.ComputeHash(profile.Configuration), out Guid arriving))
+            {
+                duplicates[profile.Id] = arriving;
+            }
+        }
+
+        Dictionary<string, PackagedCredential> localCredentials = await ReadCredentialsAsync(cancellationToken);
+        Dictionary<string, PackagedCredential> arrivingCredentials = CredentialIndex(remote.Credentials)
+            .Where(entry => result.ContainsKey(entry.Value.ProfileId))
+            .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal);
+
+        LibraryMergeResult outcome = await ApplyLocallyAsync(localEntities, result, [], duplicates, now, cancellationToken);
+        int credentialsChanged = await ApplyCredentialsAsync(localCredentials, arrivingCredentials, [], cancellationToken);
+
+        context.ChangeTracker.Clear();
+
+        return outcome with
+        {
+            CredentialsChanged = credentialsChanged,
+            Shared = remote,
+            SharedChanged = false,
+        };
+    }
+
     private static string WrittenBy =>
         typeof(LibraryMerger).Assembly.GetName().Version?.ToString(3) ?? "unknown";
 

@@ -43,7 +43,10 @@ public sealed class MainWindowViewModelTests : IAsyncLifetime
             ReadyEnvironmentProbe.Gate(),
             SilentUpdates.Coordinator(),
             new StubLocalizer(),
-            TimeProvider.System);
+            TimeProvider.System)
+        {
+            MinimumSyncingDisplay = TimeSpan.FromMilliseconds(150),
+        };
 
         await model.LoadAsync();
     }
@@ -328,6 +331,62 @@ public sealed class MainWindowViewModelTests : IAsyncLifetime
 
         Assert.True(model.IsLibraryProblem);
         Assert.True(model.LibraryBannerOffersPassphrase);
+    }
+
+    [Fact]
+    public void StatusBar_SaysWhereTheLibraryStandsAndHowItIsGoing()
+    {
+        Assert.False(model.IsLibraryShared);
+
+        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.Synchronised, DateTimeOffset.UtcNow));
+
+        Assert.True(model.IsLibraryShared);
+        Assert.Equal("library.state.Synchronised", model.LibraryStateText);
+        Assert.False(model.IsLibraryRetrying || model.IsLibraryStuck);
+
+        model.ShowLibraryStatus(new SharedLibraryStatus(
+            SharedLibraryCondition.Unreachable,
+            WaitingSince: DateTimeOffset.UtcNow,
+            RetryAt: DateTimeOffset.UtcNow.AddSeconds(30)));
+
+        Assert.True(model.IsLibraryRetrying);
+        Assert.Equal("library.state.Unreachable · library.state.retry · library.state.waiting", model.LibraryStateText);
+
+        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.PassphraseNeeded));
+
+        Assert.True(model.IsLibraryStuck);
+        Assert.False(model.IsLibraryRetrying);
+
+        model.ShowLibraryStatus(SharedLibraryStatus.NotShared);
+
+        Assert.False(model.IsLibraryShared);
+    }
+
+    /// <summary>
+    /// A synchronisation that is over in a moment still shows as one, long enough to be read.
+    /// </summary>
+    [Fact]
+    public async Task StatusBar_KeepsSynchronisingInViewForAMoment()
+    {
+        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.Synchronising));
+        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.Synchronised, DateTimeOffset.UtcNow));
+
+        Assert.True(model.IsLibrarySyncing);
+
+        await Task.Delay(600);
+
+        Assert.False(model.IsLibrarySyncing);
+        Assert.Equal("library.state.Synchronised", model.LibraryStateText);
+    }
+
+    [Fact]
+    public void LibraryActivity_ShowsTheNewestStepFirst()
+    {
+        model.AddLibraryActivity(new SharedLibraryActivity(DateTimeOffset.UtcNow, SharedLibraryActivityKind.ChangedHere, []));
+        model.AddLibraryActivity(new SharedLibraryActivity(DateTimeOffset.UtcNow, SharedLibraryActivityKind.Written, [2048L]));
+
+        Assert.True(model.HasLibraryActivity);
+        Assert.Equal(["library.activity.Written", "library.activity.ChangedHere"], model.LibraryActivity.Select(entry => entry.Text));
     }
 
     [Fact]

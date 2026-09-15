@@ -138,6 +138,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         ArgumentNullException.ThrowIfNull(status);
 
+        ShowLibraryState(status);
+
         if (!status.IsProblem)
         {
             if (IsLibraryProblem)
@@ -179,6 +181,130 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         LibraryBannerOffersPassphrase = false;
         LibraryBannerOffersRetry = false;
         IsLibraryBannerVisible = true;
+    }
+
+    /// <summary>
+    /// True while this machine uses a shared library, which is when the status bar speaks of it.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsLibraryShared { get; set; }
+
+    [ObservableProperty]
+    public partial string LibraryStateText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The whole sentence behind the few words in the status bar.
+    /// </summary>
+    [ObservableProperty]
+    public partial string LibraryStateDetail { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial bool IsLibrarySyncing { get; set; }
+
+    /// <summary>
+    /// A problem that is tried again on its own.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsLibraryRetrying { get; set; }
+
+    /// <summary>
+    /// A problem that waits for somebody, such as a passphrase or a newer version.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsLibraryStuck { get; set; }
+
+    /// <summary>
+    /// The steps the shared library took, newest first.
+    /// </summary>
+    public ObservableCollection<LibraryActivityViewModel> LibraryActivity { get; } = [];
+
+    [ObservableProperty]
+    public partial bool HasLibraryActivity { get; set; }
+
+    /// <summary>
+    /// How long synchronising stays in the status bar at least.
+    /// </summary>
+    /// <remarks>
+    /// Most synchronisations take a fraction of a second. Shown only for that long, the word would
+    /// flicker past unread, and a change would look as if nothing had happened to it.
+    /// </remarks>
+    internal TimeSpan MinimumSyncingDisplay { get; init; } = TimeSpan.FromSeconds(1.2);
+
+    private const int LibraryActivityShown = 200;
+
+    private DateTimeOffset? syncingSince;
+    private int libraryStateVersion;
+
+    /// <summary>
+    /// Adds a step to the record the status bar opens.
+    /// </summary>
+    public void AddLibraryActivity(SharedLibraryActivity entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        LibraryActivity.Insert(0, new LibraryActivityViewModel(
+            entry.At.ToLocalTime().ToString("T", System.Globalization.CultureInfo.CurrentCulture),
+            SharedLibraryText.Activity(entry, localizer),
+            entry.IsProblem));
+
+        while (LibraryActivity.Count > LibraryActivityShown)
+        {
+            LibraryActivity.RemoveAt(LibraryActivity.Count - 1);
+        }
+
+        HasLibraryActivity = true;
+    }
+
+    private void ShowLibraryState(SharedLibraryStatus status)
+    {
+        int version = ++libraryStateVersion;
+        DateTimeOffset now = timeProvider.GetUtcNow();
+
+        if (status.Condition == SharedLibraryCondition.Synchronising)
+        {
+            syncingSince ??= now;
+            ApplyLibraryState(status);
+            return;
+        }
+
+        if (syncingSince is { } since && now - since < MinimumSyncingDisplay)
+        {
+            syncingSince = null;
+
+            // Discarded rather than awaited: the caller is an event, and a newer state arriving in
+            // the meantime makes this one stale, which the version says.
+            _ = ApplyLibraryStateLaterAsync(status, version, MinimumSyncingDisplay - (now - since));
+            return;
+        }
+
+        syncingSince = null;
+        ApplyLibraryState(status);
+    }
+
+    private async Task ApplyLibraryStateLaterAsync(SharedLibraryStatus status, int version, TimeSpan wait)
+    {
+        await Task.Delay(wait, timeProvider);
+
+        if (version == libraryStateVersion)
+        {
+            ApplyLibraryState(status);
+        }
+    }
+
+    private void ApplyLibraryState(SharedLibraryStatus status)
+    {
+        IsLibraryShared = status.IsShared;
+
+        if (!status.IsShared)
+        {
+            return;
+        }
+
+        LibraryStateText = SharedLibraryText.State(status, localizer);
+        LibraryStateDetail = SharedLibraryText.Describe(status, localizer);
+        IsLibrarySyncing = status.Condition == SharedLibraryCondition.Synchronising;
+        IsLibraryRetrying = status.IsProblem && status.RetryAt is not null;
+        IsLibraryStuck = status.IsProblem && status.RetryAt is null;
     }
 
     [RelayCommand]
