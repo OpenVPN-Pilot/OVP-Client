@@ -28,6 +28,23 @@ public sealed class ShippedCatalogueTests
     private static IReadOnlyList<LanguageCatalogue> Load(string? platform = null) =>
         new JsonLanguageCatalogueSource([LanguageDirectory], platform: platform).Load();
 
+    /// <summary>
+    /// The editor names a finding by its code, which a search of the sources cannot follow.
+    /// </summary>
+    [Fact]
+    public void EveryConfigurationFinding_HasASentence()
+    {
+        LanguageCatalogue english = Load().Single(catalogue => catalogue.Code == "en");
+
+        foreach (OpenVpnPilot.OpenVpn.Configuration.OvpnConfigIssueCode code in
+            Enum.GetValues<OpenVpnPilot.OpenVpn.Configuration.OvpnConfigIssueCode>())
+        {
+            Assert.True(
+                english.Strings.ContainsKey("editor.issue." + code),
+                $"No sentence describes the configuration finding {code}.");
+        }
+    }
+
     [Fact]
     public void Catalogues_AreDiscoveredBesideTheApplication()
     {

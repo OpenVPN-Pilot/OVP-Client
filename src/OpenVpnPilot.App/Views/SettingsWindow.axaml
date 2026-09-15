@@ -59,6 +59,24 @@
             <CheckBox Content="{loc:Translate settings.closeToTray}"
                       IsChecked="{Binding CloseToTray}" />
 
+            <Border Classes="divider" />
+
+            <TextBlock Text="{loc:Translate settings.profileEditor}" Classes="section" />
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <TextBlock Text="{loc:Translate settings.profileEditorOpens}" Classes="muted"
+                         VerticalAlignment="Center" />
+              <ComboBox ItemsSource="{Binding EditorViews}" SelectedItem="{Binding SelectedEditorView}"
+                        MinWidth="240">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:EditorViewChoice">
+                    <TextBlock Text="{Binding Name}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+            </StackPanel>
+            <TextBlock Text="{loc:Translate settings.profileEditorHint}" Classes="muted"
+                       TextWrapping="Wrap" />
+
           </StackPanel>
         </ScrollViewer>
       </TabItem>

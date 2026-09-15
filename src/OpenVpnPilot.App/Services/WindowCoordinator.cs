@@ -437,9 +437,12 @@ public sealed class WindowCoordinator
         ProfileEditorViewModel model = new(
             services.GetRequiredService<IProfileStore>(),
             services.GetRequiredService<Core.Localization.ILocalizer>(),
-            profile);
+            profile,
+            startsInPlainText: settings.Current.General.ProfileEditor == ProfileEditorView.PlainText);
 
         ProfileEditorWindow window = new() { DataContext = model };
+
+        window.Opened += async (_, _) => await model.LoadAsync();
 
         model.Closed += async (_, changed) =>
         {

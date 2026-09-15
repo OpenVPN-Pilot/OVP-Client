@@ -54,6 +54,11 @@ internal sealed class FakeProfileStore : IProfileStore
 
     public List<Guid> Deleted { get; } = [];
 
+    /// <summary>
+    /// Every configuration written, in order, so a test can tell an edit from a save that changed nothing.
+    /// </summary>
+    public List<string> ConfigurationUpdates { get; } = [];
+
     public Profile Add(string name, params string[] tagNames)
     {
         Profile profile = new()
@@ -110,7 +115,7 @@ internal sealed class FakeProfileStore : IProfileStore
     }
 
     public Task<string?> GetConfigurationAsync(Guid profileId, CancellationToken cancellationToken = default) =>
-        Task.FromResult<string?>("client");
+        Task.FromResult(Profiles.FirstOrDefault(profile => profile.Id == profileId)?.Configuration);
 
     public Task RecordConnectionAsync(Guid profileId, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
@@ -141,6 +146,23 @@ internal sealed class FakeProfileStore : IProfileStore
 
     public Task SetProfileNotesAsync(Guid profileId, string? notes, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
+
+    public Task<ConfigurationUpdate> UpdateConfigurationAsync(
+        Guid profileId,
+        string configuration,
+        CancellationToken cancellationToken = default)
+    {
+        Profile? profile = Profiles.FirstOrDefault(candidate => candidate.Id == profileId);
+
+        if (profile is null)
+        {
+            return Task.FromResult(new ConfigurationUpdate(false, null));
+        }
+
+        profile.Configuration = configuration;
+        ConfigurationUpdates.Add(configuration);
+        return Task.FromResult(new ConfigurationUpdate(true, null));
+    }
 
     public Task SetRouteProtectionAsync(
         Guid profileId,

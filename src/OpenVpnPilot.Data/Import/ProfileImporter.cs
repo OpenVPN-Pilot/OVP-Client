@@ -182,7 +182,10 @@ public sealed class ProfileImporter
         };
     }
 
-    internal static string ComputeHash(string content) =>
+    /// <summary>
+    /// The value duplicates are recognised by, which is the same wherever a configuration is stored.
+    /// </summary>
+    public static string ComputeHash(string content) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content)))
             .ToLower(CultureInfo.InvariantCulture);
 }

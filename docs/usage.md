@@ -27,6 +27,28 @@ The real limits are outside the application: one OpenVPN process and one virtual
 and the adapter pool is what runs out first. A tunnel that cannot come up is given a minute and then
 abandoned, so a saturated machine reports what happened instead of leaving processes behind.
 
+## Changing a profile
+
+**Edit** in the detail panel opens the profile. The form names what is changed by hand: the name, the
+server with its port and protocol, the tags, the shortcut slot, whether pushed routes are accepted,
+the notes, and the certificates and keys. Changing a field replaces the lines that field is about
+and leaves the rest of the configuration exactly as it was, comments and ordering included. A
+configuration that names several servers has the first one in the form.
+
+**Edit as plain text** shows the whole configuration as OpenVPN reads it, for anything the form does
+not name. Switching back reads what was typed into the form again, and whichever is showing is what
+is saved. The general page of the settings decides which of the two the editor opens with.
+
+Every change is checked as it is made, with the same checks for both views. What OpenVPN would refuse
+is marked in red and stops a save: no server, a port or protocol it cannot read, nothing to verify the
+server with, a block that is never closed, a certificate or key pasted into the wrong block, and a
+configuration another profile already has. A reference to a file on disk and a directive that runs a
+program are marked in amber and do not stop it. A connected profile keeps running with what it
+started with, and uses the changed configuration from the next connection on.
+
+Return saves from any single line field and escape closes without saving. The notes, the keys and the
+plain text keep return for a new line.
+
 ## Adding a language
 
 Language files are JSON. The ones that ship live in `lang` beside the executable, and anything placed

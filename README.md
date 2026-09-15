@@ -45,6 +45,8 @@ The rest is one page per subject, so this one stays short:
 - The same palette for stopping: one shortcut lists what is running, space ticks several, return
   disconnects them
 - Checkboxes on demand, to connect, disconnect or delete a set of profiles together
+- A profile editor with a form for the server, port, protocol and keys, and the plain configuration
+  one button away, both checked against what OpenVPN would refuse before anything is saved
 - Tags and favourites with numbered slots bound to shortcuts
 - Global shortcuts for connect, reconnect, disconnect and the favourite slots
 - Several tunnels connected at once, each with its own live telemetry

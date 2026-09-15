@@ -119,6 +119,15 @@ public sealed class GeneralSettings
     /// </summary>
     public WindowPlacementSettings MainWindow { get; set; } = new();
 
+    /// <summary>
+    /// What the profile editor shows first: the form, or the configuration as OpenVPN reads it.
+    /// </summary>
+    /// <remarks>
+    /// Both are one button apart in the editor. This is for the person who reaches for the text every
+    /// time and would otherwise press that button every time.
+    /// </remarks>
+    public ProfileEditorView ProfileEditor { get; set; } = ProfileEditorView.Form;
+
     public GeneralSettings Clone()
     {
         GeneralSettings copy = (GeneralSettings)MemberwiseClone();
@@ -157,6 +166,22 @@ public sealed class WindowPlacementSettings
     public bool HasPosition => X is not null && Y is not null;
 
     public WindowPlacementSettings Clone() => (WindowPlacementSettings)MemberwiseClone();
+}
+
+/// <summary>
+/// The two ways the profile editor can present a profile.
+/// </summary>
+public enum ProfileEditorView
+{
+    /// <summary>
+    /// Named fields for what is changed by hand: the server, the port, the protocol and the keys.
+    /// </summary>
+    Form,
+
+    /// <summary>
+    /// The whole configuration as text.
+    /// </summary>
+    PlainText,
 }
 
 public sealed class AppearanceSettings

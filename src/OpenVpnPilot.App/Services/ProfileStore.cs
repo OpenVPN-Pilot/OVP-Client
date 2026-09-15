@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
+using OpenVpnPilot.Data.Import;
 using OpenVpnPilot.Data.Tagging;
+using OpenVpnPilot.OpenVpn.Configuration;
 
 namespace OpenVpnPilot.App.Services;
 
@@ -56,6 +58,19 @@ public interface IProfileStore
     public Task SetProfileNotesAsync(Guid profileId, string? notes, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Replaces a profile's configuration, and everything the list reads from it.
+    /// </summary>
+    /// <remarks>
+    /// Refused when another profile already holds exactly this configuration, because an identical
+    /// configuration is how an import recognises a duplicate, and an edit must not create one that an
+    /// import would have refused.
+    /// </remarks>
+    public Task<ConfigurationUpdate> UpdateConfigurationAsync(
+        Guid profileId,
+        string configuration,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Overrides the route protection for one profile, or returns it to the global setting.
     /// </summary>
     public Task SetRouteProtectionAsync(
@@ -75,6 +90,13 @@ public interface IProfileStore
 /// A tag with the number of profiles carrying it.
 /// </summary>
 public sealed record TagSummary(Guid Id, string Name, string? Colour, int ProfileCount);
+
+/// <summary>
+/// What replacing a configuration did.
+/// </summary>
+/// <param name="Saved">True when the configuration was written.</param>
+/// <param name="DuplicateOf">The profile that already holds this configuration, when that is why not.</param>
+public sealed record ConfigurationUpdate(bool Saved, string? DuplicateOf);
 
 /// <summary>
 /// Entity Framework backed implementation.
@@ -306,6 +328,54 @@ public sealed class ProfileStore : IProfileStore
         profile.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes;
         profile.UpdatedAt = timeProvider.GetUtcNow();
         await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<ConfigurationUpdate> UpdateConfigurationAsync(
+        Guid profileId,
+        string configuration,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        string hash = ProfileImporter.ComputeHash(configuration);
+
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        string? duplicate = await context.Profiles
+            .AsNoTracking()
+            .Where(other => other.ContentHash == hash && other.Id != profileId)
+            .Select(other => other.Name)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (duplicate is not null)
+        {
+            return new ConfigurationUpdate(false, duplicate);
+        }
+
+        Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
+        if (profile is null)
+        {
+            return new ConfigurationUpdate(false, null);
+        }
+
+        // Read the way an import reads it, so an edited profile looks in the list exactly as the
+        // same file imported fresh would.
+        OvpnConfiguration parsed = OvpnConfigParser.Parse(configuration);
+        OvpnRemote? remote = parsed.Remotes.Count > 0 ? parsed.Remotes[0] : null;
+
+        profile.Configuration = configuration;
+        profile.ContentHash = hash;
+        profile.RemoteHost = remote?.Host;
+        profile.RemotePort = remote?.Port;
+        profile.Protocol = remote?.Protocol.ToString().ToLowerInvariant();
+        profile.RequiresCredentials = parsed.RequiresUserCredentials;
+        profile.IsSelfContained = parsed.IsSelfContained;
+        profile.HasUnsupportedOptions = parsed.ScriptOptions.Count > 0;
+        profile.UpdatedAt = timeProvider.GetUtcNow();
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        return new ConfigurationUpdate(true, null);
     }
 
     public async Task SetRouteProtectionAsync(

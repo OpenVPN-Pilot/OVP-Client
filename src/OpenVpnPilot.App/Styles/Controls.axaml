@@ -137,6 +137,21 @@
     <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
   </Style>
 
+  <!--
+    Configuration text: fixed width, because base64 and aligned options read as columns, and not
+    wrapped, because a wrapped certificate line looks like two lines and is not.
+  -->
+  <Style Selector="TextBox.code">
+    <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="AcceptsReturn" Value="True" />
+    <Setter Property="TextWrapping" Value="NoWrap" />
+    <Setter Property="Height" Value="150" />
+    <Setter Property="VerticalContentAlignment" Value="Top" />
+    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+    <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+  </Style>
+
   <!-- Sidebar entries behave as navigation rather than as a list. -->
   <Style Selector="ListBox.nav">
     <Setter Property="Background" Value="Transparent" />

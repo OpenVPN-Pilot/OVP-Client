@@ -4,92 +4,211 @@
         xmlns:loc="using:OpenVpnPilot.App.Localization"
         x:Class="OpenVpnPilot.App.Views.ProfileEditorWindow"
         x:DataType="vm:ProfileEditorViewModel"
-        Width="520" SizeToContent="Height"
-        MinWidth="460"
+        Width="680" Height="780"
+        MinWidth="540" MinHeight="520"
         WindowStartupLocation="CenterOwner"
-        CanResize="False"
         Background="{DynamicResource SurfaceWindow}"
         Icon="/Assets/openvpnpilot.ico"
         Title="{loc:Translate editor.title}">
 
-  <StackPanel Margin="22" Spacing="14">
+  <!--
+    Resizable, because a configuration is text of unknown length and a certificate is sixty
+    characters of base64 a line. The form scrolls and the plain text fills the window.
+  -->
+  <Grid RowDefinitions="*,Auto,Auto">
 
-    <StackPanel Spacing="5">
-      <TextBlock Text="{loc:Translate editor.name}" Classes="muted" />
-      <TextBox Text="{Binding Name}" />
-    </StackPanel>
+    <!-- The form. -->
+    <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled"
+                  IsVisible="{Binding !IsPlainText}">
+      <StackPanel Margin="22,20" Spacing="14" IsEnabled="{Binding IsLoaded}">
 
-    <TextBlock Text="{Binding Endpoint}" Classes="muted" />
+        <StackPanel Spacing="5">
+          <TextBlock Text="{loc:Translate editor.name}" Classes="muted" />
+          <TextBox Name="NameBox" Text="{Binding Name}" />
+        </StackPanel>
 
-    <Border Classes="divider" />
+        <Border Classes="divider" />
 
-    <StackPanel Spacing="5">
-      <StackPanel Orientation="Horizontal" Spacing="6">
-        <TextBlock Text="{loc:Translate editor.tags}" Classes="muted" VerticalAlignment="Center" />
-        <Border Classes="hint" ToolTip.Tip="{loc:Translate tags.help}">
-          <TextBlock Text="i" />
+        <TextBlock Text="{loc:Translate editor.server}" Classes="section" />
+
+        <Grid ColumnDefinitions="*,120,110" ColumnSpacing="10" RowDefinitions="Auto,Auto" RowSpacing="5">
+          <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Translate editor.host}" Classes="muted" />
+          <TextBlock Grid.Row="0" Grid.Column="1" Text="{loc:Translate editor.port}" Classes="muted" />
+          <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Translate editor.protocol}" Classes="muted" />
+
+          <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding Host}"
+                   PlaceholderText="{loc:Translate editor.hostHint}" />
+          <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="1" Maximum="65535" Increment="1"
+                         FormatString="0" ParsingNumberStyle="Integer"
+                         Value="{Binding Port}" />
+          <ComboBox Grid.Row="1" Grid.Column="2" HorizontalAlignment="Stretch"
+                    ItemsSource="{Binding Protocols}" SelectedItem="{Binding SelectedProtocol}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ProtocolChoice">
+                <TextBlock Text="{Binding Name}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </Grid>
+
+        <TextBlock Text="{Binding MoreRemotesNotice}" Classes="muted" TextWrapping="Wrap"
+                   IsVisible="{Binding HasMoreRemotes}" />
+
+        <Border CornerRadius="7" Padding="12,10"
+                Background="{DynamicResource StatePendingSoft}"
+                IsVisible="{Binding IsConnected}">
+          <TextBlock Text="{loc:Translate editor.connectedNotice}" TextWrapping="Wrap" FontSize="12"
+                     Foreground="{DynamicResource StatePending}" />
         </Border>
+
+        <Border Classes="divider" />
+
+        <StackPanel Spacing="5">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{loc:Translate editor.tags}" Classes="muted" VerticalAlignment="Center" />
+            <Border Classes="hint" ToolTip.Tip="{loc:Translate tags.help}">
+              <TextBlock Text="i" />
+            </Border>
+          </StackPanel>
+          <TextBox Text="{Binding TagsInput}" PlaceholderText="{loc:Translate import.tagsHint}" />
+        </StackPanel>
+
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+          <StackPanel Grid.Column="0" Spacing="5">
+            <TextBlock Text="{loc:Translate editor.slot}" Classes="muted" />
+            <ComboBox ItemsSource="{Binding Slots}" SelectedItem="{Binding SelectedSlot}"
+                      HorizontalAlignment="Stretch" />
+            <CheckBox Content="{loc:Translate editor.favourite}" IsChecked="{Binding IsFavourite}"
+                      Margin="0,4,0,0" />
+          </StackPanel>
+
+          <StackPanel Grid.Column="1" Spacing="5">
+            <TextBlock Text="{loc:Translate editor.routing}" Classes="muted" />
+            <ComboBox ItemsSource="{Binding RouteProtectionChoices}"
+                      SelectedItem="{Binding SelectedRouteProtection}"
+                      HorizontalAlignment="Stretch">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:RouteProtectionChoice">
+                  <TextBlock Text="{Binding Name}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+        </Grid>
+
+        <TextBlock Text="{loc:Translate editor.slotHint}" Classes="muted" TextWrapping="Wrap" />
+
+        <!-- Return starts a new line here, as it does in every field that holds more than one. -->
+        <StackPanel Spacing="5">
+          <TextBlock Text="{loc:Translate editor.notes}" Classes="muted" />
+          <TextBox Text="{Binding Notes}" AcceptsReturn="True" Height="76" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Border Classes="divider" />
+
+        <TextBlock Text="{loc:Translate editor.keys}" Classes="section" />
+        <TextBlock Text="{loc:Translate editor.keysHint}" Classes="muted" TextWrapping="Wrap" />
+
+        <!--
+          Collapsed, because they are what is changed least and are long enough to push everything
+          else out of sight when open.
+        -->
+        <Expander Header="{loc:Translate editor.blockCa}" HorizontalAlignment="Stretch">
+          <TextBox Text="{Binding CaText}" Classes="code" />
+        </Expander>
+        <Expander Header="{loc:Translate editor.blockCert}" HorizontalAlignment="Stretch">
+          <TextBox Text="{Binding CertText}" Classes="code" />
+        </Expander>
+        <Expander Header="{loc:Translate editor.blockKey}" HorizontalAlignment="Stretch">
+          <TextBox Text="{Binding KeyText}" Classes="code" />
+        </Expander>
+        <Expander Header="{Binding TlsKeyLabel}" HorizontalAlignment="Stretch"
+                  IsVisible="{Binding HasTlsKey}">
+          <TextBox Text="{Binding TlsKeyText}" Classes="code" />
+        </Expander>
+
       </StackPanel>
-      <TextBox Text="{Binding TagsInput}" PlaceholderText="{loc:Translate import.tagsHint}" />
-    </StackPanel>
+    </ScrollViewer>
 
-    <Border Classes="divider" />
-
-    <CheckBox Content="{loc:Translate editor.favourite}" IsChecked="{Binding IsFavourite}" />
-
-    <StackPanel Spacing="5">
-      <TextBlock Text="{loc:Translate editor.slot}" Classes="muted" />
-      <ComboBox ItemsSource="{Binding Slots}" SelectedItem="{Binding SelectedSlot}"
-                HorizontalAlignment="Left" MinWidth="120" />
-      <TextBlock Text="{loc:Translate editor.slotHint}" Classes="muted" TextWrapping="Wrap" />
-    </StackPanel>
-
-    <StackPanel Spacing="5">
-      <TextBlock Text="{loc:Translate editor.routing}" Classes="muted" />
-      <ComboBox ItemsSource="{Binding RouteProtectionChoices}"
-                SelectedItem="{Binding SelectedRouteProtection}"
-                HorizontalAlignment="Stretch">
-        <ComboBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:RouteProtectionChoice">
-            <TextBlock Text="{Binding Name}" />
-          </DataTemplate>
-        </ComboBox.ItemTemplate>
-      </ComboBox>
-    </StackPanel>
-
-    <StackPanel Spacing="5">
-      <TextBlock Text="{loc:Translate editor.notes}" Classes="muted" />
-      <TextBox Text="{Binding Notes}" AcceptsReturn="True" Height="76" TextWrapping="Wrap" />
-    </StackPanel>
-
-    <TextBlock Text="{Binding StatusMessage}" Classes="muted"
-               Foreground="{DynamicResource StateFailed}" TextWrapping="Wrap" />
-
-    <Border Classes="divider" />
-
-    <Grid ColumnDefinitions="Auto,*,Auto,Auto" IsVisible="{Binding !IsConfirmingDelete}">
-      <Button Grid.Column="0" Classes="danger" Content="{loc:Translate editor.delete}"
-              Command="{Binding RequestDeleteCommand}" />
-      <Button Grid.Column="2" Content="{loc:Translate common.cancel}" MinWidth="92" Margin="0,0,8,0"
-              Command="{Binding CancelCommand}" />
-      <Button Grid.Column="3" Content="{loc:Translate common.save}" Classes="primary" MinWidth="92"
-              Command="{Binding SaveCommand}" />
+    <!-- The plain text. -->
+    <Grid Grid.Row="0" RowDefinitions="Auto,*" RowSpacing="8" Margin="22,18,22,10"
+          IsVisible="{Binding IsPlainText}">
+      <TextBlock Grid.Row="0" Text="{loc:Translate editor.plainHint}" Classes="muted" TextWrapping="Wrap" />
+      <TextBox Grid.Row="1" Name="ConfigurationBox" Text="{Binding ConfigurationText}"
+               Classes="code" Height="NaN" MinHeight="0" VerticalAlignment="Stretch"
+               IsEnabled="{Binding IsLoaded}" />
     </Grid>
 
-    <Border CornerRadius="7" Padding="12,10"
-            Background="{DynamicResource StateFailedSoft}"
-            IsVisible="{Binding IsConfirmingDelete}">
+    <!--
+      What is wrong, beside whichever view is showing. Red stops a save; amber is worth knowing and
+      does not.
+    -->
+    <Border Grid.Row="1" Margin="22,0,22,10" Padding="12,9" CornerRadius="7"
+            Background="{DynamicResource SurfaceSidebar}"
+            BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1"
+            IsVisible="{Binding HasIssues}">
+      <ScrollViewer MaxHeight="120" HorizontalScrollBarVisibility="Disabled">
+        <ItemsControl ItemsSource="{Binding Issues}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ProfileEditorIssue">
+              <Panel Margin="0,2">
+                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="12"
+                           Foreground="{DynamicResource StateFailed}" IsVisible="{Binding IsError}" />
+                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="12"
+                           Foreground="{DynamicResource StatePending}" IsVisible="{Binding IsWarning}" />
+              </Panel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Border>
+
+    <Border Grid.Row="2" Background="{DynamicResource SurfaceSidebar}"
+            BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
+            Padding="16,12">
       <StackPanel Spacing="10">
-        <TextBlock Text="{loc:Translate editor.deleteConfirm}" TextWrapping="Wrap" FontSize="12"
-                   Foreground="{DynamicResource StateFailed}" />
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-          <Button Content="{loc:Translate common.cancel}" MinWidth="92"
-                  Command="{Binding CancelDeleteCommand}" />
-          <Button Content="{loc:Translate editor.delete}" MinWidth="92" Classes="destructive"
-                  Command="{Binding ConfirmDeleteCommand}" />
-        </StackPanel>
+
+        <TextBlock Text="{Binding StatusMessage}" Classes="muted" TextWrapping="Wrap"
+                   Foreground="{DynamicResource StateFailed}"
+                   IsVisible="{Binding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+        <!--
+          Return saves from any single line field, and escape closes without saving. A field that
+          holds several lines keeps return for itself, which is what stops a note or a key from being
+          saved halfway through a line.
+        -->
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="8"
+              IsVisible="{Binding !IsConfirmingDelete}">
+          <Button Grid.Column="0" Classes="danger" Content="{loc:Translate editor.delete}"
+                  Command="{Binding RequestDeleteCommand}" />
+          <Button Grid.Column="1" Classes="quiet" Content="{Binding ViewToggleLabel}"
+                  IsEnabled="{Binding IsLoaded}"
+                  Command="{Binding ToggleViewCommand}" />
+          <Button Grid.Column="3" Content="{loc:Translate common.cancel}" MinWidth="92"
+                  IsCancel="True"
+                  Command="{Binding CancelCommand}" />
+          <Button Grid.Column="4" Content="{loc:Translate common.save}" Classes="primary" MinWidth="92"
+                  IsDefault="{Binding !IsConfirmingDelete}"
+                  Command="{Binding SaveCommand}" />
+        </Grid>
+
+        <Border CornerRadius="7" Padding="12,10"
+                Background="{DynamicResource StateFailedSoft}"
+                IsVisible="{Binding IsConfirmingDelete}">
+          <StackPanel Spacing="10">
+            <TextBlock Text="{loc:Translate editor.deleteConfirm}" TextWrapping="Wrap" FontSize="12"
+                       Foreground="{DynamicResource StateFailed}" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+              <Button Content="{loc:Translate common.cancel}" MinWidth="92" Classes="quiet"
+                      Command="{Binding CancelDeleteCommand}" />
+              <Button Content="{loc:Translate editor.delete}" MinWidth="92" Classes="destructive"
+                      Command="{Binding ConfirmDeleteCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
       </StackPanel>
     </Border>
 
-  </StackPanel>
+  </Grid>
 </Window>

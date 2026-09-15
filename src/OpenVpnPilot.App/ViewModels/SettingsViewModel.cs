@@ -83,6 +83,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
             new ThemeChoice(ThemePreference.Dark, localizer["settings.themeDark"]),
         ];
 
+        EditorViews =
+        [
+            new EditorViewChoice(ProfileEditorView.Form, localizer["settings.profileEditorForm"]),
+            new EditorViewChoice(ProfileEditorView.PlainText, localizer["settings.profileEditorPlain"]),
+        ];
+
         ReadFromDraft();
     }
 
@@ -108,6 +114,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
     public ObservableCollection<LanguageChoice> Languages { get; }
 
     public ObservableCollection<ThemeChoice> Themes { get; }
+
+    public ObservableCollection<EditorViewChoice> EditorViews { get; }
+
+    /// <summary>
+    /// What the profile editor shows when it opens.
+    /// </summary>
+    [ObservableProperty]
+    public partial EditorViewChoice? SelectedEditorView { get; set; }
 
     public ObservableCollection<HotkeyEditorViewModel> Hotkeys { get; } = [];
 
@@ -274,6 +288,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         StartWithSystem = draft.General.StartWithSystem;
         CloseToTray = draft.General.CloseToTray;
 
+        SelectedEditorView = EditorViews.FirstOrDefault(view => view.View == draft.General.ProfileEditor)
+            ?? EditorViews[0];
+
         ProtectRoutes = draft.Connections.ProtectRoutes;
         ConnectTimeoutSeconds = draft.Connections.ConnectTimeoutSeconds;
         AutoReconnect = draft.Connections.AutoReconnect;
@@ -306,6 +323,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         draft.General.StartMinimised = StartMinimised;
         draft.General.StartWithSystem = StartWithSystem;
         draft.General.CloseToTray = CloseToTray;
+        draft.General.ProfileEditor = SelectedEditorView?.View ?? ProfileEditorView.Form;
 
         draft.Appearance.Theme = SelectedTheme?.Preference ?? ThemePreference.System;
 
@@ -524,3 +542,8 @@ public sealed record LanguageChoice(string? Code, string Name);
 /// One entry in the theme picker.
 /// </summary>
 public sealed record ThemeChoice(ThemePreference Preference, string Name);
+
+/// <summary>
+/// One entry in the picker for what the profile editor opens with.
+/// </summary>
+public sealed record EditorViewChoice(ProfileEditorView View, string Name);
