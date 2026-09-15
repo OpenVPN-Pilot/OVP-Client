@@ -3,8 +3,8 @@ using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.Data.Import;
+using OpenVpnPilot.Data.Library;
 using OpenVpnPilot.Data.Tagging;
-using OpenVpnPilot.OpenVpn.Configuration;
 
 namespace OpenVpnPilot.App.Services;
 
@@ -101,6 +101,12 @@ public sealed record ConfigurationUpdate(bool Saved, string? DuplicateOf);
 /// <summary>
 /// Entity Framework backed implementation.
 /// </summary>
+/// <remarks>
+/// When a profile was last changed is what a shared library settles two people's changes by, so it
+/// moves only when something that is shared changes, and only when it actually changes. Saving the
+/// editor without touching a field, or marking a favourite, which is nobody else's business, must
+/// not make this machine's copy look newer than a colleague's real edit.
+/// </remarks>
 public sealed class ProfileStore : IProfileStore
 {
     private readonly IDbContextFactory<PilotDbContext> contextFactory;
@@ -224,7 +230,6 @@ public sealed class ProfileStore : IProfileStore
             profile.FavouriteSlot = null;
         }
 
-        profile.UpdatedAt = timeProvider.GetUtcNow();
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -264,7 +269,6 @@ public sealed class ProfileStore : IProfileStore
         }
 
         profile.FavouriteSlot = slot;
-        profile.UpdatedAt = timeProvider.GetUtcNow();
 
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -302,7 +306,7 @@ public sealed class ProfileStore : IProfileStore
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
-        if (profile is null)
+        if (profile is null || string.Equals(profile.Name, name.Trim(), StringComparison.Ordinal))
         {
             return;
         }
@@ -319,13 +323,15 @@ public sealed class ProfileStore : IProfileStore
     {
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
+        string? normalised = string.IsNullOrWhiteSpace(notes) ? null : notes;
+
         Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
-        if (profile is null)
+        if (profile is null || string.Equals(profile.Notes, normalised, StringComparison.Ordinal))
         {
             return;
         }
 
-        profile.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes;
+        profile.Notes = normalised;
         profile.UpdatedAt = timeProvider.GetUtcNow();
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -360,17 +366,7 @@ public sealed class ProfileStore : IProfileStore
 
         // Read the way an import reads it, so an edited profile looks in the list exactly as the
         // same file imported fresh would.
-        OvpnConfiguration parsed = OvpnConfigParser.Parse(configuration);
-        OvpnRemote? remote = parsed.Remotes.Count > 0 ? parsed.Remotes[0] : null;
-
-        profile.Configuration = configuration;
-        profile.ContentHash = hash;
-        profile.RemoteHost = remote?.Host;
-        profile.RemotePort = remote?.Port;
-        profile.Protocol = remote?.Protocol.ToString().ToLowerInvariant();
-        profile.RequiresCredentials = parsed.RequiresUserCredentials;
-        profile.IsSelfContained = parsed.IsSelfContained;
-        profile.HasUnsupportedOptions = parsed.ScriptOptions.Count > 0;
+        ProfileConfigurationFacts.Apply(profile, configuration);
         profile.UpdatedAt = timeProvider.GetUtcNow();
 
         await context.SaveChangesAsync(cancellationToken);
@@ -386,7 +382,7 @@ public sealed class ProfileStore : IProfileStore
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
-        if (profile is null)
+        if (profile is null || profile.ProtectRoutes == protectRoutes)
         {
             return;
         }
@@ -412,8 +408,23 @@ public sealed class ProfileStore : IProfileStore
             .ToList();
 
         List<ProfileTag> existing = await context.ProfileTags
+            .Include(link => link.Tag)
             .Where(link => link.ProfileId == profileId)
             .ToListAsync(cancellationToken);
+
+        HashSet<string> current = new(existing.Select(link => link.Tag!.Name), StringComparer.OrdinalIgnoreCase);
+
+        if (current.SetEquals(wanted))
+        {
+            return;
+        }
+
+        Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
+
+        if (profile is not null)
+        {
+            profile.UpdatedAt = timeProvider.GetUtcNow();
+        }
 
         context.ProfileTags.RemoveRange(existing);
 
