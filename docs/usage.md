@@ -49,6 +49,102 @@ started with, and uses the changed configuration from the next connection on.
 Return saves from any single line field and escape closes without saving. The notes, the keys and the
 plain text keep return for a new line.
 
+## Moving a set to another machine
+
+**Export** writes the ticked profiles, or every profile carrying the tags chosen there, either as plain
+`.ovpn` files or as one encrypted `.ovppkg` package. A package can also carry the shortcuts, the
+settings and the saved sign ins of those profiles, each of them chosen on its own. What belongs to
+the machine is never in it: window positions, the OpenVPN path, autostart and a shared library.
+
+Opening a package asks for its passphrase and then lists what it carries: every profile, marked as
+new or as already stored under a name, and under them the sign ins, the shortcuts and the settings.
+Nothing that is not ticked is taken. A shortcut is added only where this machine binds neither the
+action nor the combination yet, and the settings replace this machine's only when that is ticked. A
+package written by a newer version than the one opening it is refused rather than read in part.
+
+## Sharing a library between machines
+
+A library can live in one encrypted file that several machines use together, so that a profile
+imported or changed on one of them arrives on the others. It is meant for a folder a sync client
+keeps in step, such as one OneDrive synchronises: the application reads and writes a file, and
+carrying that file between machines is the sync client's job.
+
+Under **Settings, Profiles**, **Create a library...** writes this machine's profiles and their sign ins
+into a new file and asks for the passphrase every other machine will need. Pass it on separately from
+the file. **Use an existing library...** picks that file on another machine and asks for the
+passphrase once; the profiles already on that machine are combined with the ones in the file. The
+passphrase is kept in the operating system's protected storage beside the stored sign ins, and never
+in the database, the settings, a log or an export.
+
+| Shared | Stays on each machine |
+| --- | --- |
+| Every profile, with its configuration, name, tags, notes, colour and route protection | Favourites and their shortcut slots |
+| The saved sign ins of those profiles | Shortcuts, settings and the session history |
+| Which profiles were deleted, for a year | When a profile was last used |
+
+### How it stays in step
+
+- **At start, what this machine changed comes first.** Anything changed while the application was
+  closed, with `ovp` for example, is reconciled with the file before anything is taken from it.
+- **While it runs**, a change made here is noticed within seconds and written out. The file is
+  looked at every minute and read only when its contents changed: it is compared by its hash, so a
+  sync client touching the file does not make every machine read it again.
+- **Writing takes a lock**, a `<name>.lock` file beside the shared one naming the machine that holds
+  it. The new version is written beside the file and replaces it in one step, so nobody reads half of
+  it. Before that step the file is read again, and if another machine wrote it in the meantime the
+  merge is done again with what that machine wrote. A lock older than two minutes belongs to a
+  machine that went away and is taken over.
+- **Quitting** writes out whatever is still waiting.
+
+### When the file cannot be reached
+
+The list keeps working with this machine's own copy whatever happens to the file. A banner in the
+main window says what stands in the way and since when changes made here are waiting, and another
+attempt follows after half a minute, then after longer and longer pauses up to five minutes. **Try
+again** does not wait.
+
+- A folder that cannot be reached, without a network for example, is simply tried again.
+- A file that is missing from a folder that is there is looked for again and not written again.
+  The sync client may not have delivered it yet, or somebody removed it on purpose. When it is gone
+  for good, stop sharing on one machine and create the library again at the same place; the others
+  carry on with it as long as the passphrase is the same.
+- A passphrase that no longer opens the file was changed on another machine, and the banner asks for
+  the new one.
+- A file written by a newer version is not written back until this machine is updated, because what
+  it cannot fully read it cannot faithfully write.
+
+### Conflicts
+
+Every machine remembers what the file held when it last synchronised, so it can tell who changed
+what. That decides nearly everything without a conflict at all:
+
+- **Changes are merged field by field.** A profile renamed on one machine and given another port on
+  a second keeps both changes.
+- **The same field changed on two machines** before either synchronised is the one real conflict.
+  The later change wins, and the banner names the profile and says which side was kept.
+- **A deletion never wins over a later change.** A profile deleted on one machine and changed
+  afterwards on another comes back, and the banner says so. A connected profile that another machine
+  deleted stays until its tunnel is disconnected.
+- **The same configuration imported on two machines** before either synchronised is one profile
+  held twice. Every machine keeps the same one of the two, and what this machine kept about the
+  other, its favourite mark, its history and its sign ins, moves over to it.
+- **A sign in changed on two machines** keeps the one typed on the machine that synchronises last,
+  since there is no telling which of them the server accepted more recently.
+- **Copies the sync client keeps**, named after the file with a machine's name appended, happen when
+  two machines wrote at nearly the same moment. They are mentioned in the banner and not read,
+  because what they hold is in the library already unless both writes crossed within seconds. Delete
+  them once you have looked.
+
+### When someone should no longer have it
+
+**Change the passphrase** writes the file again with a new one, and every other machine asks for it
+the next time it synchronises. The old passphrase still opens what was written before: copies somebody
+already has and older versions a sync client keeps in its history. Take away access to the folder as
+well.
+
+**Stop sharing** ends it for this machine only. The profiles stay, the passphrase and what the machine
+remembered about the file are removed, and the file is left as it is for everybody else.
+
 ## Adding a language
 
 Language files are JSON. The ones that ship live in `lang` beside the executable, and anything placed
