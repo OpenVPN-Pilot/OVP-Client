@@ -45,8 +45,6 @@
       "favourites": "Favoriten",
       "recent": "Zuletzt verwendet",
       "history": "Verlauf",
-      "new": "Neu",
-      "markSeen": "Als gesehen markieren",
       "log": "Protokoll",
       "logHint": "Alles, was diese Anwendung und OpenVPN aufzeichnen, während es geschieht. Pro Tag wird eine Datei neben dem Profilspeicher abgelegt."
     },
@@ -122,7 +120,6 @@
       "profileBusy": "{0}: {1}",
       "reconnectScheduled": "{0} wurde getrennt. Neuer Versuch in {1} s, Versuch {2}.",
       "reconnectGaveUp": "{0} konnte nach {1} Versuch(en) nicht wieder verbunden werden.",
-      "discoveriesCleared": "{0} Profil(e) als gesehen markiert.",
       "credentialsForgotten": "Die gespeicherten Anmeldedaten für {0} wurden vergessen.",
       "noStoredCredentials": "Für {0} war nichts gespeichert."
     },
@@ -237,7 +234,6 @@
       "historyCleared": "{0} Sitzung(en) entfernt.",
       "conflictNotSaved": "Zwei Tastenkürzel verwenden dieselbe Kombination. Es wurde nichts gespeichert.",
       "tabProfiles": "Profile",
-      "watchSection": "Überwachte Ordner",
       "transfer": "Import und Export",
       "transferHint": "Der Importassistent liest .ovpn-Dateien, Ordner, ZIP-Archive und .ovppkg-Pakete. Der Export schreibt einfache Konfigurationen oder ein verschlüsseltes Paket, das einen ganzen Satz auf einen anderen Rechner mitnimmt.",
       "reloadProfiles": "Liste neu laden",
@@ -362,20 +358,6 @@
       "delete": "Löschen",
       "deleteConfirm": "Damit werden das Profil und sein Verlauf entfernt. Das lässt sich nicht rückgängig machen.",
       "nameRequired": "Ein Profil braucht einen Namen."
-    },
-    "watch": {
-      "hint": "Ein überwachter Ordner wird beim Start der Anwendung geprüft und erneut, sobald dort eine Datei erscheint. Eine bereits gespeicherte Konfiguration wird an ihrem Inhalt erkannt, es wird also nichts doppelt importiert.",
-      "empty": "Es werden keine Ordner überwacht.",
-      "add": "Ordner überwachen",
-      "scanNow": "Jetzt prüfen",
-      "autoImport": "Gefundenes ohne Nachfrage importieren",
-      "recursive": "Unterordner einbeziehen",
-      "added": "{0} wird überwacht.",
-      "removed": "{0} wird nicht mehr überwacht.",
-      "scanned": "{0} Profil(e) importiert.",
-      "imported": "{0} Profil(e) aus {1} importiert.",
-      "interval": "Erneut prüfen alle, in Minuten",
-      "intervalHint": "Null prüft nur beim Start und wenn der Ordner eine Änderung meldet, was für einen lokalen Ordner genügt. Setzen Sie ein Intervall für eine Netzwerkfreigabe, wo auf diese Meldungen kein Verlass ist. So gefundene Profile erscheinen in der Bibliothek unter Neu, bis Sie sie als gesehen markieren."
     },
     "tags": {
       "applied": "{0} zu {1} Profil(en) hinzugefügt.",

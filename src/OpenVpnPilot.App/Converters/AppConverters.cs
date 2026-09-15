@@ -48,18 +48,6 @@ public static class AppConverters
             : "-");
 
     /// <summary>
-    /// Renders when a watched directory was last scanned.
-    /// </summary>
-    /// <remarks>
-    /// A directory that has never been scanned says so rather than showing an empty cell, because an
-    /// empty cell reads as "nothing found" rather than as "not looked at yet".
-    /// </remarks>
-    public static readonly IValueConverter LastScan = new FuncValueConverter<DateTimeOffset?, string>(
-        static when => when is { } moment
-            ? moment.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
-            : "-");
-
-    /// <summary>
     /// Renders a count only when it is greater than zero, so empty badges stay hidden.
     /// </summary>
     public static readonly IValueConverter CountBadge = new FuncValueConverter<int, string>(

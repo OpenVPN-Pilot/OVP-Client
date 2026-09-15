@@ -76,8 +76,6 @@ internal static class AppHost
         builder.Services.AddSingleton<IHotkeyStore, HotkeyStore>();
         builder.Services.AddSingleton<IProfileImportService, ProfileImportService>();
         builder.Services.AddSingleton<IProfilePackageWriter, ProfilePackageWriter>();
-        builder.Services.AddSingleton<IWatchedFolderStore, WatchedFolderStore>();
-        builder.Services.AddSingleton<WatchedFolderMonitor>();
         builder.Services.AddSingleton<DiagnosticsBundle>();
         builder.Services.AddSingleton<EnvironmentGate>();
         builder.Services.AddSingleton<UpdateCoordinator>();

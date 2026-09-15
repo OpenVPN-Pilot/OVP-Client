@@ -185,32 +185,6 @@ public sealed class ProfileImporterTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
-    public async Task CommitAsync_WithADiscoveryTime_MarksTheProfilesAsNew()
-    {
-        string path = WriteConfig("site-alpha.ovpn", SelfContained("vpn.example.com", 1194, "udp"));
-        ProfileImporter importer = CreateImporter();
-
-        DateTimeOffset found = new(2026, 5, 1, 12, 0, 0, TimeSpan.Zero);
-        await importer.CommitAsync(await importer.PrepareAsync([path]), found);
-
-        // The mark is what puts a profile under the library's new entry until it has been seen.
-        Profile stored = await context.Profiles.SingleAsync();
-        Assert.Equal(found, stored.DiscoveredAt);
-    }
-
-    [Fact]
-    public async Task CommitAsync_WithoutADiscoveryTime_LeavesTheProfileUnmarked()
-    {
-        string path = WriteConfig("site-beta.ovpn", SelfContained("vpn.example.com", 1194, "udp"));
-        ProfileImporter importer = CreateImporter();
-
-        await importer.CommitAsync(await importer.PrepareAsync([path]));
-
-        // An import the user asked for is not news to them.
-        Assert.Null((await context.Profiles.SingleAsync()).DiscoveredAt);
-    }
-
-    [Fact]
     public async Task FavouriteSlot_CannotBeClaimedTwice()
     {
         string first = WriteConfig("a.ovpn", SelfContained("a.example.com", 1194, "udp"));

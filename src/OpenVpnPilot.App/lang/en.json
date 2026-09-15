@@ -45,8 +45,6 @@
       "favourites": "Favourites",
       "recent": "Recent",
       "history": "History",
-      "new": "New",
-      "markSeen": "Mark these as seen",
       "log": "Log",
       "logHint": "Everything this application and OpenVPN record, as it happens. One file per day is kept beside the profile store."
     },
@@ -122,7 +120,6 @@
       "profileBusy": "{0}: {1}",
       "reconnectScheduled": "{0} dropped. Reconnecting in {1} s, attempt {2}.",
       "reconnectGaveUp": "{0} could not be reconnected after {1} attempt(s).",
-      "discoveriesCleared": "{0} profile(s) marked as seen.",
       "credentialsForgotten": "The stored credentials for {0} were forgotten.",
       "noStoredCredentials": "Nothing was stored for {0}."
     },
@@ -237,7 +234,6 @@
       "historyCleared": "{0} session(s) removed.",
       "conflictNotSaved": "Two shortcuts use the same combination. Nothing was saved.",
       "tabProfiles": "Profiles",
-      "watchSection": "Watched folders",
       "transfer": "Import and export",
       "transferHint": "The import wizard reads .ovpn files, folders, ZIP archives and .ovppkg packages. Export writes plain configurations, or one encrypted package that carries a whole set to another machine.",
       "reloadProfiles": "Reload the list",
@@ -362,20 +358,6 @@
       "delete": "Delete",
       "deleteConfirm": "This removes the profile and its history. It cannot be undone.",
       "nameRequired": "A profile needs a name."
-    },
-    "watch": {
-      "hint": "A watched directory is scanned when the application starts and again whenever a file appears in it. A configuration that is already stored is recognised by its contents, so nothing is imported twice.",
-      "empty": "No directories are being watched.",
-      "add": "Watch a folder",
-      "scanNow": "Scan now",
-      "autoImport": "Import what is found without asking",
-      "recursive": "Include subfolders",
-      "added": "Watching {0}.",
-      "removed": "No longer watching {0}.",
-      "scanned": "{0} profile(s) imported.",
-      "imported": "{0} profile(s) imported from {1}.",
-      "interval": "Re-read every, in minutes",
-      "intervalHint": "Zero re-reads only at startup and when the directory reports a change, which is enough for a local folder. Set an interval for a network share, where those reports cannot be relied on. Profiles that arrive this way appear under New in the library until you mark them as seen."
     },
     "tags": {
       "applied": "{0} added to {1} profile(s).",

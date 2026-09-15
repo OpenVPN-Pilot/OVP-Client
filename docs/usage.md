@@ -8,9 +8,6 @@ There are no folders. A profile carries as many tags as it needs, the sidebar li
 search box matches a tag along with the name and the remote host. One profile can belong to as many
 groupings as make sense, which a tree cannot express, and nothing has to be maintained by hand.
 
-Profiles a watched directory brings in appear under **New** until they are marked as seen, so an
-automatic import never drops them unannounced into the middle of the list.
-
 ## Working on more than one at a time
 
 ![The quick switcher filtering the list as letters are typed](../assets/screenshots/quick-switcher.png)

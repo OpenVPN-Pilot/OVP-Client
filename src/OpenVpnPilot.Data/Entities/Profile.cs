@@ -26,7 +26,7 @@ public sealed class Profile
     public ProfileSource Source { get; set; } = ProfileSource.Manual;
 
     /// <summary>
-    /// Where the profile came from, so a watched folder can match a file back to its profile.
+    /// The file the profile was imported from, so the user can still tell where it came from.
     /// </summary>
     public string? SourcePath { get; set; }
 
@@ -81,16 +81,6 @@ public sealed class Profile
     /// </summary>
     public string? Colour { get; set; }
 
-    /// <summary>
-    /// When a watched directory brought this profile in, until the user has looked at it.
-    /// </summary>
-    /// <remarks>
-    /// A directory that imports on its own would otherwise drop profiles into the middle of an
-    /// alphabetical list with nothing to distinguish them. This is what the library's new entry
-    /// filters on, and clearing it is how the user says they have seen it.
-    /// </remarks>
-    public DateTimeOffset? DiscoveredAt { get; set; }
-
     public DateTimeOffset? LastConnectedAt { get; set; }
 
     public int ConnectCount { get; set; }
@@ -112,12 +102,7 @@ public enum ProfileSource
     Manual,
 
     /// <summary>
-    /// Imported once from a file or an archive.
+    /// Imported once from a file, an archive or a package.
     /// </summary>
     Imported,
-
-    /// <summary>
-    /// Kept in step with a watched folder.
-    /// </summary>
-    WatchedFolder,
 }

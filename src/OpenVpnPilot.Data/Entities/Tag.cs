@@ -56,22 +56,3 @@ public sealed class CredentialSet
 
     public List<Profile> Profiles { get; } = [];
 }
-
-/// <summary>
-/// A directory watched for configuration files, so that profiles stay in step with a shared location.
-/// </summary>
-public sealed class WatchedFolder
-{
-    public Guid Id { get; set; } = Guid.NewGuid();
-
-    public required string Path { get; set; }
-
-    public bool IsRecursive { get; set; } = true;
-
-    /// <summary>
-    /// True when new files are imported without asking.
-    /// </summary>
-    public bool AutoImport { get; set; } = true;
-
-    public DateTimeOffset? LastScanAt { get; set; }
-}

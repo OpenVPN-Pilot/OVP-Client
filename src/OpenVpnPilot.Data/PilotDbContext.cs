@@ -27,8 +27,6 @@ public sealed class PilotDbContext : DbContext
 
     public DbSet<CredentialSet> CredentialSets => Set<CredentialSet>();
 
-    public DbSet<WatchedFolder> WatchedFolders => Set<WatchedFolder>();
-
     public DbSet<Session> Sessions => Set<Session>();
 
     public DbSet<SessionEvent> SessionEvents => Set<SessionEvent>();
@@ -109,12 +107,6 @@ public sealed class PilotDbContext : DbContext
             entity.Property(set => set.Name).HasMaxLength(200);
             entity.Property(set => set.SecretReference).HasMaxLength(200);
             entity.HasIndex(set => set.Name).IsUnique();
-        });
-
-        modelBuilder.Entity<WatchedFolder>(entity =>
-        {
-            entity.Property(folder => folder.Path).HasMaxLength(1000);
-            entity.HasIndex(folder => folder.Path).IsUnique();
         });
 
         modelBuilder.Entity<Session>(entity =>

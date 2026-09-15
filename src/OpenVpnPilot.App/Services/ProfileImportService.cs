@@ -40,14 +40,10 @@ public interface IProfileImportService
     /// <summary>
     /// Stores the accepted candidates, optionally tagging them.
     /// </summary>
-    /// <param name="discoveredAt">
-    /// Set when a watched directory brought these in, so the library can mark them as new.
-    /// </param>
     /// <returns>How many profiles were created.</returns>
     public Task<int> CommitAsync(
         IReadOnlyList<ImportCandidate> candidates,
         IReadOnlyList<string> tagNames,
-        DateTimeOffset? discoveredAt = null,
         CancellationToken cancellationToken = default);
 }
 
@@ -170,7 +166,6 @@ public sealed class ProfileImportService : IProfileImportService
     public async Task<int> CommitAsync(
         IReadOnlyList<ImportCandidate> candidates,
         IReadOnlyList<string> tagNames,
-        DateTimeOffset? discoveredAt = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(candidates);
@@ -179,10 +174,7 @@ public sealed class ProfileImportService : IProfileImportService
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
         ProfileImporter importer = new(context, inliner, timeProvider);
 
-        IReadOnlyList<Profile> created = await importer.CommitAsync(
-            candidates,
-            discoveredAt,
-            cancellationToken);
+        IReadOnlyList<Profile> created = await importer.CommitAsync(candidates, cancellationToken);
 
         if (created.Count > 0 && tagNames.Count > 0)
         {

@@ -172,12 +172,6 @@
                       Command="{Binding ConnectVisibleCommand}" />
             </StackPanel>
 
-            <StackPanel Spacing="6" IsVisible="{Binding IsNewSelected}">
-              <Button Content="{loc:Translate nav.markSeen}" Classes="quiet"
-                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                      Command="{Binding MarkDiscoveriesSeenCommand}" />
-            </StackPanel>
-
             <StackPanel Spacing="6" IsVisible="{Binding HasTags}">
               <StackPanel Orientation="Horizontal" Spacing="6" Margin="10,0,0,2">
                 <TextBlock Text="{loc:Translate nav.tags}" Classes="overline" VerticalAlignment="Center" />
@@ -269,11 +263,6 @@
                   <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                     <Border Classes="slot" Margin="7,0,0,0" IsVisible="{Binding HasFavouriteSlot}">
                       <TextBlock Text="{Binding FavouriteSlotDisplay}" />
-                    </Border>
-                    <Border Classes="pill" Margin="7,0,0,0" IsVisible="{Binding IsNew}"
-                            Background="{DynamicResource AccentSoft}">
-                      <TextBlock Text="{loc:Translate nav.new}"
-                                 Foreground="{DynamicResource Accent}" />
                     </Border>
                   </StackPanel>
 

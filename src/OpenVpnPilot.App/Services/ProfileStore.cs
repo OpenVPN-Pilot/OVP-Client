@@ -69,13 +69,6 @@ public interface IProfileStore
         CancellationToken cancellationToken = default);
 
     public Task DeleteProfileAsync(Guid profileId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Clears the discovery marks, which is how the user says they have seen what a watched
-    /// directory brought in.
-    /// </summary>
-    /// <returns>How many profiles were marked as seen.</returns>
-    public Task<int> ClearDiscoveriesAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -114,7 +107,6 @@ public sealed class ProfileStore : IProfileStore
                 Name = profile.Name,
                 Configuration = string.Empty,
                 ContentHash = profile.ContentHash,
-                DiscoveredAt = profile.DiscoveredAt,
                 RemoteHost = profile.RemoteHost,
                 RemotePort = profile.RemotePort,
                 Protocol = profile.Protocol,
@@ -387,17 +379,6 @@ public sealed class ProfileStore : IProfileStore
         await context.Tags
             .Where(tag => !tag.Profiles.Any())
             .ExecuteDeleteAsync(cancellationToken);
-    }
-
-    public async Task<int> ClearDiscoveriesAsync(CancellationToken cancellationToken = default)
-    {
-        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
-
-        return await context.Profiles
-            .Where(profile => profile.DiscoveredAt != null)
-            .ExecuteUpdateAsync(
-                setters => setters.SetProperty(profile => profile.DiscoveredAt, (DateTimeOffset?)null),
-                cancellationToken);
     }
 
     private sealed record TagLink(Guid ProfileId, string Name);

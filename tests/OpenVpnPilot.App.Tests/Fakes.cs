@@ -147,9 +147,6 @@ internal sealed class FakeProfileStore : IProfileStore
         bool? protectRoutes,
         CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
-
-    public Task<int> ClearDiscoveriesAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(0);
 }
 
 internal sealed class FakeSettingsService : ISettingsService

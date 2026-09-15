@@ -319,18 +319,6 @@ public partial class App : Application
             AppLog.AbandonedSessionsClosed(logger, abandoned);
         }
 
-        WatchedFolderMonitor watched = services.GetRequiredService<WatchedFolderMonitor>();
-
-        watched.Imported += (_, imported) => Dispatcher.UIThread.Post(async () =>
-        {
-            MainWindowViewModel model = services.GetRequiredService<MainWindowViewModel>();
-            await model.LoadAsync();
-            model.StatusMessage = services.GetRequiredService<Core.Localization.ILocalizer>()
-                .Translate("watch.imported", imported.Count, imported.Path);
-        });
-
-        await watched.StartAsync();
-
         // A shortcut that opens a window is not something a headless copy should own, and the
         // copy that a person is using may be the one that wants them.
         if (Startup.Headless)
@@ -399,7 +387,6 @@ public partial class App : Application
         RunStep(logger, "hotkeys", () => services.GetRequiredService<HotkeyCoordinator>().Dispose());
         RunStep(logger, "reconnects", () => services.GetRequiredService<ReconnectSupervisor>().Dispose());
         RunStep(logger, started, "ping", async () => await services.GetRequiredService<PingMonitor>().DisposeAsync());
-        RunStep(logger, started, "watched folders", async () => await services.GetRequiredService<WatchedFolderMonitor>().DisposeAsync());
         RunStep(logger, "tray icon", () => services.GetRequiredService<TrayIconController>().Dispose());
         RunStep(logger, "application menu", () => applicationMenu?.Dispose());
         RunStep(logger, "log relay", () => services.GetRequiredService<OpenVpnLogRelay>().Dispose());

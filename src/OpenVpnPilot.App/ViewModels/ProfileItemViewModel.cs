@@ -22,7 +22,6 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
 
         Id = profile.Id;
         Name = profile.Name;
-        DiscoveredAt = profile.DiscoveredAt;
         Endpoint = FormatEndpoint(profile);
         RequiresCredentials = profile.RequiresCredentials;
         HasUnsupportedOptions = profile.HasUnsupportedOptions;
@@ -47,13 +46,6 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     public Guid Id { get; }
 
     public string Name { get; }
-
-    /// <summary>
-    /// Set while a profile a watched directory brought in has not been looked at yet.
-    /// </summary>
-    public DateTimeOffset? DiscoveredAt { get; }
-
-    public bool IsNew => DiscoveredAt is not null;
 
     public string Endpoint { get; }
 

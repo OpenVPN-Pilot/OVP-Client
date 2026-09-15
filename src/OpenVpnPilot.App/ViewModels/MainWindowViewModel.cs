@@ -79,7 +79,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.Active, "nav.active", localizer),
             SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.Favourites, "nav.favourites", localizer),
             SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.Recent, "nav.recent", localizer),
-            SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.New, "nav.new", localizer),
         ];
 
         // A connected row shows its uptime, which has to advance on its own because nothing in the
@@ -155,7 +154,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// its own selection back. Both entries then looked chosen and the filter was neither.
     /// </remarks>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsNewSelected))]
     public partial SidebarFilterViewModel? SelectedFilter { get; set; }
 
     /// <summary>
@@ -174,11 +172,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// Set while one list is being cleared because the other was chosen from.
     /// </summary>
     private bool movingSelection;
-
-    /// <summary>
-    /// True while the new entry is selected, which is when marking everything seen makes sense.
-    /// </summary>
-    public bool IsNewSelected => SelectedFilter?.Kind == SidebarFilterKind.New;
 
     [ObservableProperty]
     public partial string StatusMessage { get; set; } = string.Empty;
@@ -699,7 +692,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
                 SidebarFilterKind.Active => allProfiles.Count(profile => !profile.IsIdle),
                 SidebarFilterKind.Favourites => allProfiles.Count(profile => profile.IsFavourite),
                 SidebarFilterKind.Recent => allProfiles.Count(profile => profile.LastConnectedAt is not null),
-                SidebarFilterKind.New => allProfiles.Count(profile => profile.IsNew),
                 _ => 0,
             };
         }
@@ -726,9 +718,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             SidebarFilterKind.Recent => matches
                 .Where(profile => profile.LastConnectedAt is not null)
                 .OrderByDescending(profile => profile.LastConnectedAt),
-            SidebarFilterKind.New => matches
-                .Where(profile => profile.IsNew)
-                .OrderByDescending(profile => profile.DiscoveredAt),
             SidebarFilterKind.Tag => matches.Where(profile =>
                 profile.Tags.Contains(filter!.TagName!, StringComparer.OrdinalIgnoreCase)),
             _ => matches,
@@ -999,25 +988,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             await ConnectAsync(profile);
         }
-    }
-
-    /// <summary>
-    /// Clears the new marks, which is how the user says they have looked at what arrived.
-    /// </summary>
-    [RelayCommand]
-    private async Task MarkDiscoveriesSeenAsync()
-    {
-        int cleared = await store.ClearDiscoveriesAsync();
-
-        if (cleared == 0)
-        {
-            return;
-        }
-
-        SelectedBuiltIn = Filters[0];
-        await LoadAsync();
-
-        StatusMessage = localizer.Translate("status.discoveriesCleared", cleared);
     }
 
     /// <summary>

@@ -28,8 +28,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private readonly ISecretStore secrets;
     private readonly IAutoStartManager autoStart;
     private readonly ISessionStore sessions;
-    private readonly IWatchedFolderStore watchedFolders;
-    private readonly WatchedFolderMonitor watchedFolderMonitor;
     private readonly DiagnosticsBundle diagnostics;
     private readonly UpdateCoordinator updates;
 
@@ -44,8 +42,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         ISecretStore secrets,
         IAutoStartManager autoStart,
         ISessionStore sessions,
-        IWatchedFolderStore watchedFolders,
-        WatchedFolderMonitor watchedFolderMonitor,
         DiagnosticsBundle diagnostics,
         UpdateCoordinator updates)
     {
@@ -57,8 +53,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(secrets);
         ArgumentNullException.ThrowIfNull(autoStart);
         ArgumentNullException.ThrowIfNull(sessions);
-        ArgumentNullException.ThrowIfNull(watchedFolders);
-        ArgumentNullException.ThrowIfNull(watchedFolderMonitor);
         ArgumentNullException.ThrowIfNull(diagnostics);
         ArgumentNullException.ThrowIfNull(updates);
 
@@ -70,8 +64,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         this.secrets = secrets;
         this.autoStart = autoStart;
         this.sessions = sessions;
-        this.watchedFolders = watchedFolders;
-        this.watchedFolderMonitor = watchedFolderMonitor;
         this.diagnostics = diagnostics;
         this.updates = updates;
 
@@ -119,22 +111,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public ObservableCollection<HotkeyEditorViewModel> Hotkeys { get; } = [];
 
-    public ObservableCollection<WatchedFolderRecord> WatchedFolders { get; } = [];
-
-    public bool HasWatchedFolders => WatchedFolders.Count > 0;
-
-    [ObservableProperty]
-    public partial WatchedFolderRecord? SelectedWatchedFolder { get; set; }
-
-    /// <summary>
-    /// Whether a directory added from here imports on its own or only reports what it found.
-    /// </summary>
-    [ObservableProperty]
-    public partial bool WatchAutoImports { get; set; } = true;
-
-    [ObservableProperty]
-    public partial bool WatchRecursively { get; set; } = true;
-
     [ObservableProperty]
     public partial LanguageChoice? SelectedLanguage { get; set; }
 
@@ -167,9 +143,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     [ObservableProperty]
     public partial bool RestoreOnStart { get; set; }
-
-    [ObservableProperty]
-    public partial int WatchIntervalMinutes { get; set; }
 
     [ObservableProperty]
     public partial bool NotificationsEnabled { get; set; }
@@ -282,14 +255,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
             Hotkeys.Add(editor);
         }
 
-        WatchedFolders.Clear();
-        foreach (WatchedFolderRecord folder in await watchedFolders.GetAllAsync(cancellationToken))
-        {
-            WatchedFolders.Add(folder);
-        }
-
-        OnPropertyChanged(nameof(HasWatchedFolders));
-
         StoredSecretCount = (await secrets.ListAsync(cancellationToken)).Count;
 
         // The registry is the truth for autostart, not the settings file, because the entry can be
@@ -315,7 +280,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         MaxReconnectAttempts = draft.Connections.MaxReconnectAttempts;
         ReconnectDelaySeconds = draft.Connections.ReconnectDelaySeconds;
         RestoreOnStart = draft.Connections.RestoreOnStart;
-        WatchIntervalMinutes = draft.Connections.WatchIntervalMinutes;
 
         NotificationsEnabled = draft.Notifications.Enabled;
         NotifyOnConnecting = draft.Notifications.OnConnecting;
@@ -351,7 +315,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         draft.Connections.MaxReconnectAttempts = Math.Clamp(MaxReconnectAttempts, 0, 100);
         draft.Connections.ReconnectDelaySeconds = Math.Clamp(ReconnectDelaySeconds, 1, 600);
         draft.Connections.RestoreOnStart = RestoreOnStart;
-        draft.Connections.WatchIntervalMinutes = Math.Clamp(WatchIntervalMinutes, 0, 1440);
 
         draft.Notifications.Enabled = NotificationsEnabled;
         draft.Notifications.OnConnecting = NotifyOnConnecting;
@@ -448,10 +411,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// Reads the profile list from the store again.
     /// </summary>
     /// <remarks>
-    /// The list keeps itself current for everything the window does: an import, an edit and a watched
-    /// directory all reload it. What it cannot see is the store being changed from outside, by the
-    /// companion command in a terminal or by a second machine writing to a synchronised copy. This is
-    /// the way back from that, and it is here rather than in the header because it is needed rarely.
+    /// The list keeps itself current for everything the window does: an import and an edit both
+    /// reload it. What it cannot see is the store being changed from outside, by the companion
+    /// command in a terminal. This is the way back from that, and it is here rather than in the
+    /// header because it is needed rarely.
     /// </remarks>
     [RelayCommand]
     private void ReloadProfiles()
@@ -505,50 +468,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         int removed = await sessions.PruneAsync(DateTimeOffset.UtcNow);
         StatusMessage = localizer.Translate("settings.historyCleared", removed);
-    }
-
-    /// <summary>
-    /// Starts watching a directory. The path comes from the view, which owns the picker.
-    /// </summary>
-    public async Task AddWatchedFolderAsync(string path, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-
-        await watchedFolders.AddAsync(path, WatchRecursively, WatchAutoImports, cancellationToken);
-
-        await watchedFolderMonitor.ReloadAsync(cancellationToken);
-        await LoadAsync(cancellationToken);
-
-        StatusMessage = localizer.Translate("watch.added", path);
-    }
-
-    [RelayCommand]
-    private async Task RemoveWatchedFolderAsync()
-    {
-        if (SelectedWatchedFolder is not { } folder)
-        {
-            return;
-        }
-
-        await watchedFolders.RemoveAsync(folder.Id);
-        await watchedFolderMonitor.ReloadAsync();
-        await LoadAsync();
-
-        StatusMessage = localizer.Translate("watch.removed", folder.Path);
-    }
-
-    [RelayCommand]
-    private async Task ScanWatchedFoldersAsync()
-    {
-        int total = 0;
-
-        foreach (WatchedFolderRecord folder in WatchedFolders.ToList())
-        {
-            total += await watchedFolderMonitor.ScanAsync(folder);
-        }
-
-        await LoadAsync();
-        StatusMessage = localizer.Translate("watch.scanned", total);
     }
 
     /// <summary>

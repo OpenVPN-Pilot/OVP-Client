@@ -54,7 +54,7 @@ The rest is one page per subject, so this one stays short:
 - Session history with durations and transfer volumes, exportable as CSV and clearable by filter
 - A live log window carrying both this application's own record and OpenVPN's, filterable by source,
   level and text, written to one file per day and kept for as long as you say
-- Bulk import from files, folders and ZIP archives, plus watched folders that keep profiles in sync
+- Bulk import from files, folders and ZIP archives
 - Opening a `.ovpn` file from the shell brings up the import wizard with it, once you have picked
   this application in the Open with menu
 - Export as plain configurations, or as an encrypted `.ovppkg` package for another machine, which
@@ -115,7 +115,7 @@ platform's page.
 - [x] Tags, favourites, quick switcher, import and export
 - [x] Global shortcuts, notifications, telemetry and session history
 - [x] Localization, settings, autostart and auto reconnect
-- [x] Portable packages, watched folders and a diagnostics bundle
+- [x] Portable packages and a diagnostics bundle
 - [x] Installer, `ovp` on PATH, and a command line other software can drive
 - [x] macOS: the helper that starts OpenVPN as root, the bundle, the disk image and the package
 - [ ] An update feed
