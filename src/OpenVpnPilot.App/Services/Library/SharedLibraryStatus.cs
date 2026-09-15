@@ -139,6 +139,11 @@ public enum SharedLibraryActivityKind
 
     ChangedMeanwhile,
 
+    /// <summary>
+    /// The sync client kept another machine's file instead of the one written here.
+    /// </summary>
+    WriteNotKept,
+
     ConflictCopiesFound,
 
     Failed,

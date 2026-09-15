@@ -593,6 +593,7 @@
         "ConflictsResolved": "{0} conflict(s) resolved, the later change was kept",
         "Written": "Shared file written ({0})",
         "ChangedMeanwhile": "Another machine wrote the file in the meantime, merging again",
+        "WriteNotKept": "The sync client kept another machine's version instead of this one; the changes made here are merged in again",
         "ConflictCopiesFound": "Copies left by the sync client: {0}",
         "Failed": "Synchronising failed",
         "RetryScheduled": "Trying again at {0}",

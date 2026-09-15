@@ -71,6 +71,18 @@ public sealed record ProfilePackageContent
     /// </summary>
     [JsonPropertyName("deletedProfiles")]
     public IReadOnlyList<PackagedDeletion> DeletedProfiles { get; init; } = [];
+
+    /// <summary>
+    /// The hashes of the shared file's earlier versions this one was merged from, oldest first.
+    /// </summary>
+    /// <remarks>
+    /// How a machine tells a version that continued its own write from one written beside it. A
+    /// sync client that saw two writes at once keeps one of them, and the machine whose write was not
+    /// kept has to merge against what both started from, or its changes read as taken back. A reader
+    /// that does not know the field ignores it.
+    /// </remarks>
+    [JsonPropertyName("lineage")]
+    public IReadOnlyList<string> Lineage { get; init; } = [];
 }
 
 /// <summary>

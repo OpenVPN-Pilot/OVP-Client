@@ -593,6 +593,7 @@
         "ConflictsResolved": "{0} Konflikt(e) gelöst, die spätere Änderung gilt",
         "Written": "Geteilte Datei geschrieben ({0})",
         "ChangedMeanwhile": "Ein anderer Rechner hat zwischendurch geschrieben, es wird erneut zusammengeführt",
+        "WriteNotKept": "Der Synchronisierungsdienst hat die Version eines anderen Rechners behalten; die Änderungen von hier werden erneut eingebracht",
         "ConflictCopiesFound": "Vom Synchronisierungsdienst abgelegte Kopien: {0}",
         "Failed": "Abgleich fehlgeschlagen",
         "RetryScheduled": "Neuer Versuch um {0}",

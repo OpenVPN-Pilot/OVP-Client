@@ -54,6 +54,12 @@ public sealed class SharedLibrarySync : IAsyncDisposable
     private const int ReconcileAttempts = 3;
 
     /// <summary>
+    /// How many earlier versions a file names. Enough to cover every write a machine that was away
+    /// for a while missed, few enough not to matter to the size of the file.
+    /// </summary>
+    private const int LineageKept = 50;
+
+    /// <summary>
     /// How many steps are kept for a person to look back on.
     /// </summary>
     private const int ActivityKept = 200;
@@ -158,6 +164,12 @@ public sealed class SharedLibrarySync : IAsyncDisposable
     private string RecordPath => Path.Combine(recordDirectory, "state.json");
 
     private string AncestorPath => Path.Combine(recordDirectory, "ancestor.ovppkg");
+
+    /// <summary>
+    /// The version this machine's last write was merged from, kept until a later version shows that
+    /// the write was continued.
+    /// </summary>
+    private string BasePath => Path.Combine(recordDirectory, "base.ovppkg");
 
     /// <summary>
     /// Starts reconciling in the background: once now, then whenever something is due.
@@ -646,7 +658,20 @@ public sealed class SharedLibrarySync : IAsyncDisposable
                 string hash = Hash(bytes);
                 Record(SharedLibraryActivityKind.Read, (long)bytes.Length);
                 ProfilePackageContent remote = ProfilePackageFile.Decode(bytes, passphrase);
-                ProfilePackageContent? ancestor = record.RemoteHash is null ? null : LoadAncestor(passphrase);
+                ProfilePackageContent? ancestor = record.RemoteHash is null ? null : LoadAncestor(AncestorPath, passphrase);
+
+                // This machine wrote last, and the file now holds a version that does not descend from
+                // that write: the sync client kept another machine's file instead. What this machine
+                // wrote is still in its store, so it merges against the version its write started
+                // from, where those changes are changes rather than something the file took back.
+                if (record.WroteLast
+                    && !string.Equals(hash, record.RemoteHash, StringComparison.Ordinal)
+                    && !(remote.Lineage ?? []).Contains(record.RemoteHash, StringComparer.Ordinal))
+                {
+                    SharedLibraryLog.WriteNotKept(logger, path);
+                    Record(SharedLibraryActivityKind.WriteNotKept);
+                    ancestor = LoadAncestor(BasePath, passphrase);
+                }
 
                 LibraryMergeResult result;
 
@@ -669,10 +694,13 @@ public sealed class SharedLibrarySync : IAsyncDisposable
                 }
 
                 byte[] ancestorBytes = bytes;
+                bool wrote = false;
 
                 if (result.SharedChanged)
                 {
-                    byte[] encoded = ProfilePackageFile.Encode(result.Shared, passphrase);
+                    byte[] encoded = ProfilePackageFile.Encode(
+                        result.Shared with { Lineage = [.. (remote.Lineage ?? []).TakeLast(LineageKept - 1), hash] },
+                        passphrase);
 
                     await using (await file.LockAsync(LockWait, cancellationToken))
                     {
@@ -689,11 +717,12 @@ public sealed class SharedLibrarySync : IAsyncDisposable
                     Record(SharedLibraryActivityKind.Written, (long)encoded.Length);
 
                     ancestorBytes = encoded;
+                    wrote = true;
                 }
 
                 List<string> copies = NewConflictCopies(file, record);
                 record.DeferredProfiles = [.. result.DeferredProfiles];
-                await CompleteAsync(file, record, ancestorBytes, cancellationToken);
+                await CompleteAsync(file, record, ancestorBytes, cancellationToken, based: wrote ? bytes : null);
                 secretChangesSynchronised = secretsBefore;
 
                 SharedLibraryLog.Reconciled(
@@ -782,6 +811,11 @@ public sealed class SharedLibrarySync : IAsyncDisposable
                 retry: true,
                 cancellationToken);
         }
+        catch (System.Data.Common.DbException exception)
+        {
+            SharedLibraryLog.Failed(logger, path, exception);
+            return await FailAsync(SharedLibraryCondition.Failed, record, exception.Message, retry: true, cancellationToken);
+        }
         catch (DbUpdateException exception)
         {
             SharedLibraryLog.Failed(logger, path, exception);
@@ -796,15 +830,26 @@ public sealed class SharedLibrarySync : IAsyncDisposable
     /// The size and time the file had before it was read, when nothing was written since. Without
     /// one they are taken now, which is right after a write of this machine's own.
     /// </param>
+    /// <param name="based">
+    /// What the file held before this machine wrote over it, or null when this machine did not write.
+    /// </param>
     private async Task CompleteAsync(
         SharedLibraryFile file,
         SyncRecord record,
         byte[] ancestor,
         CancellationToken cancellationToken,
-        SharedFileStamp? readStamp = null)
+        SharedFileStamp? readStamp = null,
+        byte[]? based = null)
     {
         Directory.CreateDirectory(recordDirectory);
         await File.WriteAllBytesAsync(AncestorPath, ancestor, cancellationToken);
+
+        if (based is not null)
+        {
+            await File.WriteAllBytesAsync(BasePath, based, cancellationToken);
+        }
+
+        record.WroteLast = based is not null;
 
         SharedFileStamp? stamp = readStamp ?? file.Probe();
 
@@ -959,12 +1004,12 @@ public sealed class SharedLibrarySync : IAsyncDisposable
         return fresh;
     }
 
-    private ProfilePackageContent? LoadAncestor(string passphrase)
+    private ProfilePackageContent? LoadAncestor(string recordFile, string passphrase)
     {
         try
         {
-            return File.Exists(AncestorPath)
-                ? ProfilePackageFile.Decode(File.ReadAllBytes(AncestorPath), passphrase)
+            return File.Exists(recordFile)
+                ? ProfilePackageFile.Decode(File.ReadAllBytes(recordFile), passphrase)
                 : null;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or CryptographicException or InvalidOperationException)
@@ -1017,7 +1062,7 @@ public sealed class SharedLibrarySync : IAsyncDisposable
 
     private void ForgetRecord()
     {
-        foreach (string path in new[] { RecordPath, AncestorPath })
+        foreach (string path in new[] { RecordPath, AncestorPath, BasePath })
         {
             try
             {
@@ -1086,6 +1131,11 @@ public sealed class SharedLibrarySync : IAsyncDisposable
         public string? LocalFingerprint { get; set; }
 
         public DateTimeOffset? WaitingSince { get; set; }
+
+        /// <summary>
+        /// True when the version recorded as the ancestor is one this machine wrote.
+        /// </summary>
+        public bool WroteLast { get; set; }
 
         /// <summary>
         /// Profiles the file says are deleted and that stay here while their tunnel runs.

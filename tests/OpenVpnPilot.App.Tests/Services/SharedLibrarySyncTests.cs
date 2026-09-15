@@ -432,6 +432,34 @@ public sealed class SharedLibrarySyncTests : IAsyncLifetime
         Assert.False(await second.Sync.IsDueHereAsync());
     }
 
+    /// <summary>
+    /// Two machines write while neither can see the other's lock, as when one of them is offline and
+    /// the sync client keeps only one of the two files. The machine whose file was not kept still has
+    /// its changes, and they must reach the library rather than be taken back.
+    /// </summary>
+    [Fact]
+    public async Task AWriteTheSyncClientDidNotKeep_IsNotTakenBack()
+    {
+        (Machine first, Machine second, Guid id) = await TwoJoinedMachinesAsync();
+        byte[] common = await File.ReadAllBytesAsync(LibraryPath);
+
+        // The first machine adds a profile and writes, but the sync client later keeps the other file.
+        await first.AddAsync("added-while-offline", 1300);
+        await first.Sync.SyncNowAsync();
+        await File.WriteAllBytesAsync(LibraryPath, common);
+        File.SetLastWriteTimeUtc(LibraryPath, DateTime.UtcNow.AddSeconds(5));
+
+        // The second machine renames a profile on the version both started from and writes.
+        await second.ChangeAsync(id, profile => profile.Name = "renamed-meanwhile");
+        await second.Sync.SyncNowAsync();
+
+        await first.Sync.SyncNowAsync();
+        await second.Sync.SyncNowAsync();
+
+        Assert.Equal(["added-while-offline", "renamed-meanwhile"], await first.NamesAsync());
+        Assert.Equal(["added-while-offline", "renamed-meanwhile"], await second.NamesAsync());
+    }
+
     private async Task<(Machine First, Machine Second, Guid Id)> TwoJoinedMachinesAsync(TimeSpan? lockWait = null)
     {
         Machine first = await CreateMachineAsync("first", lockWait);

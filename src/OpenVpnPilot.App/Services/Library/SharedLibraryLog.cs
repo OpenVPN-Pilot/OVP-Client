@@ -17,6 +17,12 @@ internal static partial class SharedLibraryLog
     public static partial void Reconciled(ILogger logger, string path, int added, int updated, int removed, int conflicts, bool written);
 
     [LoggerMessage(
+        EventId = 3210,
+        Level = LogLevel.Warning,
+        Message = "Shared library {Path} holds a version that does not descend from this machine's last write; merging against the version that write started from.")]
+    public static partial void WriteNotKept(ILogger logger, string path);
+
+    [LoggerMessage(
         EventId = 3201,
         Level = LogLevel.Warning,
         Message = "Shared library {Path} could not be reached.")]
