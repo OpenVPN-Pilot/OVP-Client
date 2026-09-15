@@ -8,6 +8,81 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged. A release tag is `v<version>`, for example `v1.2.0`.
 
+## [1.5.0] - 2026-09-15
+
+### Added
+
+- **The configuration can be edited.** It was not editable at all, on the reasoning that a slip would
+  break a working profile, and what that left was re-importing a whole file to change a port. The
+  profile editor now has a form for what is changed by hand, the server, its port and protocol and
+  the certificates and keys, and a changed field replaces only the lines it is about, leaving
+  comments, ordering and line endings as they were. The whole configuration is one button away as
+  plain text for everything else, the edit carries across in both directions, and the general
+  settings decide which of the two the editor opens with.
+- Every edit is checked as it is made against what OpenVPN is known to refuse, in a sentence that
+  names the value and, in the plain text, the line: no server, a port or protocol it cannot read,
+  nothing to verify the server with, a block that is never closed, a closing tag with no opening, and
+  a certificate or key pasted into the wrong block. Those stop a save. A reference to a file on disk
+  and a directive that runs a program are reported and do not. A save refreshes what the list reads
+  from the configuration, and a configuration another profile already holds is refused the way an
+  import would refuse it.
+- A profile can be deleted from the detail panel, which asks first and names the profile it is about.
+- The detail panel shows a profile's notes under when it was last used, selectable so an address or a
+  contact in them can be copied.
+- A limit on how large the log directory may grow, a gigabyte by default and changeable in the
+  advanced settings. The oldest files go first when it is reached.
+
+### Changed
+
+- The log is written one file per hour rather than one per day. A tunnel that logged the same failure
+  for every packet wrote daily files of more than a gigabyte, and the retention kept a week of them.
+  An hour that writes more than a twentieth of the limit continues in a second file, so the limit
+  holds even while the file being written is the large one. Daily files an earlier version wrote
+  expire by the same rules.
+- **Select** is called **Select several**, sits above the list it acts on rather than in the header,
+  and reads **Done selecting** while it is on. It gave no sign of having done anything, or of how to
+  leave the mode it had entered.
+- The bar under a selection is two lines, what is ticked and then what to do with it, with delete set
+  apart at the far end. What cannot be undone shares one red style, outlined where it asks and filled
+  where it confirms, in the list, the detail panel and the profile editor.
+- Return presses the primary button of the profile editor, the settings, the import and the export,
+  and escape closes each of them and the history and log windows without saving. A field that holds
+  several lines keeps return for a new line.
+- The profile editor window can be resized.
+- Tag names are matched without regard to case wherever a tag is looked up, as the sidebar already
+  counted them, so importing `Office` into a store that has `office` no longer makes a second entry.
+
+### Removed
+
+- **Watched folders**, with their settings, the section on the profiles page and the **New** entry in
+  the library that listed what they brought in. Keeping the store in step with a directory caused
+  more trouble than it saved, and importing or opening a package does the same job when somebody asks
+  for it. A migration drops the table and the column; profiles a directory brought in stay, recorded
+  as ordinary imports.
+- **Connect everything shown** in the sidebar. Ticking what is shown and connecting the selection does
+  the same on purpose rather than by accident.
+
+### Fixed
+
+- Opening a package ended the application when two of its profiles shared a tag the store did not
+  have yet. Each profile looked its tags up in the database, where the tag the previous profile had
+  just added was not saved, so the same tag was added twice and the unique index refused the save;
+  the exception escaped the import. Tags are now resolved once per import and remembered, and
+  anything else a store refuses during an import is reported on the import screen.
+- In the disconnect palette on macOS, space was typed into the search box instead of ticking a row,
+  and the arrow keys could be taken by the box. The palette handled its keys after the box, and on
+  macOS the system's input method serves the box first and delivers a space as text. Keys are now
+  taken before the box sees them, and a space is taken from the text.
+- On macOS the application stayed in the Dock with its window closed, although it lives in the menu
+  bar and on Windows leaves the taskbar with the window. It now leaves the Dock while no window of its
+  own is open and comes back when one is shown.
+- On macOS the application menu kept the framework's entry about itself. The platform part that fills
+  the menu was never registered, and the menu was set after the platform had already read it, which
+  it does once. Both are fixed, and the application's own about entry and settings sit in front of
+  the entries macOS adds for hiding and quitting.
+- A configuration that sets its port with `port` rather than on the remote line was listed with port
+  1194.
+
 ## [1.4.0] - 2026-09-13
 
 ### Added
