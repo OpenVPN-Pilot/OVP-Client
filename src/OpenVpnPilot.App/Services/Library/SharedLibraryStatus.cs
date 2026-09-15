@@ -35,6 +35,11 @@ public sealed record SharedLibraryStatus(
     /// </summary>
     public bool NeedsPassphrase => Condition is SharedLibraryCondition.PassphraseNeeded
         or SharedLibraryCondition.PassphraseRejected;
+
+    /// <summary>
+    /// True when deletions are held back until somebody says whether they were meant.
+    /// </summary>
+    public bool NeedsDecision => Condition is SharedLibraryCondition.DeletionHeld;
 }
 
 public enum SharedLibraryCondition
@@ -91,6 +96,12 @@ public enum SharedLibraryCondition
     /// Anything else the file system or the store refused.
     /// </summary>
     Failed,
+
+    /// <summary>
+    /// A synchronisation would delete unusually many profiles for everyone, and waits to be told
+    /// whether that was meant. The detail is how many.
+    /// </summary>
+    DeletionHeld,
 }
 
 /// <summary>
@@ -164,6 +175,12 @@ public enum SharedLibraryActivityKind
     LeftKeepingProfiles,
 
     LeftRemovingProfiles,
+
+    DeletionHeld,
+
+    DeletionsRestored,
+
+    DeletionsConfirmed,
 }
 
 /// <summary>

@@ -106,6 +106,19 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     public event EventHandler? LibraryPassphraseRequested;
 
     /// <summary>
+    /// Raised when held deletions are to be undone on this machine.
+    /// </summary>
+    public event EventHandler? LibraryRestoreRequested;
+
+    /// <summary>
+    /// Raised when held deletions are to be written for everyone.
+    /// </summary>
+    public event EventHandler? LibraryDeletionConfirmed;
+
+    [ObservableProperty]
+    public partial bool LibraryBannerOffersDecision { get; set; }
+
+    /// <summary>
     /// True while the banner about the shared library is showing.
     /// </summary>
     [ObservableProperty]
@@ -153,7 +166,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         LibraryBannerText = SharedLibraryText.Describe(status, localizer);
         LibraryBannerOffersPassphrase = status.NeedsPassphrase;
-        LibraryBannerOffersRetry = !status.NeedsPassphrase;
+        LibraryBannerOffersDecision = status.NeedsDecision;
+        LibraryBannerOffersRetry = !status.NeedsPassphrase && !status.NeedsDecision;
         IsLibraryProblem = true;
         IsLibraryBannerVisible = true;
     }
@@ -179,6 +193,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         LibraryBannerText = conflicts;
         LibraryBannerOffersPassphrase = false;
+        LibraryBannerOffersDecision = false;
         LibraryBannerOffersRetry = false;
         IsLibraryBannerVisible = true;
     }
@@ -309,6 +324,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [RelayCommand]
     private void RetryLibrary() => LibraryRetryRequested?.Invoke(this, EventArgs.Empty);
+
+    [RelayCommand]
+    private void RestoreLibraryDeletions() => LibraryRestoreRequested?.Invoke(this, EventArgs.Empty);
+
+    [RelayCommand]
+    private void ConfirmLibraryDeletions() => LibraryDeletionConfirmed?.Invoke(this, EventArgs.Empty);
 
     [RelayCommand]
     private void EnterLibraryPassphrase() => LibraryPassphraseRequested?.Invoke(this, EventArgs.Empty);

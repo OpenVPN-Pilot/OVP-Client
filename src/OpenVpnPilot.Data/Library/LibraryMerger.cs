@@ -244,6 +244,75 @@ public sealed class LibraryMerger
         };
     }
 
+    /// <summary>
+    /// Puts profiles the shared file holds back into this machine's store, with their sign ins.
+    /// </summary>
+    /// <remarks>
+    /// For deletions that were held back rather than written: the profiles come back exactly as the
+    /// file has them, so the next synchronisation finds them unchanged and deletes nothing. A profile
+    /// whose configuration the store already holds under another identifier is left out, because it
+    /// was not lost.
+    /// </remarks>
+    /// <returns>How many profiles were put back.</returns>
+    public async Task<int> RestoreAsync(
+        ProfilePackageContent source,
+        IReadOnlyCollection<Guid> profileIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(profileIds);
+
+        DateTimeOffset now = timeProvider.GetUtcNow();
+        TagCatalogue tags = await TagCatalogue.LoadAsync(context, cancellationToken);
+
+        HashSet<Guid> present = [.. await context.Profiles.Select(profile => profile.Id).ToListAsync(cancellationToken)];
+        HashSet<string> presentContent = new(
+            await context.Profiles.Select(profile => profile.ContentHash).ToListAsync(cancellationToken),
+            StringComparer.Ordinal);
+
+        List<Guid> restored = [];
+
+        foreach (PackagedProfile wanted in Index(source.Profiles).Values)
+        {
+            if (!profileIds.Contains(wanted.Id)
+                || present.Contains(wanted.Id)
+                || presentContent.Contains(ProfileImporter.ComputeHash(wanted.Configuration ?? string.Empty)))
+            {
+                continue;
+            }
+
+            Profile entity = new()
+            {
+                Id = wanted.Id,
+                Name = wanted.Name,
+                Configuration = string.Empty,
+                ContentHash = string.Empty,
+                Source = ProfileSource.Imported,
+                CreatedAt = now,
+            };
+
+            Write(entity, wanted, tags);
+            context.Profiles.Add(entity);
+            restored.Add(wanted.Id);
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+        context.ChangeTracker.Clear();
+
+        if (secrets.IsAvailable)
+        {
+            foreach (PackagedCredential credential in CredentialIndex(source.Credentials).Values.Where(credential => restored.Contains(credential.ProfileId)))
+            {
+                await secrets.WriteAsync(
+                    SecretReference.ForProfile(credential.ProfileId, credential.Realm),
+                    new StoredSecret(credential.Username, credential.Password),
+                    cancellationToken);
+            }
+        }
+
+        return restored.Count;
+    }
+
     private static string WrittenBy =>
         typeof(LibraryMerger).Assembly.GetName().Version?.ToString(3) ?? "unknown";
 

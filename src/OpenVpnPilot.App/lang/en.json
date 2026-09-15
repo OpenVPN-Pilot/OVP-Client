@@ -554,7 +554,8 @@
         "Locked": "Another machine is writing to the shared file. This machine tries again shortly.",
         "TooNew": "A newer version of OpenVpnPilot wrote the shared file. Update this machine to keep synchronising.",
         "Damaged": "The shared file opened but could not be read. {0}",
-        "Failed": "Synchronising with the shared file failed. {0}"
+        "Failed": "Synchronising with the shared file failed. {0}",
+        "DeletionHeld": "{0} profile(s) would be deleted from the shared library for every machine. That is unusually many, for example because this machine's database was started again empty, so nothing was written. Restore them here, or confirm that they are to be deleted for everyone."
       },
       "joinWarning": "This machine has {0} profile(s) of its own. Joining a shared library replaces them, together with their saved sign ins: a machine works with a shared library or with its own, never with a mixture. Nothing of them is added to the shared file. Export them first if you still need them. A profile the library holds identically keeps its favourite mark, its shortcut slot and its history.",
       "joinAcknowledge": "I understand that the profiles on this machine are replaced",
@@ -581,7 +582,8 @@
         "Damaged": "Shared file unreadable",
         "Failed": "Synchronising failed",
         "retry": "trying again at {0}",
-        "waiting": "changes waiting"
+        "waiting": "changes waiting",
+        "DeletionHeld": "Deletion held back"
       },
       "activity": {
         "Checking": "Synchronising with the shared file",
@@ -602,8 +604,13 @@
         "PassphraseStored": "Passphrase stored on this machine",
         "PassphraseChanged": "Passphrase changed, the shared file was written again",
         "LeftKeepingProfiles": "Stopped sharing, the profiles stay on this machine",
-        "LeftRemovingProfiles": "Stopped sharing, {0} profile(s) removed from this machine"
-      }
+        "LeftRemovingProfiles": "Stopped sharing, {0} profile(s) removed from this machine",
+        "DeletionHeld": "{0} deletion(s) held back, waiting for a decision",
+        "DeletionsRestored": "{0} profile(s) restored from the shared file",
+        "DeletionsConfirmed": "Deletion of {0} profile(s) confirmed and written"
+      },
+      "restoreDeleted": "Restore them",
+      "confirmDeletion": "Delete for everyone"
     }
   }
 }

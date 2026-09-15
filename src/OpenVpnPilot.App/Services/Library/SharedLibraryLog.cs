@@ -23,6 +23,12 @@ internal static partial class SharedLibraryLog
     public static partial void WriteNotKept(ILogger logger, string path);
 
     [LoggerMessage(
+        EventId = 3211,
+        Level = LogLevel.Warning,
+        Message = "Shared library {Path}: {Count} profile(s) would be deleted for everyone; held until confirmed.")]
+    public static partial void DeletionHeld(ILogger logger, string path, int count);
+
+    [LoggerMessage(
         EventId = 3201,
         Level = LogLevel.Warning,
         Message = "Shared library {Path} could not be reached.")]

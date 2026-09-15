@@ -460,6 +460,75 @@ public sealed class SharedLibrarySyncTests : IAsyncLifetime
         Assert.Equal(["added-while-offline", "renamed-meanwhile"], await second.NamesAsync());
     }
 
+    /// <summary>
+    /// A machine whose database was started again empty would delete the whole library for everyone.
+    /// It holds that back, and restoring puts the profiles back without touching the file.
+    /// </summary>
+    [Fact]
+    public async Task AnEmptiedStore_HoldsTheDeletionsBackUntilRestored()
+    {
+        (Machine first, Machine second) = await ThreeProfilesJoinedAsync();
+        byte[] before = await File.ReadAllBytesAsync(LibraryPath);
+
+        await using (PilotDbContext context = await second.Factory.CreateDbContextAsync())
+        {
+            await context.Profiles.ExecuteDeleteAsync();
+        }
+
+        SharedLibraryStatus held = await second.Sync.SyncNowAsync();
+
+        Assert.Equal(SharedLibraryCondition.DeletionHeld, held.Condition);
+        Assert.Equal("3", held.Detail);
+        Assert.Equal(before, await File.ReadAllBytesAsync(LibraryPath));
+
+        SharedLibraryStatus restored = await second.Sync.RestoreHeldDeletionsAsync();
+
+        Assert.Equal(SharedLibraryCondition.Synchronised, restored.Condition);
+        Assert.Equal(["site-alpha", "site-beta", "site-gamma"], await second.NamesAsync());
+        Assert.Equal(before, await File.ReadAllBytesAsync(LibraryPath));
+    }
+
+    [Fact]
+    public async Task ConfirmedDeletions_AreWrittenForEveryone()
+    {
+        (Machine first, Machine second) = await ThreeProfilesJoinedAsync();
+
+        await using (PilotDbContext context = await second.Factory.CreateDbContextAsync())
+        {
+            await context.Profiles.Where(profile => profile.Name != "site-gamma").ExecuteDeleteAsync();
+        }
+
+        Assert.Equal(SharedLibraryCondition.DeletionHeld, (await second.Sync.SyncNowAsync()).Condition);
+        Assert.Equal(SharedLibraryCondition.Synchronised, (await second.Sync.ConfirmDeletionsAsync()).Condition);
+
+        await first.Sync.SyncNowAsync();
+
+        Assert.Equal(["site-gamma"], await first.NamesAsync());
+    }
+
+    [Theory]
+    [InlineData(1, 1, false)]
+    [InlineData(1, 3, false)]
+    [InlineData(2, 3, true)]
+    [InlineData(4, 40, false)]
+    [InlineData(10, 400, true)]
+    public void WhatCountsAsUnusuallyMany(int deleted, int held, bool expected) =>
+        Assert.Equal(expected, SharedLibrarySync.IsUnusuallyMany(deleted, held));
+
+    private async Task<(Machine First, Machine Second)> ThreeProfilesJoinedAsync()
+    {
+        Machine first = await CreateMachineAsync("first");
+        await first.AddAsync("site-alpha", 1194);
+        await first.AddAsync("site-beta", 1195);
+        await first.AddAsync("site-gamma", 1196);
+        await first.Sync.CreateAsync(LibraryPath, Passphrase);
+
+        Machine second = await CreateMachineAsync("second");
+        await second.Sync.JoinAsync(LibraryPath, Passphrase);
+
+        return (first, second);
+    }
+
     private async Task<(Machine First, Machine Second, Guid Id)> TwoJoinedMachinesAsync(TimeSpan? lockWait = null)
     {
         Machine first = await CreateMachineAsync("first", lockWait);

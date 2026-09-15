@@ -373,6 +373,20 @@ public partial class App : Application
         });
 
         model.LibraryRetryRequested += async (_, _) => await library.SyncNowAsync();
+        model.LibraryDeletionConfirmed += async (_, _) => await library.ConfirmDeletionsAsync();
+        model.LibraryRestoreRequested += async (_, _) =>
+        {
+            try
+            {
+                await library.RestoreHeldDeletionsAsync();
+                await model.LoadAsync();
+            }
+            catch (Exception exception) when (SharedLibraryText.Refusal(exception, services.GetRequiredService<Core.Localization.ILocalizer>()) is { } refusal)
+            {
+                // The file could not be read again to restore from. Said where the question was asked.
+                model.StatusMessage = refusal;
+            }
+        };
 
         library.Start();
     }

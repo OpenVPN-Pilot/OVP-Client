@@ -135,6 +135,12 @@
           <Button Content="{loc:Translate library.retry}"
                   IsVisible="{Binding LibraryBannerOffersRetry}"
                   Command="{Binding RetryLibraryCommand}" />
+          <Button Content="{loc:Translate library.restoreDeleted}" Classes="primary"
+                  IsVisible="{Binding LibraryBannerOffersDecision}"
+                  Command="{Binding RestoreLibraryDeletionsCommand}" />
+          <Button Content="{loc:Translate library.confirmDeletion}" Classes="danger"
+                  IsVisible="{Binding LibraryBannerOffersDecision}"
+                  Command="{Binding ConfirmLibraryDeletionsCommand}" />
           <Button Content="{loc:Translate library.dismiss}" Classes="quiet"
                   Command="{Binding DismissLibraryBannerCommand}" />
         </StackPanel>

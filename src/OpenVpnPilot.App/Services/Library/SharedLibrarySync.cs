@@ -8,6 +8,7 @@ using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Settings;
 using OpenVpnPilot.Core.Storage;
 using OpenVpnPilot.Data;
+using OpenVpnPilot.Data.Import;
 using OpenVpnPilot.Data.Library;
 using OpenVpnPilot.Data.Packaging;
 using OpenVpnPilot.OpenVpn.Runtime;
@@ -84,6 +85,8 @@ public sealed class SharedLibrarySync : IAsyncDisposable
     private int failures;
     private DateTimeOffset retryAfter = DateTimeOffset.MinValue;
     private bool reconciling;
+    private bool deletionsConfirmed;
+    private List<Guid> heldDeletions = [];
     private bool disposed;
 
     public SharedLibrarySync(
@@ -518,7 +521,7 @@ public sealed class SharedLibrarySync : IAsyncDisposable
 
                 DateTimeOffset now = timeProvider.GetUtcNow();
 
-                if (now < retryAfter || Status.NeedsPassphrase)
+                if (now < retryAfter || Status.NeedsPassphrase || Status.NeedsDecision)
                 {
                     continue;
                 }
@@ -549,6 +552,92 @@ public sealed class SharedLibrarySync : IAsyncDisposable
             // The application is closing, and the way out has its own last attempt.
         }
     }
+
+    /// <summary>
+    /// Writes the deletions that were held back, because somebody said they were meant.
+    /// </summary>
+    public async Task<SharedLibraryStatus> ConfirmDeletionsAsync(CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken);
+
+        try
+        {
+            deletionsConfirmed = true;
+            return await SynchroniseAsync(quickCheck: false, cancellationToken);
+        }
+        finally
+        {
+            deletionsConfirmed = false;
+            gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Puts the profiles whose deletion was held back into this machine's store again, from the file.
+    /// </summary>
+    public async Task<SharedLibraryStatus> RestoreHeldDeletionsAsync(CancellationToken cancellationToken = default)
+    {
+        string path = SharedPath ?? throw new InvalidOperationException("No shared library is configured.");
+        string passphrase = (await secrets.TryReadAsync(SecretReference.LibraryPassphrase, cancellationToken))?.Password
+            ?? throw new InvalidOperationException("No passphrase is stored.");
+
+        await gate.WaitAsync(cancellationToken);
+
+        try
+        {
+            SharedLibraryFile file = new(path, timeProvider);
+            ProfilePackageContent remote = ProfilePackageFile.Decode(await file.ReadAsync(cancellationToken), passphrase);
+            int restored;
+
+            await using (PilotDbContext context = await contexts.CreateDbContextAsync(cancellationToken))
+            {
+                reconciling = true;
+
+                try
+                {
+                    restored = await new LibraryMerger(context, secrets, timeProvider).RestoreAsync(remote, heldDeletions, cancellationToken);
+                }
+                finally
+                {
+                    reconciling = false;
+                }
+            }
+
+            heldDeletions = [];
+            Record(SharedLibraryActivityKind.DeletionsRestored, restored);
+
+            return await SynchroniseAsync(quickCheck: false, cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// The profiles the file holds that the merged library no longer does, apart from duplicates
+    /// folded into a profile with the same configuration.
+    /// </summary>
+    private static List<Guid> Dropped(ProfilePackageContent remote, ProfilePackageContent merged)
+    {
+        HashSet<Guid> kept = [.. merged.Profiles.Select(profile => profile.Id)];
+        HashSet<string> keptContent = new(
+            merged.Profiles.Select(profile => ProfileImporter.ComputeHash(profile.Configuration ?? string.Empty)),
+            StringComparer.Ordinal);
+
+        return [.. (remote.Profiles ?? [])
+            .Where(profile => profile is not null
+                && !kept.Contains(profile.Id)
+                && !keptContent.Contains(ProfileImporter.ComputeHash(profile.Configuration ?? string.Empty)))
+            .Select(profile => profile.Id)];
+    }
+
+    /// <summary>
+    /// Ten or more at once, or most of the library. One or two deleted by hand go through; a store
+    /// that came back empty, or a selection deleted by mistake, is held.
+    /// </summary>
+    internal static bool IsUnusuallyMany(int deleted, int held) =>
+        deleted >= 10 || (deleted >= 2 && deleted * 2 > held);
 
     /// <summary>
     /// Removes every profile, its sign ins and the tags nothing carries any more.
@@ -696,6 +785,22 @@ public sealed class SharedLibrarySync : IAsyncDisposable
                 byte[] ancestorBytes = bytes;
                 bool wrote = false;
 
+                List<Guid> dropped = Dropped(remote, result.Shared);
+
+                if (!deletionsConfirmed && IsUnusuallyMany(dropped.Count, remote.Profiles.Count))
+                {
+                    heldDeletions = dropped;
+                    SharedLibraryLog.DeletionHeld(logger, path, dropped.Count);
+                    Record(SharedLibraryActivityKind.DeletionHeld, dropped.Count);
+
+                    return await FailAsync(
+                        SharedLibraryCondition.DeletionHeld,
+                        record,
+                        dropped.Count.ToString(CultureInfo.CurrentCulture),
+                        retry: false,
+                        cancellationToken);
+                }
+
                 if (result.SharedChanged)
                 {
                     byte[] encoded = ProfilePackageFile.Encode(
@@ -719,6 +824,14 @@ public sealed class SharedLibrarySync : IAsyncDisposable
                     ancestorBytes = encoded;
                     wrote = true;
                 }
+
+                if (deletionsConfirmed)
+                {
+                    Record(SharedLibraryActivityKind.DeletionsConfirmed, dropped.Count);
+                    deletionsConfirmed = false;
+                }
+
+                heldDeletions = [];
 
                 List<string> copies = NewConflictCopies(file, record);
                 record.DeferredProfiles = [.. result.DeferredProfiles];

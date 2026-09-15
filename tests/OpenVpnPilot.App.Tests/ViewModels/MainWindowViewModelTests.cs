@@ -390,6 +390,26 @@ public sealed class MainWindowViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public void LibraryBanner_AsksWhetherHeldDeletionsWereMeant()
+    {
+        int restores = 0;
+        int confirmations = 0;
+        model.LibraryRestoreRequested += (_, _) => restores++;
+        model.LibraryDeletionConfirmed += (_, _) => confirmations++;
+
+        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.DeletionHeld, Detail: "12"));
+
+        Assert.True(model.LibraryBannerOffersDecision);
+        Assert.False(model.LibraryBannerOffersRetry);
+        Assert.False(model.LibraryBannerOffersPassphrase);
+
+        model.RestoreLibraryDeletionsCommand.Execute(null);
+        model.ConfirmLibraryDeletionsCommand.Execute(null);
+
+        Assert.Equal((1, 1), (restores, confirmations));
+    }
+
+    [Fact]
     public void LibraryBanner_Commands_AskTheOwnerToAct()
     {
         int retries = 0;
