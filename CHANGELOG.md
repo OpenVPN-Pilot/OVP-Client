@@ -36,6 +36,18 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
 - A banner in the main window for what stands in the way of the shared library, with the passphrase
   prompt or another attempt, and for conflicts that were resolved and copies of the file a sync
   client left behind. The status bar says what a synchronisation changed, and the list reloads.
+- Every version of the shared file names the versions it descends from, so a machine whose write the
+  sync client replaced with another machine's, as happens when one of them was offline, merges
+  against where both started and keeps its changes instead of losing them.
+- Deleting ten or more profiles for everyone at once, or two or more that are most of the library, is
+  held back and asked about, restore on this machine or delete for everyone. A machine whose
+  database was started again empty no longer empties the library for every machine.
+- **Backups of the shared library.** Every machine keeps the versions it saw, the last twenty and one
+  a day for thirty days, and leaves a copy of the version it last synchronised with and a note
+  beside the file, in a `.backups` folder. The settings list the machines using the library and every
+  backup, and restore one for every machine, which is also the way back from a missing or damaged
+  file.
+- Deleting, editing and importing say that the change reaches every machine while a library is shared.
 - The status bar shows where the shared library stands at all times, synchronising, synchronised
   with the time, or what stands in the way with the next attempt and whether changes are waiting.
   **Sync log** beside it lists the steps taken: changes noticed, the file read and written, what was

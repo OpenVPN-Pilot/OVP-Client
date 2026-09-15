@@ -147,10 +147,41 @@ what. That decides nearly everything without a conflict at all:
   since there is no telling which of them the server accepted more recently. A sign in removed on
   one machine is removed on all of them, whether the server refused it or **Forget all stored
   credentials** was pressed, which says so on the credentials page and leaves the passphrase alone.
-- **Copies the sync client keeps**, named after the file with a machine's name appended, happen when
-  two machines wrote at nearly the same moment. They are mentioned in the banner and not read,
-  because what they hold is in the library already unless both writes crossed within seconds. Delete
-  them once you have looked.
+- **Two machines writing at once**, most often because one of them was offline, is something the
+  lock cannot prevent: the lock only reaches the other machines once the sync client has carried it
+  there. The sync client then keeps one of the two files and puts the other beside it under the
+  file's name with a machine's name appended. Every version names the versions it descends from, so
+  the machine whose file was not kept notices, merges against the version both started from, and
+  writes its changes again. The copy is mentioned in the banner and can be deleted once you have
+  looked.
+- **Deleting unusually many profiles at once**, ten or more, or two or more that are most of the
+  library, is held back instead of written. The usual cause is not a decision at all but a machine
+  whose database was started again empty. The banner asks whether to restore them on this machine
+  from the file or to delete them for everyone, and nothing is written until one of the two is chosen.
+
+While a library is shared, deleting a profile, editing one and importing say beside the button that
+the change reaches every machine.
+
+### Backups
+
+A shared library has no server behind it to keep its history, so every machine keeps some:
+
+- **On the machine itself**, every version of the file it saw or wrote, the last twenty and one a day
+  for thirty days, under `library\backups` in the data directory. Nothing that happens to the shared
+  folder can reach them.
+- **Beside the file**, in a folder named after it with `.backups`, every machine keeps a copy of the
+  version it last synchronised with, named after the account and the machine, and a small note with
+  the same names, the version of the application and when it last synchronised. That is a copy for
+  everybody that survives the file being lost, and **Settings, Profiles** lists from those notes which
+  machines use the library and which stopped. The names come from the operating system; anything a
+  file system could object to is replaced in the file name.
+
+Every copy is the file as it was, encrypted as it was, and useless without the passphrase of its
+time. **Backups...** lists them all with when they were taken and how many profiles they hold.
+Restoring one asks first, then makes it the library again for every machine: profiles added since
+are deleted, profiles deleted since come back, and what the file held before is kept as a backup
+first, so a restore can be undone the same way. It is also the way back from a file that is missing
+or can no longer be opened.
 
 ### When someone should no longer have it
 

@@ -71,7 +71,7 @@ machine still keeps each person's profiles apart.
 | Profiles, tags and history | `%LOCALAPPDATA%\OpenVpnPilot\pilot.db` |
 | Settings | `%LOCALAPPDATA%\OpenVpnPilot\settings.json`, editable by hand |
 | Credentials | `%LOCALAPPDATA%\OpenVpnPilot\secrets\`, one protected file each, the passphrase of a shared library among them |
-| A shared library | the file wherever it was put, and in `%LOCALAPPDATA%\OpenVpnPilot\library\` what this machine last synchronised with it, encrypted like the file |
+| A shared library | the file wherever it was put, with every machine's copy and note in the `.backups` folder beside it; in `%LOCALAPPDATA%\OpenVpnPilot\library\` what this machine last synchronised with it and, under `backups\`, the versions it kept, all encrypted like the file |
 | Logs | `%LOCALAPPDATA%\OpenVpnPilot\logs\`, one `yyyy-MM-dd_HH.log` per hour, seven days and a gigabyte at most by default |
 | Added languages | `%LOCALAPPDATA%\OpenVpnPilot\lang\` |
 | Configurations while connected | `%ProgramData%\OpenVpnPilot\runtime\<user SID>\` |
