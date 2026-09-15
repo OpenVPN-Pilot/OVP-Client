@@ -57,6 +57,12 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+
+        // The platform reads the application's menu once, right after this and before anything else
+        // of the application runs, and a menu set any later is never shown. It is set here empty and
+        // filled once the services that word it exist. Where no platform shows such a menu this is
+        // simply never read.
+        NativeMenu.SetMenu(this, []);
     }
 
     public override void OnFrameworkInitializationCompleted()

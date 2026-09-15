@@ -139,6 +139,17 @@ Nothing here asks you to turn Gatekeeper off, and nothing here should. Allowing 
 have the source for is a decision about that application; turning the check off is a decision about
 every application you will ever download.
 
+## The menu bar and the Dock
+
+The application lives in the menu bar. With its window closed it leaves the Dock as well, the way it
+leaves the taskbar on Windows, and the tunnels keep running; the menu bar entry is the way back to
+the window, and showing the window puts the Dock icon back. Closing the window quits instead when the
+general settings say so.
+
+The menu named after the application carries **About OpenVPN Pilot**, which is macOS's own panel
+with the version and copyright from the bundle, and **Settings** under command and comma, followed by
+the entries every Mac application has for hiding it and quitting.
+
 ## Notifications
 
 A tunnel coming up, dropping or failing is announced through the user notification centre, which asks
