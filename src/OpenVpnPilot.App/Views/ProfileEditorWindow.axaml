@@ -68,8 +68,7 @@
     <Border Classes="divider" />
 
     <Grid ColumnDefinitions="Auto,*,Auto,Auto" IsVisible="{Binding !IsConfirmingDelete}">
-      <Button Grid.Column="0" Classes="quiet" Content="{loc:Translate editor.delete}"
-              Foreground="{DynamicResource StateFailed}"
+      <Button Grid.Column="0" Classes="danger" Content="{loc:Translate editor.delete}"
               Command="{Binding RequestDeleteCommand}" />
       <Button Grid.Column="2" Content="{loc:Translate common.cancel}" MinWidth="92" Margin="0,0,8,0"
               Command="{Binding CancelCommand}" />
@@ -86,8 +85,7 @@
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
           <Button Content="{loc:Translate common.cancel}" MinWidth="92"
                   Command="{Binding CancelDeleteCommand}" />
-          <Button Content="{loc:Translate editor.delete}" MinWidth="92"
-                  Foreground="{DynamicResource StateFailed}"
+          <Button Content="{loc:Translate editor.delete}" MinWidth="92" Classes="destructive"
                   Command="{Binding ConfirmDeleteCommand}" />
         </StackPanel>
       </StackPanel>

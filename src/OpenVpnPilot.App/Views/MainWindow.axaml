@@ -57,8 +57,6 @@
           window is small.
         -->
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-          <Button Content="{loc:Translate select.mode}" Classes="quiet"
-                  Command="{Binding ToggleSelectingCommand}" />
           <Button Content="{loc:Translate nav.history}" Classes="quiet"
                   Command="{Binding OpenHistoryCommand}" />
           <Button Content="{loc:Translate nav.log}" Classes="quiet"
@@ -165,13 +163,6 @@
               </ListBox>
             </StackPanel>
 
-            <StackPanel Spacing="6">
-              <Button Content="{loc:Translate select.connectShown}" Classes="quiet"
-                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                      ToolTip.Tip="{loc:Translate select.connectShownHint}"
-                      Command="{Binding ConnectVisibleCommand}" />
-            </StackPanel>
-
             <StackPanel Spacing="6" IsVisible="{Binding HasTags}">
               <StackPanel Orientation="Horizontal" Spacing="6" Margin="10,0,0,2">
                 <TextBlock Text="{loc:Translate nav.tags}" Classes="overline" VerticalAlignment="Center" />
@@ -201,8 +192,28 @@
       </Border>
 
       <!-- Profile list -->
-      <Grid Grid.Column="1" RowDefinitions="*,Auto">
-        <ListBox Grid.Row="0" Classes="profiles" ItemsSource="{Binding VisibleProfiles}"
+      <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto">
+
+        <!--
+          What the list is showing, and the switch that puts a checkbox on every row. The switch sits
+          here rather than in the header because it acts on this list and on nothing else, and it
+          says what pressing it again will do: a button that only ever reads "select" gave no sign
+          that it had done anything, or of how to leave the mode it had entered.
+        -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="20,12,14,2">
+          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <TextBlock Text="{Binding SelectedFilter.Label}" FontSize="13" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextPrimary}"
+                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding VisibleSummary}" Classes="muted" VerticalAlignment="Center" />
+          </StackPanel>
+          <Button Grid.Column="1" Classes="quiet" Classes.primary="{Binding IsSelecting}"
+                  Content="{Binding SelectToggleLabel}"
+                  ToolTip.Tip="{loc:Translate select.modeHint}"
+                  Command="{Binding ToggleSelectingCommand}" />
+        </Grid>
+
+        <ListBox Grid.Row="1" Classes="profiles" ItemsSource="{Binding VisibleProfiles}"
                  SelectedItem="{Binding SelectedProfile}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
           <ListBox.ItemTemplate>
@@ -297,7 +308,7 @@
           </ListBox.ItemTemplate>
         </ListBox>
 
-        <StackPanel Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
+        <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
                     MaxWidth="340" IsVisible="{Binding !VisibleProfiles.Count}">
           <TextBlock Text="{Binding EmptyStateTitle}" FontSize="14" FontWeight="SemiBold"
                      Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Center" />
@@ -309,30 +320,42 @@
         </StackPanel>
 
         <!--
-          What is ticked, and what can be done with it. Deleting asks twice, because it is the one
-          action here that cannot be undone and the one most likely to be aimed at twenty rows.
+          What is ticked, and what can be done with it. Two lines: the first says how much is ticked
+          and changes that, the second acts on it. Deleting stands apart at the far end and in red,
+          and asks twice, because it is the one action here that cannot be undone and the one most
+          likely to be aimed at twenty rows.
         -->
-        <Border Grid.Row="1" Background="{DynamicResource SurfaceSidebar}"
+        <Border Grid.Row="2" Background="{DynamicResource SurfaceSidebar}"
                 BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
                 Padding="14,10" IsVisible="{Binding IsSelecting}">
-          <StackPanel Spacing="10">
-            <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
-              <TextBlock Text="{Binding SelectionSummary}" Classes="muted"
-                         VerticalAlignment="Center" Margin="0,0,6,0" />
-              <Button Content="{loc:Translate select.all}" Classes="quiet"
-                      Command="{Binding TickAllShownCommand}" />
-              <Button Content="{loc:Translate select.none}" Classes="quiet"
-                      Command="{Binding TickNoneCommand}" />
-              <Button Content="{loc:Translate select.connect}" Classes="primary"
-                      IsEnabled="{Binding HasTicked}"
-                      Command="{Binding ConnectTickedCommand}" />
-              <Button Content="{loc:Translate select.disconnect}"
-                      IsEnabled="{Binding HasTicked}"
-                      Command="{Binding DisconnectTickedCommand}" />
-              <Button Content="{loc:Translate select.delete}" Classes="quiet"
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBlock Grid.Column="0" Text="{Binding SelectionSummary}" Classes="muted"
+                         VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                <Button Content="{loc:Translate select.all}" Classes="quiet"
+                        Command="{Binding TickAllShownCommand}" />
+                <Button Content="{loc:Translate select.none}" Classes="quiet"
+                        IsEnabled="{Binding HasTicked}"
+                        Command="{Binding TickNoneCommand}" />
+              </StackPanel>
+            </Grid>
+
+            <DockPanel LastChildFill="True">
+              <Button DockPanel.Dock="Right" Classes="danger" Margin="8,0,0,0"
+                      VerticalAlignment="Top"
+                      Content="{loc:Translate select.delete}"
                       IsEnabled="{Binding HasTicked}"
                       Command="{Binding AskToDeleteTickedCommand}" />
-            </WrapPanel>
+              <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+                <Button Content="{loc:Translate select.connect}" Classes="primary"
+                        IsEnabled="{Binding HasTicked}"
+                        Command="{Binding ConnectTickedCommand}" />
+                <Button Content="{loc:Translate select.disconnect}"
+                        IsEnabled="{Binding HasTicked}"
+                        Command="{Binding DisconnectTickedCommand}" />
+              </WrapPanel>
+            </DockPanel>
 
             <Border CornerRadius="7" Padding="12,10"
                     Background="{DynamicResource StateFailedSoft}"
@@ -340,11 +363,11 @@
               <StackPanel Spacing="9">
                 <TextBlock Text="{Binding DeleteConfirmation}" TextWrapping="Wrap" FontSize="12"
                            Foreground="{DynamicResource StateFailed}" />
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button Content="{loc:Translate select.deleteConfirm}"
-                          Command="{Binding DeleteTickedCommand}" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
                   <Button Content="{loc:Translate common.cancel}" Classes="quiet"
                           Command="{Binding CancelDeleteCommand}" />
+                  <Button Content="{loc:Translate select.deleteConfirm}" Classes="destructive"
+                          Command="{Binding DeleteTickedCommand}" />
                 </StackPanel>
               </StackPanel>
             </Border>
@@ -406,7 +429,30 @@
                       IsVisible="{Binding SelectedProfile.RequiresCredentials}"
                       Command="{Binding SignInAgainCommand}"
                       CommandParameter="{Binding SelectedProfile}" />
+              <Button Content="{loc:Translate profile.delete}" Classes="danger"
+                      IsVisible="{Binding !IsConfirmingProfileDelete}"
+                      Command="{Binding AskToDeleteSelectedCommand}" />
             </WrapPanel>
+
+            <!--
+              Asked here, beside the button, rather than in a dialog. Removing one profile from the
+              detail panel is a deliberate act on the profile being looked at, and the question names
+              it so that nobody deletes the wrong one because the selection moved.
+            -->
+            <Border CornerRadius="7" Padding="12,10"
+                    Background="{DynamicResource StateFailedSoft}"
+                    IsVisible="{Binding IsConfirmingProfileDelete}">
+              <StackPanel Spacing="9">
+                <TextBlock Text="{Binding ProfileDeleteConfirmation}" TextWrapping="Wrap" FontSize="12"
+                           Foreground="{DynamicResource StateFailed}" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                  <Button Content="{loc:Translate common.cancel}" Classes="quiet"
+                          Command="{Binding CancelDeleteSelectedCommand}" />
+                  <Button Content="{loc:Translate profile.deleteConfirmButton}" Classes="destructive"
+                          Command="{Binding DeleteSelectedCommand}" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
 
             <Border Classes="divider" />
 
@@ -496,6 +542,18 @@
                            TextWrapping="Wrap" />
                 <TextBlock Grid.Column="1" Classes="body" TextWrapping="Wrap"
                            Text="{Binding SelectedProfile.TagsDisplay}" />
+              </Grid>
+              <!--
+                Selectable, because what people write here is usually something to copy: a contact,
+                an address behind the tunnel, the reason a profile exists.
+              -->
+              <Grid ColumnDefinitions="104,*" ColumnSpacing="12"
+                    IsVisible="{Binding SelectedProfile.HasNotes}">
+                <TextBlock Grid.Column="0" Text="{loc:Translate profile.notes}" Classes="muted"
+                           TextWrapping="Wrap" />
+                <SelectableTextBlock Grid.Column="1" Classes="body" TextWrapping="Wrap"
+                                     FontSize="13" Foreground="{DynamicResource TextPrimary}"
+                                     Text="{Binding SelectedProfile.Notes}" />
               </Grid>
             </StackPanel>
 

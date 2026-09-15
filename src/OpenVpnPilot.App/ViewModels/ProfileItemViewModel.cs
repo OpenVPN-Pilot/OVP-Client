@@ -63,6 +63,8 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
 
     public string? Notes { get; }
 
+    public bool HasNotes => !string.IsNullOrWhiteSpace(Notes);
+
     /// <summary>
     /// Per profile override for the route protection. Null follows the application wide setting.
     /// </summary>

@@ -12,13 +12,15 @@ groupings as make sense, which a tree cannot express, and nothing has to be main
 
 ![The quick switcher filtering the list as letters are typed](../assets/screenshots/quick-switcher.png)
 
-**Select** in the header puts a checkbox on every row. Tick some and connect, disconnect or delete
-them together; deleting asks a second time, because it is the one action here that cannot be undone.
+**Select several**, above the list, puts a checkbox on every row and turns into **Done selecting**
+until it is pressed again. Tick some and connect, disconnect or delete them together; **Select all
+shown** ticks what the current filter and search leave visible, which is how a whole tag is brought up
+in one go. Deleting asks a second time, because it is the one action here that cannot be undone.
+Profiles are connected one after another rather than all at once: each tunnel is a process, an
+adapter and a port, and twenty starting in the same instant is how a machine runs out of all three.
 
-**Connect everything shown** in the sidebar acts on what the current filter and search leave visible,
-which is how a whole tag is brought up in one go. Profiles are connected one after another rather
-than all at once: each tunnel is a process, an adapter and a port, and twenty starting in the same
-instant is how a machine runs out of all three.
+A single profile is deleted from the detail panel, which asks first and names the profile it is
+about. Its notes are shown there too, under when it was last used, and can be selected and copied.
 
 There is no built in limit on how many tunnels run at once, and ten at a time is what the lab is for.
 The real limits are outside the application: one OpenVPN process and one virtual adapter per tunnel,
