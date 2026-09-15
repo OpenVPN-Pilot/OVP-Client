@@ -22,6 +22,10 @@ namespace OpenVpnPilot.App.ViewModels;
 /// off unless it is asked for, it is only possible for a package because only a package is
 /// encrypted, and the screen says plainly what it means: whoever has the file and the passphrase can
 /// connect as the person who wrote it.
+///
+/// What goes in is chosen here: the profiles one by one or a whole tag at a time, and whether the
+/// shortcuts and the settings go with them. A tag ticks the profiles that carry it, and unticking it
+/// takes back only those no other ticked tag still covers.
 /// </remarks>
 public sealed partial class ExportViewModel : ViewModelBase
 {
@@ -51,6 +55,30 @@ public sealed partial class ExportViewModel : ViewModelBase
     public event EventHandler? Closed;
 
     public ObservableCollection<ExportProfileViewModel> Profiles { get; } = [];
+
+    /// <summary>
+    /// The tags, each ticking the profiles that carry it.
+    /// </summary>
+    public ObservableCollection<TagChoiceViewModel> Tags { get; } = [];
+
+    public bool HasTags => Tags.Count > 0;
+
+    /// <summary>
+    /// Carries the shortcut bindings, which a receiving machine takes only where it has none.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IncludeHotkeys { get; set; } = true;
+
+    /// <summary>
+    /// Carries the settings, without the ones that describe this machine.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IncludeSettings { get; set; }
+
+    /// <summary>
+    /// Set while ticks are being changed on behalf of a tag, so they are not counted one by one.
+    /// </summary>
+    private bool applyingTag;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPackage))]
@@ -163,13 +191,64 @@ public sealed partial class ExportViewModel : ViewModelBase
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
         Profiles.Clear();
+        Tags.Clear();
         credentialCounts = await packages.CountCredentialsAsync(cancellationToken);
+
+        IReadOnlyDictionary<Guid, IReadOnlyList<string>> profileTags =
+            await store.GetProfileTagsAsync(cancellationToken);
 
         foreach (Profile profile in await store.GetProfilesAsync(cancellationToken))
         {
-            ExportProfileViewModel row = new(profile.Id, profile.Name);
-            row.PropertyChanged += (_, _) => RecountSelection();
+            profileTags.TryGetValue(profile.Id, out IReadOnlyList<string>? tags);
+
+            ExportProfileViewModel row = new(profile.Id, profile.Name, tags ?? []);
+            row.PropertyChanged += (_, _) =>
+            {
+                if (!applyingTag)
+                {
+                    RecountSelection();
+                }
+            };
+
             Profiles.Add(row);
+        }
+
+        foreach (TagSummary tag in await store.GetTagsAsync(cancellationToken))
+        {
+            TagChoiceViewModel choice = new(tag.Name, Profiles.Count(profile => profile.Carries(tag.Name)));
+            choice.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(TagChoiceViewModel.IsSelected) && !applyingTag)
+                {
+                    ApplyTag(choice);
+                }
+            };
+
+            Tags.Add(choice);
+        }
+
+        OnPropertyChanged(nameof(HasTags));
+        RecountSelection();
+    }
+
+    /// <summary>
+    /// Ticks the profiles a tag covers, or unticks the ones no other ticked tag still covers.
+    /// </summary>
+    private void ApplyTag(TagChoiceViewModel tag)
+    {
+        applyingTag = true;
+
+        try
+        {
+            foreach (ExportProfileViewModel profile in Profiles.Where(profile => profile.Carries(tag.Name)))
+            {
+                profile.IsSelected = tag.IsSelected
+                    || Tags.Any(other => other.IsSelected && profile.Carries(other.Name));
+            }
+        }
+        finally
+        {
+            applyingTag = false;
         }
 
         RecountSelection();
@@ -201,21 +280,33 @@ public sealed partial class ExportViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void SelectAll()
-    {
-        foreach (ExportProfileViewModel profile in Profiles)
-        {
-            profile.IsSelected = true;
-        }
-    }
+    private void SelectAll() => SetEverything(true);
 
     [RelayCommand]
-    private void SelectNone()
+    private void SelectNone() => SetEverything(false);
+
+    private void SetEverything(bool selected)
     {
-        foreach (ExportProfileViewModel profile in Profiles)
+        applyingTag = true;
+
+        try
         {
-            profile.IsSelected = false;
+            foreach (TagChoiceViewModel tag in Tags)
+            {
+                tag.IsSelected = selected;
+            }
+
+            foreach (ExportProfileViewModel profile in Profiles)
+            {
+                profile.IsSelected = selected;
+            }
         }
+        finally
+        {
+            applyingTag = false;
+        }
+
+        RecountSelection();
     }
 
     [RelayCommand]
@@ -239,18 +330,22 @@ public sealed partial class ExportViewModel : ViewModelBase
         {
             PackageWriteResult written = await packages.WriteAsync(
                 path,
-                SelectedIds,
+                new PackageExportRequest(SelectedIds)
+                {
+                    IncludeCredentials = IncludeCredentials,
+                    IncludeHotkeys = IncludeHotkeys,
+                    IncludeSettings = IncludeSettings,
+                },
                 Passphrase,
-                IncludeCredentials,
                 cancellationToken);
 
-            StatusMessage = written.Credentials > 0
-                ? localizer.Translate(
-                    "export.packageWrittenWithCredentials",
-                    written.Profiles,
-                    written.Credentials,
-                    path)
-                : localizer.Translate("export.packageWritten", written.Profiles, path);
+            StatusMessage = localizer.Translate(
+                "export.packageWrittenParts",
+                written.Profiles,
+                written.Credentials,
+                written.Hotkeys,
+                localizer[written.Settings ? "common.yes" : "common.no"],
+                path);
 
             // The passphrase has done its job and has no reason to stay in memory.
             Passphrase = string.Empty;
@@ -349,16 +444,27 @@ public sealed partial class ExportViewModel : ViewModelBase
 /// </summary>
 public sealed partial class ExportProfileViewModel : ViewModelBase
 {
-    public ExportProfileViewModel(Guid id, string name)
+    public ExportProfileViewModel(Guid id, string name, IReadOnlyList<string> tags)
     {
+        ArgumentNullException.ThrowIfNull(tags);
+
         Id = id;
         Name = name;
+        Tags = tags;
     }
 
     public Guid Id { get; }
 
     public string Name { get; }
 
+    public IReadOnlyList<string> Tags { get; }
+
+    public string TagsDisplay => string.Join(", ", Tags);
+
+    public bool HasTags => Tags.Count > 0;
+
     [ObservableProperty]
     public partial bool IsSelected { get; set; } = true;
+
+    public bool Carries(string tag) => Tags.Contains(tag, StringComparer.OrdinalIgnoreCase);
 }

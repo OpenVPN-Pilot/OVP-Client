@@ -296,6 +296,43 @@ public sealed class ProfilePackageTests : IDisposable
         Assert.False(File.Exists(PackagePath));
     }
 
+    /// <summary>
+    /// A layout this build does not know may mean something it would misread, and a shared library
+    /// written back from a misreading would lose what the newer version put there.
+    /// </summary>
+    [Fact]
+    public void APackageFromANewerFormat_IsRefused()
+    {
+        ProfilePackageContent content = new() { FormatVersion = ProfilePackageContent.CurrentFormatVersion + 1, WrittenBy = "9.0.0" };
+
+        byte[] encoded = ProfilePackageFile.Encode(content, "passphrase");
+
+        PackageTooNewException refused = Assert.Throws<PackageTooNewException>(
+            () => ProfilePackageFile.Decode(encoded, "passphrase"));
+
+        Assert.Equal("9.0.0", refused.WrittenBy);
+    }
+
+    /// <summary>
+    /// A package from before the layout carried settings and deletions still opens.
+    /// </summary>
+    [Fact]
+    public void APackageOfFormatOne_ReadsWithNothingOfTheLaterParts()
+    {
+        ProfilePackageContent content = new()
+        {
+            FormatVersion = 1,
+            Profiles = [new PackagedProfile { Id = Guid.NewGuid(), Name = "site-alpha", Configuration = "client" }],
+        };
+
+        ProfilePackageContent read = ProfilePackageFile.Decode(ProfilePackageFile.Encode(content, "passphrase"), "passphrase");
+
+        Assert.Equal(1, read.FormatVersion);
+        Assert.Null(read.Settings);
+        Assert.Empty(read.DeletedProfiles);
+        Assert.Null(Assert.Single(read.Profiles).UpdatedAt);
+    }
+
     [Fact]
     public async Task AFileThatIsNotAPackage_IsRefusedRatherThanGuessedAt()
     {

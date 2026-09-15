@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace OpenVpnPilot.Data.Packaging;
@@ -7,21 +8,36 @@ namespace OpenVpnPilot.Data.Packaging;
 /// </summary>
 /// <remarks>
 /// The package is a single file so a profile set can be moved without anyone having to know where
-/// the database lives. It carries the configurations, their tags and the shortcuts, and deliberately
-/// nothing about how they were used: the session history belongs to the machine it happened on.
+/// the database lives. It carries the configurations, their tags, and whichever of the shortcuts,
+/// the settings and the saved sign ins the person writing it chose to include, and deliberately
+/// nothing about how the profiles were used: the session history belongs to the machine it happened
+/// on.
 ///
 /// Credentials are not included unless the caller asks for them and supplies a passphrase. A stored
 /// secret is protected by the operating system for one user on one machine, so moving it means
 /// re-protecting it with something the recipient can supply, and writing it in the clear because
 /// that was easier would be a leak the user did not agree to.
+///
+/// The same file is what a shared library is kept in. That is why a profile carries when it was
+/// last changed and the package carries the profiles that were deleted: two people changing one set
+/// can only be reconciled by knowing which change came last and what went away.
 /// </remarks>
 public sealed record ProfilePackageContent
 {
     /// <summary>
+    /// The newest layout this build reads and writes.
+    /// </summary>
+    /// <remarks>
+    /// Two added the settings, when a profile last changed and the deletions. A file of one reads as
+    /// one of two that has none of them.
+    /// </remarks>
+    public const int CurrentFormatVersion = 2;
+
+    /// <summary>
     /// The layout this file was written with, so a later version can read an earlier one.
     /// </summary>
     [JsonPropertyName("formatVersion")]
-    public int FormatVersion { get; init; } = 1;
+    public int FormatVersion { get; init; } = CurrentFormatVersion;
 
     [JsonPropertyName("createdAt")]
     public DateTimeOffset CreatedAt { get; init; }
@@ -43,6 +59,18 @@ public sealed record ProfilePackageContent
     /// </summary>
     [JsonPropertyName("credentials")]
     public IReadOnlyList<PackagedCredential> Credentials { get; init; } = [];
+
+    /// <summary>
+    /// The settings, in the settings file's own form, when the writer chose to include them.
+    /// </summary>
+    [JsonPropertyName("settings")]
+    public JsonElement? Settings { get; init; }
+
+    /// <summary>
+    /// Profiles that were deleted from a shared library, so the deletion reaches everyone using it.
+    /// </summary>
+    [JsonPropertyName("deletedProfiles")]
+    public IReadOnlyList<PackagedDeletion> DeletedProfiles { get; init; } = [];
 }
 
 /// <summary>
@@ -50,7 +78,7 @@ public sealed record ProfilePackageContent
 /// </summary>
 public sealed record PackagedProfile
 {
-    [property: JsonPropertyName("id")]
+    [JsonPropertyName("id")]
     public Guid Id { get; init; }
 
     [JsonPropertyName("name")]
@@ -88,6 +116,12 @@ public sealed record PackagedProfile
 
     [JsonPropertyName("tags")]
     public IReadOnlyList<string> Tags { get; init; } = [];
+
+    /// <summary>
+    /// When what is shared about the profile last changed. Absent from a package of format one.
+    /// </summary>
+    [JsonPropertyName("updatedAt")]
+    public DateTimeOffset? UpdatedAt { get; init; }
 }
 
 /// <summary>
@@ -106,3 +140,10 @@ public sealed record PackagedCredential(
     [property: JsonPropertyName("realm")] string Realm,
     [property: JsonPropertyName("username")] string? Username,
     [property: JsonPropertyName("password")] string Password);
+
+/// <summary>
+/// A profile that was deleted, and when.
+/// </summary>
+public sealed record PackagedDeletion(
+    [property: JsonPropertyName("profileId")] Guid ProfileId,
+    [property: JsonPropertyName("deletedAt")] DateTimeOffset DeletedAt);

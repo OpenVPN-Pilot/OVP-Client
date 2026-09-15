@@ -38,6 +38,8 @@ public sealed class PilotSettings
 
     public AdvancedSettings Advanced { get; set; } = new();
 
+    public LibrarySettings Library { get; set; } = new();
+
     /// <summary>
     /// Produces an independent copy, so a screen can edit settings without the change taking effect
     /// until it is saved.
@@ -79,7 +81,26 @@ public sealed class PilotSettings
         Notifications = Notifications.Clone(),
         Credentials = Credentials.Clone(),
         Advanced = Advanced.Clone(),
+        Library = Library.Clone(),
     };
+}
+
+/// <summary>
+/// Where the profile library is shared from, when it is.
+/// </summary>
+/// <remarks>
+/// Only the path is a setting. What was last synchronised, and whether changes are waiting, is state
+/// the application keeps beside the store, and the passphrase is kept by the operating system.
+/// </remarks>
+public sealed class LibrarySettings
+{
+    /// <summary>
+    /// The shared package file, usually in a folder a sync client keeps in step. Null while the
+    /// library is not shared.
+    /// </summary>
+    public string? SharedPath { get; set; }
+
+    public LibrarySettings Clone() => (LibrarySettings)MemberwiseClone();
 }
 
 public sealed class GeneralSettings
