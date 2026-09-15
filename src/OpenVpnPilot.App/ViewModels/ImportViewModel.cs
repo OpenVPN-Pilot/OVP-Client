@@ -83,6 +83,7 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
     public partial string StatusMessage { get; set; } = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCommit))]
     public partial bool IsBusy { get; set; }
 
     [ObservableProperty]
@@ -100,7 +101,10 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPackage))]
+    [NotifyPropertyChangedFor(nameof(IsPackageLocked))]
+    [NotifyPropertyChangedFor(nameof(IsPackageOpen))]
     [NotifyPropertyChangedFor(nameof(PackageName))]
+    [NotifyPropertyChangedFor(nameof(CommitLabel))]
     [NotifyPropertyChangedFor(nameof(CanCommit))]
     [NotifyPropertyChangedFor(nameof(HasRows))]
     public partial string? PackagePath { get; set; }

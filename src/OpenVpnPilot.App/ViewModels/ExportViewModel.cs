@@ -102,6 +102,7 @@ public sealed partial class ExportViewModel : ViewModelBase
     public partial string StatusMessage { get; set; } = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanExport))]
     public partial bool IsBusy { get; set; }
 
     /// <summary>
