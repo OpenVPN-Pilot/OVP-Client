@@ -544,7 +544,7 @@ public sealed class LibraryMerger
             Added = added,
             Updated = updated,
             Removed = removed,
-            DeferredDeletions = deferred.Count,
+            DeferredProfiles = [.. deferred],
         };
     }
 
@@ -826,7 +826,9 @@ public sealed record LibraryMergeResult
     /// <summary>
     /// Profiles deleted elsewhere that stay here until their tunnel ends.
     /// </summary>
-    public int DeferredDeletions { get; init; }
+    public IReadOnlyCollection<Guid> DeferredProfiles { get; init; } = [];
+
+    public int DeferredDeletions => DeferredProfiles.Count;
 
     public IReadOnlyList<LibraryConflict> Conflicts { get; init; } = [];
 

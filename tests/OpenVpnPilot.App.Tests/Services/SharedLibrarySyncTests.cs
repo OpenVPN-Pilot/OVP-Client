@@ -290,6 +290,37 @@ public sealed class SharedLibrarySyncTests : IAsyncLifetime
         Assert.Equal("typed at the prompt", (await second.Secrets.TryReadAsync(SecretReference.ForProfile(id, "Auth")))?.Password);
     }
 
+    /// <summary>
+    /// A profile deleted elsewhere while its tunnel runs here stays, and goes once the tunnel has
+    /// ended, although neither the file nor anything on this machine changed in the meantime.
+    /// </summary>
+    [Fact]
+    public async Task ADeletionThatWaitedForATunnel_IsCarriedOutWhenTheTunnelEnds()
+    {
+        (Machine first, Machine second, Guid id) = await TwoJoinedMachinesAsync();
+        second.Running.Add(id);
+
+        await using (PilotDbContext context = await first.Factory.CreateDbContextAsync())
+        {
+            await context.Profiles.Where(profile => profile.Id == id).ExecuteDeleteAsync();
+        }
+
+        await first.Sync.SyncNowAsync();
+        await second.Sync.SyncNowAsync();
+
+        Assert.Equal(["site-alpha"], await second.NamesAsync());
+        Assert.False(await second.Sync.IsDueHereAsync(), "Nothing is due while the tunnel runs.");
+
+        second.Running.Clear();
+
+        Assert.True(await second.Sync.IsDueHereAsync(), "The tunnel has ended, so the deletion is due.");
+
+        await second.Sync.SyncNowAsync();
+
+        Assert.Empty(await second.NamesAsync());
+        Assert.False(await second.Sync.IsDueHereAsync());
+    }
+
     private async Task<(Machine First, Machine Second, Guid Id)> TwoJoinedMachinesAsync(TimeSpan? lockWait = null)
     {
         Machine first = await CreateMachineAsync("first", lockWait);
@@ -333,6 +364,7 @@ public sealed class SharedLibrarySyncTests : IAsyncLifetime
         ObservedSecretStore observed = new(secrets);
         FakeSettingsService settings = new();
         ConnectionManager connections = IdleConnections.Create();
+        HashSet<Guid> running = [];
 
         SharedLibrarySync sync = new(
             settings,
@@ -344,9 +376,10 @@ public sealed class SharedLibrarySyncTests : IAsyncLifetime
             NullLogger<SharedLibrarySync>.Instance)
         {
             LockWait = lockWait ?? TimeSpan.FromSeconds(5),
+            ActiveProfiles = () => running,
         };
 
-        Machine machine = new(services, factory, secrets, observed, settings, connections, sync);
+        Machine machine = new(services, factory, secrets, observed, settings, connections, sync, running);
         machines.Add(machine);
         return machine;
     }
@@ -379,7 +412,8 @@ public sealed class SharedLibrarySyncTests : IAsyncLifetime
         ObservedSecretStore Observed,
         FakeSettingsService Settings,
         ConnectionManager Connections,
-        SharedLibrarySync Sync)
+        SharedLibrarySync Sync,
+        HashSet<Guid> Running)
     {
         public async Task<Profile> AddAsync(string name, int port)
         {

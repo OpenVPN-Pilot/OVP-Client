@@ -96,6 +96,7 @@ public sealed class SharedLibrarySync : IAsyncDisposable
         this.logger = logger;
 
         recordDirectory = Path.Combine(paths.DataDirectory, "library");
+        ActiveProfiles = () => connections.ActiveProfiles;
     }
 
     /// <summary>
@@ -118,6 +119,11 @@ public sealed class SharedLibrarySync : IAsyncDisposable
     /// Long enough for a write in progress to finish over a slow connection.
     /// </remarks>
     internal TimeSpan LockWait { get; init; } = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// The profiles whose tunnel runs now, which a deletion made elsewhere waits for.
+    /// </summary>
+    internal Func<IReadOnlyCollection<Guid>> ActiveProfiles { get; init; }
 
     public string? SharedPath => settings.Current.Library.SharedPath is { Length: > 0 } path ? path : null;
 
@@ -168,7 +174,7 @@ public sealed class SharedLibrarySync : IAsyncDisposable
             return;
         }
 
-        if (Status.WaitingSince is not null || await LocalChangedAsync(LoadRecord(SharedPath), cancellationToken))
+        if (Status.WaitingSince is not null || await DueHereAsync(LoadRecord(SharedPath), cancellationToken))
         {
             await SyncNowAsync(cancellationToken);
         }
@@ -386,7 +392,7 @@ public sealed class SharedLibrarySync : IAsyncDisposable
 
                 bool remoteDue = now - lastRemoteCheck >= RemoteCheckInterval;
 
-                if (!remoteDue && !await LocalChangedAsync(LoadRecord(path), cancellationToken))
+                if (!remoteDue && !await DueHereAsync(LoadRecord(path), cancellationToken))
                 {
                     continue;
                 }
@@ -454,7 +460,7 @@ public sealed class SharedLibrarySync : IAsyncDisposable
                 && record.WaitingSince is null
                 && stamp.Length == record.RemoteLength
                 && stamp.LastWriteUtc == record.RemoteWriteUtc
-                && !await LocalChangedAsync(record, cancellationToken))
+                && !await DueHereAsync(record, cancellationToken))
             {
                 return Publish(SharedLibraryCondition.Synchronised, record);
             }
@@ -479,7 +485,7 @@ public sealed class SharedLibrarySync : IAsyncDisposable
                         result = await new LibraryMerger(context, secrets, timeProvider).MergeAsync(
                             remote,
                             ancestor,
-                            connections.ActiveProfiles.ToHashSet(),
+                            ActiveProfiles().ToHashSet(),
                             cancellationToken);
                     }
                     finally
@@ -509,6 +515,7 @@ public sealed class SharedLibrarySync : IAsyncDisposable
                 }
 
                 List<string> copies = NewConflictCopies(file, record);
+                record.DeferredProfiles = [.. result.DeferredProfiles];
                 await CompleteAsync(file, record, ancestorBytes, cancellationToken);
                 secretChangesSynchronised = secretsBefore;
 
@@ -646,6 +653,24 @@ public sealed class SharedLibrarySync : IAsyncDisposable
         failures = 0;
         retryAfter = DateTimeOffset.MinValue;
     }
+
+    /// <summary>
+    /// True when this machine has something to reconcile that looking at the file would not show.
+    /// </summary>
+    /// <remarks>
+    /// A deletion that waited for a tunnel is one of those. The file already says the profile is
+    /// gone and nothing here changes when the tunnel ends, so without asking about it the profile
+    /// would stay until somebody happened to change something else.
+    /// </remarks>
+    private async Task<bool> DueHereAsync(SyncRecord record, CancellationToken cancellationToken) =>
+        record.DeferredProfiles.Except(ActiveProfiles()).Any()
+        || await LocalChangedAsync(record, cancellationToken);
+
+    /// <summary>
+    /// The same question for a test, about the record as it is stored.
+    /// </summary>
+    internal Task<bool> IsDueHereAsync(CancellationToken cancellationToken = default) =>
+        SharedPath is { } path ? DueHereAsync(LoadRecord(path), cancellationToken) : Task.FromResult(false);
 
     /// <summary>
     /// True when this machine's library changed since the last synchronisation.
@@ -841,6 +866,11 @@ public sealed class SharedLibrarySync : IAsyncDisposable
         public string? LocalFingerprint { get; set; }
 
         public DateTimeOffset? WaitingSince { get; set; }
+
+        /// <summary>
+        /// Profiles the file says are deleted and that stay here while their tunnel runs.
+        /// </summary>
+        public List<Guid> DeferredProfiles { get; set; } = [];
 
         public List<string> ReportedCopies { get; set; } = [];
     }
