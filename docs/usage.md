@@ -129,7 +129,9 @@ what. That decides nearly everything without a conflict at all:
   held twice. Every machine keeps the same one of the two, and what this machine kept about the
   other, its favourite mark, its history and its sign ins, moves over to it.
 - **A sign in changed on two machines** keeps the one typed on the machine that synchronises last,
-  since there is no telling which of them the server accepted more recently.
+  since there is no telling which of them the server accepted more recently. A sign in removed on
+  one machine is removed on all of them, whether the server refused it or **Forget all stored
+  credentials** was pressed, which says so on the credentials page and leaves the passphrase alone.
 - **Copies the sync client keeps**, named after the file with a machine's name appended, happen when
   two machines wrote at nearly the same moment. They are mentioned in the banner and not read,
   because what they hold is in the library already unless both writes crossed within seconds. Delete

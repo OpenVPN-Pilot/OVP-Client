@@ -237,6 +237,7 @@
       "credentialsHint": "Anmeldedaten werden vom Betriebssystem geschützt und sind nur für dieses Konto auf diesem Rechner lesbar. Sie gelangen weder in die Profildatenbank noch in einen Export.\n\nGespeicherte Anmeldedaten werden ohne Nachfrage verwendet, ein täglich genutztes Profil fragt also nie. Lehnt der Server eine Verbindung ab, wird das Gespeicherte vergessen und erneut gefragt, mit dem Hinweis auf die Ablehnung. Um sie vorher zu ändern, verwenden Sie am Profil „Neu anmelden“.",
       "forgetCredentials": "Alle gespeicherten Anmeldedaten vergessen",
       "credentialsCleared": "{0} gespeicherte Anmeldedaten entfernt.",
+      "credentialsShared": "Dieser Rechner verwendet eine geteilte Bibliothek, die die Anmeldungen mitführt. Werden sie hier vergessen, verschwinden sie auf jedem Rechner, der sie verwendet. Die Passphrase der Bibliothek ist keine Anmeldung und bleibt erhalten.",
       "openVpnPath": "Pfad zur openvpn-Programmdatei",
       "openVpnPathHint": "Leer lassen, um die installierte zu verwenden",
       "verbosity": "OpenVPN-Ausführlichkeit",

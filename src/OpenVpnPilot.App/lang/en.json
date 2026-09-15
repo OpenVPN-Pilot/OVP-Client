@@ -237,6 +237,7 @@
       "credentialsHint": "Credentials are protected by the operating system and are readable only by this account on this machine. They never enter the profile database or an export.\n\nStored credentials are used without asking, so a profile connected daily never prompts. A connection the server refuses forgets what was stored and asks again, saying that the previous attempt was rejected. To change them before that happens, use Sign in again on the profile.",
       "forgetCredentials": "Forget all stored credentials",
       "credentialsCleared": "{0} stored credential(s) removed.",
+      "credentialsShared": "This machine uses a shared library, which carries the sign ins. Forgetting them here removes them from every machine that uses it. The passphrase of the library is not a sign in and stays.",
       "openVpnPath": "Path to the openvpn executable",
       "openVpnPathHint": "Leave empty to use the installed one",
       "verbosity": "OpenVPN verbosity",

@@ -284,7 +284,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             Hotkeys.Add(editor);
         }
 
-        StoredSecretCount = (await secrets.ListAsync(cancellationToken)).Count;
+        StoredSecretCount = (await secrets.ListAsync(cancellationToken)).Count(IsSignIn);
 
         // The registry is the truth for autostart, not the settings file, because the entry can be
         // removed from outside the application.
@@ -461,10 +461,22 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private async Task ForgetStoredCredentialsAsync()
     {
-        int removed = await secrets.ClearAsync();
+        // One by one rather than clearing the store, which would take the passphrase of a shared
+        // library with it: that is not a sign in, and losing it would stop this machine synchronising
+        // without anything on this page having said so.
+        int removed = 0;
+
+        foreach (string reference in (await secrets.ListAsync()).Where(IsSignIn))
+        {
+            await secrets.DeleteAsync(reference);
+            removed++;
+        }
+
         StoredSecretCount = 0;
         StatusMessage = localizer.Translate("settings.credentialsCleared", removed);
     }
+
+    private static bool IsSignIn(string reference) => SecretReference.TryParse(reference, out _, out _);
 
     /// <summary>
     /// Checks now, whatever the switch says, and reports whatever came back.

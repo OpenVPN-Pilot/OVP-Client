@@ -217,6 +217,10 @@
               <Button Content="{loc:Translate settings.forgetCredentials}"
                       Command="{Binding ForgetStoredCredentialsCommand}" />
             </StackPanel>
+            <!-- A shared library carries the sign ins, so forgetting them is a change every machine takes. -->
+            <TextBlock Text="{loc:Translate settings.credentialsShared}" FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource StatePending}"
+                       IsVisible="{Binding IsLibraryShared}" />
           </StackPanel>
         </ScrollViewer>
       </TabItem>

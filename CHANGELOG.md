@@ -44,6 +44,9 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   and which profiles were deleted, and a version that finds a newer format refuses the package with
   the version that wrote it rather than reading part of it. Packages written by earlier versions
   still open.
+- **Forget all stored credentials** removes the sign ins of profiles and leaves the passphrase of a
+  shared library, which the same keystore now holds, and the count beside it counts only sign ins.
+  While a library is shared the page says that forgetting them removes them from every machine.
 - A profile's change time moves only when something shared about it changes. Marking a favourite,
   connecting and an edit that changes nothing leave it alone, which is what lets two machines tell a
   real change from a visit.
