@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using OpenVpnPilot.Data.Entities;
+using OpenVpnPilot.Data.Tagging;
 
 namespace OpenVpnPilot.Data.Packaging;
 
@@ -106,6 +107,8 @@ public sealed class ProfilePackageService
         // What each packaged profile turned into, so the credentials can follow it.
         Dictionary<Guid, Guid> resolved = [];
 
+        TagCatalogue tags = await TagCatalogue.LoadAsync(context, cancellationToken);
+
         DateTimeOffset now = timeProvider.GetUtcNow();
         int added = 0;
         int skipped = 0;
@@ -140,7 +143,7 @@ public sealed class ProfilePackageService
             };
 
             context.Profiles.Add(profile);
-            await ApplyTagsAsync(profile, packaged.Tags, cancellationToken);
+            ApplyTags(profile, packaged.Tags, tags);
 
             existingByHash[hash] = profile.Id;
             resolved[packaged.Id] = profile.Id;
@@ -194,20 +197,23 @@ public sealed class ProfilePackageService
         return result;
     }
 
-    private async Task ApplyTagsAsync(
-        Profile profile,
-        IReadOnlyList<string> names,
-        CancellationToken cancellationToken)
+    private void ApplyTags(Profile profile, IReadOnlyList<string>? names, TagCatalogue tags)
     {
-        foreach (string name in names.Distinct(StringComparer.OrdinalIgnoreCase))
+        // A package is read from a file somebody else wrote, so a missing list is not assumed away.
+        if (names is null)
         {
-            Tag? tag = await context.Tags
-                .FirstOrDefaultAsync(candidate => candidate.Name == name, cancellationToken);
+            return;
+        }
 
-            if (tag is null)
+        HashSet<Guid> linked = [];
+
+        foreach (string name in names.Where(name => !string.IsNullOrWhiteSpace(name)))
+        {
+            Tag tag = tags.Resolve(name);
+
+            if (!linked.Add(tag.Id))
             {
-                tag = new Tag { Name = name };
-                context.Tags.Add(tag);
+                continue;
             }
 
             context.ProfileTags.Add(new ProfileTag

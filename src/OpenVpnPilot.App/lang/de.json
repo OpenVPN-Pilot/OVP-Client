@@ -334,6 +334,8 @@
       "packageApplied": "{0} Profil(e) importiert, {1} bereits vorhanden.",
       "packageAppliedWithCredentials": "{0} Profil(e) importiert, {1} bereits vorhanden, {2} gespeicherte Anmeldung(en) wiederhergestellt.",
       "packageRefused": "Das Paket konnte nicht geöffnet werden. Die Passphrase ist falsch, oder die Datei wurde nachträglich verändert.",
+      "packageUnreadable": "Das Paket konnte nicht gelesen werden. {0}",
+      "storeRefused": "Der Profilbestand hat den Import abgelehnt. Laden Sie die Liste neu, um zu sehen, was bis dahin gespeichert wurde. {0}",
       "unsupported": "Verwendet Skriptdirektiven: {0}",
       "missingFiles": "Referenzierte Dateien nicht gefunden: {0}",
       "outcome": {

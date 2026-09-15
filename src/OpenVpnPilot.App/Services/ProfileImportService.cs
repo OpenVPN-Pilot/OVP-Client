@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.Data.Import;
+using OpenVpnPilot.Data.Tagging;
 using OpenVpnPilot.OpenVpn.Configuration;
 
 namespace OpenVpnPilot.App.Services;
@@ -197,19 +198,14 @@ public sealed class ProfileImportService : IProfileImportService
         IReadOnlyList<string> tagNames,
         CancellationToken cancellationToken)
     {
+        TagCatalogue tags = await TagCatalogue.LoadAsync(context, cancellationToken);
+
         foreach (string name in tagNames
             .Select(tag => tag.Trim())
             .Where(tag => tag.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            Tag? tag = await context.Tags
-                .FirstOrDefaultAsync(candidate => candidate.Name == name, cancellationToken);
-
-            if (tag is null)
-            {
-                tag = new Tag { Name = name };
-                context.Tags.Add(tag);
-            }
+            Tag tag = tags.Resolve(name);
 
             foreach (Profile profile in created)
             {

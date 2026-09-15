@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Security.Cryptography;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.EntityFrameworkCore;
 using OpenVpnPilot.App.Services;
 using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.Data.Import;
@@ -244,6 +245,12 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
 
             Closed?.Invoke(this, true);
         }
+        catch (DbUpdateException exception)
+        {
+            // Anything that escapes a command ends the application, and an import is exactly where a
+            // store written by another version, or a set somebody else assembled, meets this one.
+            StatusMessage = localizer.Translate("import.storeRefused", Innermost(exception).Message);
+        }
         finally
         {
             IsBusy = false;
@@ -283,11 +290,38 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
         {
             StatusMessage = exception.Message;
         }
+        catch (DbUpdateException exception)
+        {
+            // What ended the application when a package with shared tags was opened. That cause is
+            // fixed; this is here so the next thing a store refuses is reported on this screen.
+            StatusMessage = localizer.Translate("import.storeRefused", Innermost(exception).Message);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The file was picked a moment ago and can have been moved or locked since.
+            StatusMessage = localizer.Translate("import.packageUnreadable", exception.Message);
+        }
         finally
         {
             IsBusy = false;
             OnPropertyChanged(nameof(CanCommit));
         }
+    }
+
+    /// <summary>
+    /// The exception that says what actually went wrong.
+    /// </summary>
+    /// <remarks>
+    /// Entity Framework wraps the database's refusal in a message that only says to look inside it.
+    /// </remarks>
+    private static Exception Innermost(Exception exception)
+    {
+        while (exception.InnerException is { } inner)
+        {
+            exception = inner;
+        }
+
+        return exception;
     }
 
     [RelayCommand]

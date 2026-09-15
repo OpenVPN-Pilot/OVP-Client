@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
+using OpenVpnPilot.Data.Tagging;
 
 namespace OpenVpnPilot.App.Services;
 
@@ -354,18 +355,17 @@ public sealed class ProfileStore : IProfileStore
 
         context.ProfileTags.RemoveRange(existing);
 
+        TagCatalogue tags = await TagCatalogue.LoadAsync(context, cancellationToken);
+        HashSet<Guid> linked = [];
+
         foreach (string name in wanted)
         {
-            Tag? tag = await context.Tags
-                .FirstOrDefaultAsync(candidate => candidate.Name == name, cancellationToken);
+            Tag tag = tags.Resolve(name);
 
-            if (tag is null)
+            if (linked.Add(tag.Id))
             {
-                tag = new Tag { Name = name };
-                context.Tags.Add(tag);
+                context.ProfileTags.Add(new ProfileTag { ProfileId = profileId, TagId = tag.Id, Tag = tag });
             }
-
-            context.ProfileTags.Add(new ProfileTag { ProfileId = profileId, TagId = tag.Id, Tag = tag });
         }
 
         await context.SaveChangesAsync(cancellationToken);

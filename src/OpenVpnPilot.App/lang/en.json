@@ -334,6 +334,8 @@
       "packageApplied": "{0} profile(s) imported, {1} already stored.",
       "packageAppliedWithCredentials": "{0} profile(s) imported, {1} already stored, {2} saved sign in(s) restored.",
       "packageRefused": "The package could not be opened. The passphrase is wrong, or the file was altered after it was written.",
+      "packageUnreadable": "The package could not be read. {0}",
+      "storeRefused": "The profile store refused the import. Reload the list to see what was stored before it stopped. {0}",
       "unsupported": "Uses script directives: {0}",
       "missingFiles": "Referenced files not found: {0}",
       "outcome": {
