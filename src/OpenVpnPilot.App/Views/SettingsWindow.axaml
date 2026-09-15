@@ -242,6 +242,54 @@
                        TextWrapping="Wrap" />
             <TextBlock Text="{loc:Translate settings.reloadProfilesHint}" Classes="muted"
                        TextWrapping="Wrap" />
+
+            <Border Classes="divider" />
+
+            <!--
+              A shared library is changed at once rather than with the settings' own save button:
+              joining, creating and leaving each reach a file other machines use, and a choice that
+              only took effect on save could be abandoned by closing the window after it had.
+            -->
+            <TextBlock Text="{loc:Translate library.section}" Classes="section" />
+            <TextBlock Text="{loc:Translate library.hint}" Classes="muted" TextWrapping="Wrap" />
+
+            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding !IsLibraryShared}">
+              <Button Name="JoinLibraryButton" Content="{loc:Translate library.join}"
+                      IsEnabled="{Binding !IsLibraryBusy}" />
+              <Button Name="CreateLibraryButton" Content="{loc:Translate library.create}"
+                      IsEnabled="{Binding !IsLibraryBusy}" />
+            </StackPanel>
+
+            <StackPanel Spacing="8" IsVisible="{Binding IsLibraryShared}">
+              <SelectableTextBlock Text="{Binding LibraryPath}" FontSize="13" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextPrimary}" />
+              <TextBlock Text="{Binding LibraryStatusText}" Classes="muted" TextWrapping="Wrap" />
+              <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8"
+                         IsVisible="{Binding !IsConfirmingLeave}">
+                <Button Content="{loc:Translate library.syncNow}" Classes="primary"
+                        IsEnabled="{Binding !IsLibraryBusy}"
+                        Command="{Binding SyncLibraryNowCommand}" />
+                <Button Name="LibraryPassphraseButton" Content="{Binding LibraryPassphraseLabel}"
+                        IsEnabled="{Binding !IsLibraryBusy}" />
+                <Button Content="{loc:Translate library.leave}" Classes="danger"
+                        IsEnabled="{Binding !IsLibraryBusy}"
+                        Command="{Binding AskToLeaveLibraryCommand}" />
+              </WrapPanel>
+              <Border CornerRadius="7" Padding="12,10"
+                      Background="{DynamicResource StateFailedSoft}"
+                      IsVisible="{Binding IsConfirmingLeave}">
+                <StackPanel Spacing="9">
+                  <TextBlock Text="{loc:Translate library.leaveConfirm}" TextWrapping="Wrap" FontSize="12"
+                             Foreground="{DynamicResource StateFailed}" />
+                  <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                    <Button Content="{loc:Translate common.cancel}" Classes="quiet"
+                            Command="{Binding CancelLeaveLibraryCommand}" />
+                    <Button Content="{loc:Translate library.leave}" Classes="destructive"
+                            Command="{Binding LeaveLibraryCommand}" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+            </StackPanel>
           </StackPanel>
         </ScrollViewer>
       </TabItem>

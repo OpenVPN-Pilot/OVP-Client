@@ -506,6 +506,55 @@
       "download": "Get it",
       "download@macos": "See the release",
       "dismiss": "Not now"
+    },
+    "library": {
+      "section": "SHARED LIBRARY",
+      "hint": "Keeps the profiles and their saved sign ins in one encrypted file that several machines use together, for example in a folder OneDrive synchronises. Every machine keeps working with its own copy when the file cannot be reached, and catches up afterwards. Favourites, shortcuts, settings and history stay with each machine. The passphrase is asked for once per machine and kept in the operating system's protected storage.",
+      "join": "Use an existing library...",
+      "create": "Create a library...",
+      "syncNow": "Synchronise now",
+      "retry": "Try again",
+      "dismiss": "Hide",
+      "leave": "Stop sharing",
+      "leaveConfirm": "The profiles stay on this machine and stop following the shared file. The passphrase is removed from this machine. The shared file itself is left as it is for everyone else.",
+      "left": "This machine no longer uses the shared library. Its profiles stay here.",
+      "joinTitle": "Use a shared library",
+      "joinMessage": "Enter the passphrase of {0}. The profiles in it are combined with the ones on this machine, and from then on both follow each other.",
+      "createTitle": "Create a shared library",
+      "createMessage": "{0} is written with every profile and saved sign in of this machine. Choose the passphrase every other machine will need, and pass it on separately from the file.",
+      "enterPassphrase": "Enter the passphrase",
+      "enterPassphraseMessage": "The shared library needs its passphrase on this machine. It is asked for once and then kept in the operating system's protected storage.",
+      "changePassphrase": "Change the passphrase",
+      "changePassphraseMessage": "The shared file is written again with the new passphrase, and every other machine asks for it the next time it synchronises. Somebody who knows only the old one cannot open anything written from now on.",
+      "passphraseWrong": "The passphrase does not open the shared file, or the file was altered.",
+      "exists": "A file already exists there. Use it as an existing library instead, or choose another name.",
+      "notALibrary": "The file is not a shared library. {0}",
+      "unreachable": "The shared file cannot be reached. {0}",
+      "waiting": "Changes made here since {0} are waiting to be written to it.",
+      "reconciled": "Shared library: {0} added, {1} changed, {2} removed, {3} sign in(s) updated.",
+      "bannerTitle": "Shared library",
+      "lockedBy": "{0} is writing to the shared file. This machine tries again shortly.",
+      "conflictCopies": "The sync client left copies of the shared file beside it, which were read as well and can be deleted: {0}",
+      "conflict": {
+        "bothKeptHere": "{0} was changed here and on another machine. The same setting differed, and the change made here was later, so it was kept.",
+        "bothKeptThere": "{0} was changed here and on another machine. The same setting differed, and the other change was later, so it replaced the one made here.",
+        "changedHereDeletedThere": "{0} was removed on another machine after it was changed here, so it was kept and is shared again.",
+        "deletedHereChangedThere": "{0} was removed here, but another machine changed it afterwards, so it is back.",
+        "more": "{0} more profile(s) had a conflict of the same kind."
+      },
+      "condition": {
+        "NotShared": "This machine does not use a shared library.",
+        "Synchronising": "Synchronising with the shared file...",
+        "Synchronised": "In step with the shared file since {0}.",
+        "Unreachable": "The folder of the shared file cannot be reached. This machine keeps working with its own copy and tries again.",
+        "FileMissing": "The shared file is not in its folder. It is not written again on its own, because the sync client may not have delivered it yet or it was removed on purpose.",
+        "PassphraseNeeded": "The passphrase of the shared library is not stored on this machine yet.",
+        "PassphraseRejected": "The stored passphrase no longer opens the shared file. It was probably changed on another machine.",
+        "Locked": "Another machine is writing to the shared file. This machine tries again shortly.",
+        "TooNew": "A newer version of OpenVpnPilot wrote the shared file. Update this machine to keep synchronising.",
+        "Damaged": "The shared file opened but could not be read. {0}",
+        "Failed": "Synchronising with the shared file failed. {0}"
+      }
     }
   }
 }

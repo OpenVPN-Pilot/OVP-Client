@@ -1,0 +1,40 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:OpenVpnPilot.App.ViewModels"
+        xmlns:loc="using:OpenVpnPilot.App.Localization"
+        x:Class="OpenVpnPilot.App.Views.PassphraseWindow"
+        x:DataType="vm:PassphrasePromptViewModel"
+        Width="460" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceWindow}"
+        Icon="/Assets/openvpnpilot.ico"
+        Title="{Binding Title}">
+
+  <StackPanel Margin="22" Spacing="12">
+    <TextBlock Text="{Binding Title}" Classes="title" TextWrapping="Wrap" />
+    <TextBlock Text="{Binding Message}" Classes="muted" TextWrapping="Wrap" />
+
+    <StackPanel Spacing="5">
+      <TextBlock Text="{loc:Translate export.passphrase}" Classes="muted" />
+      <TextBox Name="PassphraseBox" Text="{Binding Passphrase}" PasswordChar="•" />
+    </StackPanel>
+
+    <StackPanel Spacing="5" IsVisible="{Binding IsNew}">
+      <TextBlock Text="{loc:Translate export.passphraseAgain}" Classes="muted" />
+      <TextBox Text="{Binding Confirmation}" PasswordChar="•" />
+    </StackPanel>
+
+    <TextBlock Text="{Binding Problem}" FontSize="12" TextWrapping="Wrap"
+               Foreground="{DynamicResource StateFailed}"
+               IsVisible="{Binding HasProblem}" />
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,6,0,0">
+      <Button Content="{loc:Translate common.cancel}" MinWidth="92" IsCancel="True"
+              Command="{Binding CancelCommand}" />
+      <Button Content="{loc:Translate common.ok}" Classes="primary" MinWidth="92" IsDefault="True"
+              IsEnabled="{Binding CanAccept}"
+              Command="{Binding AcceptCommand}" />
+    </StackPanel>
+  </StackPanel>
+</Window>

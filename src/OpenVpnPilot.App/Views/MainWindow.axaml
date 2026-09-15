@@ -104,6 +104,44 @@
     </Border>
 
     <!--
+      The shared library: what stands in the way of it, or what reconciling it resolved. Red for the
+      first, because changes may be waiting; the accent for the second, because nothing is.
+    -->
+    <Border Padding="18,12"
+            BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1"
+            Classes="libraryBanner"
+            Classes.problem="{Binding IsLibraryProblem}"
+            IsVisible="{Binding IsLibraryBannerVisible}">
+      <Border.Styles>
+        <!-- Both colours come from styles: a value set on the element would outrank either. -->
+        <Style Selector="Border.libraryBanner">
+          <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+        </Style>
+        <Style Selector="Border.libraryBanner.problem">
+          <Setter Property="Background" Value="{DynamicResource StateFailedSoft}" />
+        </Style>
+      </Border.Styles>
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+          <TextBlock Text="{loc:Translate library.bannerTitle}" FontSize="13" FontWeight="SemiBold"
+                     Foreground="{DynamicResource TextPrimary}" />
+          <TextBlock Text="{Binding LibraryBannerText}" FontSize="12" TextWrapping="Wrap"
+                     Foreground="{DynamicResource TextSecondary}" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Button Content="{loc:Translate library.enterPassphrase}" Classes="primary"
+                  IsVisible="{Binding LibraryBannerOffersPassphrase}"
+                  Command="{Binding EnterLibraryPassphraseCommand}" />
+          <Button Content="{loc:Translate library.retry}"
+                  IsVisible="{Binding LibraryBannerOffersRetry}"
+                  Command="{Binding RetryLibraryCommand}" />
+          <Button Content="{loc:Translate library.dismiss}" Classes="quiet"
+                  Command="{Binding DismissLibraryBannerCommand}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!--
       A newer release, when the user asked to be told. Dismissible, because being told once is
       enough until the next start.
     -->

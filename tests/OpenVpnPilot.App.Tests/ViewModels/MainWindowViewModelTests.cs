@@ -1,5 +1,7 @@
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.App.Services.Library;
 using OpenVpnPilot.App.ViewModels;
+using OpenVpnPilot.Data.Library;
 using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.OpenVpn.Runtime;
 
@@ -259,5 +261,87 @@ public sealed class MainWindowViewModelTests : IAsyncLifetime
         await model.DeleteTickedCommand.ExecuteAsync(null);
 
         Assert.Equal([doomed], store.Deleted);
+    }
+
+    /// <summary>
+    /// A missing passphrase offers the prompt, anything else offers another attempt, and the banner
+    /// goes once the library is in step again.
+    /// </summary>
+    [Fact]
+    public void LibraryBanner_OffersWhatTheProblemNeedsAndGoesWhenItIsSolved()
+    {
+        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.PassphraseNeeded));
+
+        Assert.True(model.IsLibraryBannerVisible);
+        Assert.True(model.IsLibraryProblem);
+        Assert.True(model.LibraryBannerOffersPassphrase);
+        Assert.False(model.LibraryBannerOffersRetry);
+
+        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.Unreachable));
+
+        Assert.False(model.LibraryBannerOffersPassphrase);
+        Assert.True(model.LibraryBannerOffersRetry);
+
+        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.Synchronised, DateTimeOffset.UtcNow));
+
+        Assert.False(model.IsLibraryBannerVisible);
+        Assert.False(model.IsLibraryProblem);
+    }
+
+    /// <summary>
+    /// A conflict that was resolved is worth a notice, and one that is dismissed is not brought back
+    /// by the library merely staying in step.
+    /// </summary>
+    [Fact]
+    public void LibraryBanner_TellsOfResolvedConflictsUntilDismissed()
+    {
+        SharedLibraryReport report = new(
+            [], ["alpha"], [], 0,
+            [new LibraryConflict("alpha", LibraryConflictKind.ChangedOnBothSides, KeptHere: false)],
+            0, []);
+
+        model.ShowLibraryReport(report);
+
+        Assert.True(model.IsLibraryBannerVisible);
+        Assert.False(model.IsLibraryProblem);
+        Assert.False(model.LibraryBannerOffersRetry);
+        Assert.Equal("library.reconciled", model.StatusMessage);
+
+        model.DismissLibraryBannerCommand.Execute(null);
+        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.Synchronised, DateTimeOffset.UtcNow));
+
+        Assert.False(model.IsLibraryBannerVisible);
+    }
+
+    /// <summary>
+    /// A problem is what somebody has to act on, so a conflict notice does not cover it up.
+    /// </summary>
+    [Fact]
+    public void LibraryBanner_KeepsAProblemInViewOverAConflictNotice()
+    {
+        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.PassphraseRejected));
+
+        model.ShowLibraryReport(new SharedLibraryReport(
+            [], [], [], 0,
+            [new LibraryConflict("beta", LibraryConflictKind.DeletedHereChangedThere, KeptHere: false)],
+            0, []));
+
+        Assert.True(model.IsLibraryProblem);
+        Assert.True(model.LibraryBannerOffersPassphrase);
+    }
+
+    [Fact]
+    public void LibraryBanner_Commands_AskTheOwnerToAct()
+    {
+        int retries = 0;
+        int prompts = 0;
+        model.LibraryRetryRequested += (_, _) => retries++;
+        model.LibraryPassphraseRequested += (_, _) => prompts++;
+
+        model.RetryLibraryCommand.Execute(null);
+        model.EnterLibraryPassphraseCommand.Execute(null);
+
+        Assert.Equal(1, retries);
+        Assert.Equal(1, prompts);
     }
 }

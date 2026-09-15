@@ -11,6 +11,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenVpnPilot.App.Localization;
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.App.Services.Library;
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.App.Views;
 using OpenVpnPilot.Core.Abstractions;
@@ -325,6 +326,8 @@ public partial class App : Application
             AppLog.AbandonedSessionsClosed(logger, abandoned);
         }
 
+        StartSharedLibrary(services);
+
         // A shortcut that opens a window is not something a headless copy should own, and the
         // copy that a person is using may be the one that wants them.
         if (Startup.Headless)
@@ -337,6 +340,35 @@ public partial class App : Application
             await services.GetRequiredService<MainWindowViewModel>().ExecuteHotkeyActionAsync(action));
 
         await hotkeys.AttachAsync();
+    }
+
+    /// <summary>
+    /// Keeps the library in step with its shared file, when it has one, and tells the window what that did.
+    /// </summary>
+    /// <remarks>
+    /// A headless copy reconciles as well. It is the one a script drives, and a profile a colleague
+    /// changed is one it should connect with the change.
+    /// </remarks>
+    private static void StartSharedLibrary(IServiceProvider services)
+    {
+        SharedLibrarySync library = services.GetRequiredService<SharedLibrarySync>();
+        MainWindowViewModel model = services.GetRequiredService<MainWindowViewModel>();
+
+        library.StatusChanged += (_, status) => Dispatcher.UIThread.Post(() => model.ShowLibraryStatus(status));
+
+        library.Reconciled += (_, report) => Dispatcher.UIThread.Post(async () =>
+        {
+            if (report.ChangedHere)
+            {
+                await model.LoadAsync();
+            }
+
+            model.ShowLibraryReport(report);
+        });
+
+        model.LibraryRetryRequested += async (_, _) => await library.SyncNowAsync();
+
+        library.Start();
     }
 
     /// <summary>
@@ -390,6 +422,15 @@ public partial class App : Application
         });
 
         RunStep(logger, started, "connections", () => services.GetRequiredService<ConnectionManager>().DisconnectAllAsync());
+
+        // After the tunnels, which matter more on the way out. Whatever does not make it into the
+        // shared file in time is recorded as waiting and reconciled first on the next start.
+        RunStep(logger, started, "shared library", async () =>
+        {
+            SharedLibrarySync library = services.GetRequiredService<SharedLibrarySync>();
+            await library.FlushAsync();
+            await library.DisposeAsync();
+        });
         RunStep(logger, "hotkeys", () => services.GetRequiredService<HotkeyCoordinator>().Dispose());
         RunStep(logger, "reconnects", () => services.GetRequiredService<ReconnectSupervisor>().Dispose());
         RunStep(logger, started, "ping", async () => await services.GetRequiredService<PingMonitor>().DisposeAsync());

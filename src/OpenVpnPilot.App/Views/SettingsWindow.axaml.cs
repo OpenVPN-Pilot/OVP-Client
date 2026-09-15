@@ -25,6 +25,65 @@ public partial class SettingsWindow : Window
         AddHandler(KeyDownEvent, OnPreviewKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
         this.FindControl<Button>("DiagnosticsButton")!.Click += async (_, _) => await WriteDiagnosticsAsync();
+        this.FindControl<Button>("JoinLibraryButton")!.Click += async (_, _) => await JoinLibraryAsync();
+        this.FindControl<Button>("CreateLibraryButton")!.Click += async (_, _) => await CreateLibraryAsync();
+        this.FindControl<Button>("LibraryPassphraseButton")!.Click += async (_, _) => await AskForLibraryPassphraseAsync();
+    }
+
+    private static readonly FilePickerFileType PackageType = new("OpenVpnPilot package") { Patterns = ["*.ovppkg"] };
+
+    /// <summary>
+    /// Picks a shared file and asks for the passphrase it opens with.
+    /// </summary>
+    private async Task JoinLibraryAsync()
+    {
+        if (ViewModel is null)
+        {
+            return;
+        }
+
+        IReadOnlyList<IStorageFile> files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            AllowMultiple = false,
+            FileTypeFilter = [PackageType],
+        });
+
+        if (files.Count > 0 && files[0].TryGetLocalPath() is { } path)
+        {
+            await PassphraseWindow.AskAsync(this, ViewModel.CreateJoinPrompt(path));
+        }
+    }
+
+    /// <summary>
+    /// Picks where the shared file goes and asks for the passphrase it is to be written with.
+    /// </summary>
+    private async Task CreateLibraryAsync()
+    {
+        if (ViewModel is null)
+        {
+            return;
+        }
+
+        IStorageFile? target = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            SuggestedFileName = "openvpnpilot-library.ovppkg",
+            DefaultExtension = "ovppkg",
+            FileTypeChoices = [PackageType],
+            ShowOverwritePrompt = false,
+        });
+
+        if (target?.TryGetLocalPath() is { } path)
+        {
+            await PassphraseWindow.AskAsync(this, ViewModel.CreateCreatePrompt(path));
+        }
+    }
+
+    private async Task AskForLibraryPassphraseAsync()
+    {
+        if (ViewModel is not null)
+        {
+            await PassphraseWindow.AskAsync(this, ViewModel.CreatePassphrasePrompt());
+        }
     }
 
     /// <summary>

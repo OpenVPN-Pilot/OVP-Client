@@ -3,6 +3,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.App.Services.Library;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.Core.Settings;
@@ -93,6 +94,101 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// Raised when a screen has to be opened. The window owns the dialogs, not the view model.
     /// </summary>
     public event EventHandler<AppScreen>? ScreenRequested;
+
+    /// <summary>
+    /// Raised when the shared library should be reconciled now.
+    /// </summary>
+    public event EventHandler? LibraryRetryRequested;
+
+    /// <summary>
+    /// Raised when the passphrase of the shared library has to be asked for.
+    /// </summary>
+    public event EventHandler? LibraryPassphraseRequested;
+
+    /// <summary>
+    /// True while the banner about the shared library is showing.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsLibraryBannerVisible { get; set; }
+
+    [ObservableProperty]
+    public partial string LibraryBannerText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// True when the banner reports a problem rather than a conflict that was resolved.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsLibraryProblem { get; set; }
+
+    [ObservableProperty]
+    public partial bool LibraryBannerOffersPassphrase { get; set; }
+
+    [ObservableProperty]
+    public partial bool LibraryBannerOffersRetry { get; set; }
+
+    /// <summary>
+    /// Shows what stands in the way of the shared library, or takes the banner away once nothing does.
+    /// </summary>
+    /// <remarks>
+    /// A library that cannot be reached is not a failure of the application, so it is a banner and
+    /// the list keeps working: this machine's copy is what every connection uses either way. What
+    /// was changed meanwhile is said to be waiting, so nobody wonders whether it was lost.
+    /// </remarks>
+    public void ShowLibraryStatus(SharedLibraryStatus status)
+    {
+        ArgumentNullException.ThrowIfNull(status);
+
+        if (!status.IsProblem)
+        {
+            if (IsLibraryProblem)
+            {
+                IsLibraryBannerVisible = false;
+                IsLibraryProblem = false;
+            }
+
+            return;
+        }
+
+        LibraryBannerText = SharedLibraryText.Describe(status, localizer);
+        LibraryBannerOffersPassphrase = status.NeedsPassphrase;
+        LibraryBannerOffersRetry = !status.NeedsPassphrase;
+        IsLibraryProblem = true;
+        IsLibraryBannerVisible = true;
+    }
+
+    /// <summary>
+    /// Says what a synchronisation changed, and shows a banner for the conflicts it resolved.
+    /// </summary>
+    public void ShowLibraryReport(SharedLibraryReport report)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+
+        if (report.ChangedHere)
+        {
+            StatusMessage = SharedLibraryText.Summarise(report, localizer);
+        }
+
+        string conflicts = SharedLibraryText.Conflicts(report, localizer);
+
+        if (conflicts.Length == 0 || IsLibraryProblem)
+        {
+            return;
+        }
+
+        LibraryBannerText = conflicts;
+        LibraryBannerOffersPassphrase = false;
+        LibraryBannerOffersRetry = false;
+        IsLibraryBannerVisible = true;
+    }
+
+    [RelayCommand]
+    private void RetryLibrary() => LibraryRetryRequested?.Invoke(this, EventArgs.Empty);
+
+    [RelayCommand]
+    private void EnterLibraryPassphrase() => LibraryPassphraseRequested?.Invoke(this, EventArgs.Empty);
+
+    [RelayCommand]
+    private void DismissLibraryBanner() => IsLibraryBannerVisible = false;
 
     /// <summary>
     /// The profiles currently shown, after the search term and the sidebar filter are applied.

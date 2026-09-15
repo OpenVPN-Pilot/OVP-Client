@@ -45,6 +45,40 @@ public sealed class ShippedCatalogueTests
         }
     }
 
+    /// <summary>
+    /// The shared library words its condition by the name of the value, which a search of the
+    /// sources cannot follow either.
+    /// </summary>
+    [Fact]
+    public void EverySharedLibraryCondition_HasASentence()
+    {
+        LanguageCatalogue english = Load().Single(catalogue => catalogue.Code == "en");
+
+        foreach (OpenVpnPilot.App.Services.Library.SharedLibraryCondition condition in
+            Enum.GetValues<OpenVpnPilot.App.Services.Library.SharedLibraryCondition>())
+        {
+            Assert.True(
+                english.Strings.ContainsKey("library.condition." + condition),
+                $"No sentence describes the shared library condition {condition}.");
+        }
+    }
+
+    /// <summary>
+    /// The nested keys the shared library uses, which the search of the sources does not reach.
+    /// </summary>
+    [Theory]
+    [InlineData("library.conflict.bothKeptHere")]
+    [InlineData("library.conflict.bothKeptThere")]
+    [InlineData("library.conflict.changedHereDeletedThere")]
+    [InlineData("library.conflict.deletedHereChangedThere")]
+    [InlineData("library.conflict.more")]
+    public void EverySharedLibraryConflict_HasASentence(string key)
+    {
+        LanguageCatalogue english = Load().Single(catalogue => catalogue.Code == "en");
+
+        Assert.True(english.Strings.ContainsKey(key), $"No sentence for {key}.");
+    }
+
     [Fact]
     public void Catalogues_AreDiscoveredBesideTheApplication()
     {

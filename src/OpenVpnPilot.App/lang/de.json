@@ -506,6 +506,55 @@
       "download": "Holen",
       "download@macos": "Zur Veröffentlichung",
       "dismiss": "Jetzt nicht"
+    },
+    "library": {
+      "section": "GETEILTE BIBLIOTHEK",
+      "hint": "Hält die Profile und ihre gespeicherten Anmeldungen in einer verschlüsselten Datei, die mehrere Rechner gemeinsam verwenden, zum Beispiel in einem Ordner, den OneDrive synchronisiert. Ist die Datei nicht erreichbar, arbeitet jeder Rechner mit seiner eigenen Kopie weiter und holt danach auf. Favoriten, Tastenkürzel, Einstellungen und Verlauf bleiben auf dem jeweiligen Rechner. Die Passphrase wird einmal je Rechner abgefragt und im geschützten Speicher des Betriebssystems abgelegt.",
+      "join": "Vorhandene Bibliothek verwenden...",
+      "create": "Bibliothek anlegen...",
+      "syncNow": "Jetzt synchronisieren",
+      "retry": "Erneut versuchen",
+      "dismiss": "Ausblenden",
+      "leave": "Nicht mehr teilen",
+      "leaveConfirm": "Die Profile bleiben auf diesem Rechner und folgen der geteilten Datei nicht mehr. Die Passphrase wird von diesem Rechner entfernt. Die geteilte Datei selbst bleibt für alle anderen, wie sie ist.",
+      "left": "Dieser Rechner verwendet die geteilte Bibliothek nicht mehr. Seine Profile bleiben hier.",
+      "joinTitle": "Geteilte Bibliothek verwenden",
+      "joinMessage": "Geben Sie die Passphrase von {0} ein. Die Profile darin werden mit denen auf diesem Rechner zusammengeführt und folgen einander ab dann.",
+      "createTitle": "Geteilte Bibliothek anlegen",
+      "createMessage": "{0} wird mit allen Profilen und gespeicherten Anmeldungen dieses Rechners geschrieben. Wählen Sie die Passphrase, die jeder andere Rechner braucht, und geben Sie sie getrennt von der Datei weiter.",
+      "enterPassphrase": "Passphrase eingeben",
+      "enterPassphraseMessage": "Die geteilte Bibliothek braucht auf diesem Rechner ihre Passphrase. Sie wird einmal abgefragt und dann im geschützten Speicher des Betriebssystems abgelegt.",
+      "changePassphrase": "Passphrase ändern",
+      "changePassphraseMessage": "Die geteilte Datei wird mit der neuen Passphrase neu geschrieben, und jeder andere Rechner fragt beim nächsten Abgleich danach. Wer nur die alte kennt, kann nichts mehr öffnen, was ab jetzt geschrieben wird.",
+      "passphraseWrong": "Die Passphrase öffnet die geteilte Datei nicht, oder die Datei wurde verändert.",
+      "exists": "Dort liegt bereits eine Datei. Verwenden Sie sie als vorhandene Bibliothek, oder wählen Sie einen anderen Namen.",
+      "notALibrary": "Die Datei ist keine geteilte Bibliothek. {0}",
+      "unreachable": "Die geteilte Datei ist nicht erreichbar. {0}",
+      "waiting": "Änderungen von hier seit {0} warten darauf, hineingeschrieben zu werden.",
+      "reconciled": "Geteilte Bibliothek: {0} hinzugefügt, {1} geändert, {2} entfernt, {3} Anmeldung(en) aktualisiert.",
+      "bannerTitle": "Geteilte Bibliothek",
+      "lockedBy": "{0} schreibt gerade in die geteilte Datei. Dieser Rechner versucht es gleich erneut.",
+      "conflictCopies": "Der Synchronisierungsdienst hat Kopien der geteilten Datei daneben abgelegt. Sie wurden mitgelesen und können gelöscht werden: {0}",
+      "conflict": {
+        "bothKeptHere": "{0} wurde hier und auf einem anderen Rechner geändert. Dieselbe Einstellung war verschieden, und die Änderung von hier war später, daher gilt sie.",
+        "bothKeptThere": "{0} wurde hier und auf einem anderen Rechner geändert. Dieselbe Einstellung war verschieden, und die andere Änderung war später, daher hat sie die von hier ersetzt.",
+        "changedHereDeletedThere": "{0} wurde auf einem anderen Rechner entfernt, nachdem es hier geändert wurde. Es bleibt daher erhalten und wird wieder geteilt.",
+        "deletedHereChangedThere": "{0} wurde hier entfernt, aber ein anderer Rechner hat es danach geändert. Es ist daher wieder da.",
+        "more": "Bei {0} weiteren Profil(en) gab es einen solchen Konflikt."
+      },
+      "condition": {
+        "NotShared": "Dieser Rechner verwendet keine geteilte Bibliothek.",
+        "Synchronising": "Wird mit der geteilten Datei abgeglichen...",
+        "Synchronised": "Mit der geteilten Datei abgeglichen seit {0}.",
+        "Unreachable": "Der Ordner der geteilten Datei ist nicht erreichbar. Dieser Rechner arbeitet mit seiner eigenen Kopie weiter und versucht es erneut.",
+        "FileMissing": "Die geteilte Datei liegt nicht in ihrem Ordner. Sie wird nicht von selbst neu geschrieben, weil der Synchronisierungsdienst sie vielleicht noch nicht geliefert hat oder sie absichtlich entfernt wurde.",
+        "PassphraseNeeded": "Die Passphrase der geteilten Bibliothek ist auf diesem Rechner noch nicht gespeichert.",
+        "PassphraseRejected": "Die gespeicherte Passphrase öffnet die geteilte Datei nicht mehr. Vermutlich wurde sie auf einem anderen Rechner geändert.",
+        "Locked": "Ein anderer Rechner schreibt gerade in die geteilte Datei. Dieser Rechner versucht es gleich erneut.",
+        "TooNew": "Eine neuere Version von OpenVpnPilot hat die geteilte Datei geschrieben. Aktualisieren Sie diesen Rechner, um weiter abzugleichen.",
+        "Damaged": "Die geteilte Datei ließ sich öffnen, aber nicht lesen. {0}",
+        "Failed": "Der Abgleich mit der geteilten Datei ist fehlgeschlagen. {0}"
+      }
     }
   }
 }
