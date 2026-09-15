@@ -17,6 +17,11 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   The settings create one, join one, change its passphrase and stop sharing it. The passphrase is
   asked for once per machine and kept in the operating system's protected storage; favourites,
   shortcut slots, shortcuts, settings and history stay personal.
+- A machine uses a shared library or its own, never a mixture. Joining replaces the profiles on the
+  machine and adds none of them to the file; the settings say how many there are, offer an export
+  first and ask for a tick before the file is chosen. Stopping asks whether to keep the profiles as
+  the machine's own library or to start again with an empty one. Both are refused while a tunnel is
+  connected where profiles would be replaced or removed.
 - It is reconciled at start, with what this machine changed while the application was closed going
   first, again within seconds of a change made here, and whenever the file's contents changed, which
   is checked every minute by its hash rather than by its date. Writing takes a lock file beside the
@@ -31,6 +36,10 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
 - A banner in the main window for what stands in the way of the shared library, with the passphrase
   prompt or another attempt, and for conflicts that were resolved and copies of the file a sync
   client left behind. The status bar says what a synchronisation changed, and the list reloads.
+- The status bar shows where the shared library stands at all times, synchronising, synchronised
+  with the time, or what stands in the way with the next attempt and whether changes are waiting.
+  **Sync log** beside it lists the steps taken: changes noticed, the file read and written, what was
+  taken in, conflicts, failures and retries.
 - **Choosing what a package carries.** An export picks its profiles by ticking them or by tag, and
   includes the shortcuts, the settings and the saved sign ins each on its own. Opening a package lists
   every profile it holds, marked as new or as already stored, and what else it carries, and takes

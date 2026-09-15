@@ -72,9 +72,16 @@ carrying that file between machines is the sync client's job.
 Under **Settings, Profiles**, **Create a library...** writes this machine's profiles and their sign ins
 into a new file and asks for the passphrase every other machine will need. Pass it on separately from
 the file. **Use an existing library...** picks that file on another machine and asks for the
-passphrase once; the profiles already on that machine are combined with the ones in the file. The
-passphrase is kept in the operating system's protected storage beside the stored sign ins, and never
-in the database, the settings, a log or an export.
+passphrase once. The passphrase is kept in the operating system's protected storage beside the
+stored sign ins, and never in the database, the settings, a log or an export.
+
+A machine uses a shared library or a library of its own, never a mixture. Joining therefore
+**replaces** the profiles on that machine, with their sign ins, and adds none of them to the shared
+file, where everybody else would find them. When the machine has profiles, the settings say how many,
+offer **Export them first...**, and go on to choosing the file only once the box saying this was
+understood is ticked. A profile the library holds with the same configuration is taken as the same
+profile, and keeps its favourite mark, its shortcut slot and its history. Joining is refused while a
+tunnel is connected, because its profile might be one that is replaced.
 
 | Shared | Stays on each machine |
 | --- | --- |
@@ -95,6 +102,14 @@ in the database, the settings, a log or an export.
   merge is done again with what that machine wrote. A lock older than two minutes belongs to a
   machine that went away and is taken over.
 - **Quitting** writes out whatever is still waiting.
+
+The status bar says where the library stands at every moment: **Synchronising...** while a
+synchronisation runs, shown for at least a moment so a change can be seen going out, then
+**Synchronised** with the time, or what stands in the way with when the next attempt is made and
+whether changes are waiting. Its tooltip has the whole sentence. **Sync log** at the far end of the bar
+opens the steps taken since the application started, newest first: a change noticed here or in the
+file, the file read and written with its size, what was taken in, conflicts, failures and the retries
+they scheduled.
 
 ### When the file cannot be reached
 
@@ -144,8 +159,11 @@ the next time it synchronises. The old passphrase still opens what was written b
 already has and older versions a sync client keeps in its history. Take away access to the folder as
 well.
 
-**Stop sharing** ends it for this machine only. The profiles stay, the passphrase and what the machine
-remembered about the file are removed, and the file is left as it is for everybody else.
+**Stop sharing** ends it for this machine only, and asks what becomes of the profiles, with neither
+answer chosen in advance: keep them and go on with them as this machine's own library, or remove them
+with their sign ins and start again with an empty one, which offers an export first. Either way the
+passphrase and what the machine remembered about the file are removed, and the file is left as it is
+for everybody else.
 
 ## Adding a language
 
