@@ -407,6 +407,9 @@
               <StackPanel Spacing="9">
                 <TextBlock Text="{Binding DeleteConfirmation}" TextWrapping="Wrap" FontSize="12"
                            Foreground="{DynamicResource StateFailed}" />
+                <TextBlock Text="{loc:Translate library.deleteSharedNotice}" TextWrapping="Wrap" FontSize="12"
+                           Foreground="{DynamicResource TextPrimary}"
+                           IsVisible="{Binding IsLibraryShared}" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
                   <Button Content="{loc:Translate common.cancel}" Classes="quiet"
                           Command="{Binding CancelDeleteCommand}" />
@@ -489,6 +492,9 @@
               <StackPanel Spacing="9">
                 <TextBlock Text="{Binding ProfileDeleteConfirmation}" TextWrapping="Wrap" FontSize="12"
                            Foreground="{DynamicResource StateFailed}" />
+                <TextBlock Text="{loc:Translate library.deleteSharedNotice}" TextWrapping="Wrap" FontSize="12"
+                           Foreground="{DynamicResource TextPrimary}"
+                           IsVisible="{Binding IsLibraryShared}" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
                   <Button Content="{loc:Translate common.cancel}" Classes="quiet"
                           Command="{Binding CancelDeleteSelectedCommand}" />

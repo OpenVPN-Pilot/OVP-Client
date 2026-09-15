@@ -52,6 +52,11 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     /// </summary>
     private bool populating;
 
+    /// <summary>
+    /// True while this machine uses a shared library, where a saved change reaches every machine.
+    /// </summary>
+    public bool IsShared { get; init; }
+
     public ProfileEditorViewModel(
         IProfileStore store,
         ILocalizer localizer,

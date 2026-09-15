@@ -488,6 +488,7 @@ public sealed class WindowCoordinator
     private ImportWindow CreateImport()
     {
         ImportViewModel model = services.GetRequiredService<ImportViewModel>();
+        model.IsShared = settings.Current.Library.SharedPath is { Length: > 0 };
         ImportWindow window = new() { DataContext = model };
 
         model.Closed += async (_, imported) =>
@@ -527,7 +528,10 @@ public sealed class WindowCoordinator
             services.GetRequiredService<IProfileStore>(),
             services.GetRequiredService<Core.Localization.ILocalizer>(),
             profile,
-            startsInPlainText: settings.Current.General.ProfileEditor == ProfileEditorView.PlainText);
+            startsInPlainText: settings.Current.General.ProfileEditor == ProfileEditorView.PlainText)
+        {
+            IsShared = settings.Current.Library.SharedPath is { Length: > 0 },
+        };
 
         ProfileEditorWindow window = new() { DataContext = model };
 

@@ -86,6 +86,12 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(CanCommit))]
     public partial bool IsBusy { get; set; }
 
+    /// <summary>
+    /// True while this machine uses a shared library, which takes in whatever is imported.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsShared { get; set; }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanCommit))]
     public partial int ImportableCount { get; set; }

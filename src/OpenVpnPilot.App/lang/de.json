@@ -626,7 +626,10 @@
       "members": "RECHNER MIT DIESER BIBLIOTHEK",
       "memberSeen": "zuletzt abgeglichen {0}, Version {1}",
       "memberLeft": "hat das Teilen beendet {0}",
-      "memberThisMachine": "{0} (dieser Rechner)"
+      "memberThisMachine": "{0} (dieser Rechner)",
+      "deleteSharedNotice": "Dieser Rechner verwendet eine geteilte Bibliothek: Das Profil wird auf allen Rechnern gelöscht, die sie verwenden.",
+      "editSharedNotice": "Dieses Profil gehört zur geteilten Bibliothek. Eine gespeicherte Änderung gilt beim nächsten Abgleich auf allen Rechnern, die sie verwenden.",
+      "importSharedNotice": "Dieser Rechner verwendet eine geteilte Bibliothek: Was importiert wird, kommt auf allen Rechnern hinzu, die sie verwenden."
     }
   }
 }

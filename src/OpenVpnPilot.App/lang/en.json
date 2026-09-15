@@ -626,7 +626,10 @@
       "members": "MACHINES USING THIS LIBRARY",
       "memberSeen": "last synchronised {0}, version {1}",
       "memberLeft": "stopped sharing {0}",
-      "memberThisMachine": "{0} (this machine)"
+      "memberThisMachine": "{0} (this machine)",
+      "deleteSharedNotice": "This machine uses a shared library: the profile is deleted on every machine that uses it.",
+      "editSharedNotice": "This profile belongs to the shared library. A saved change reaches every machine that uses it at the next synchronisation.",
+      "importSharedNotice": "This machine uses a shared library: what is imported is added for every machine that uses it."
     }
   }
 }

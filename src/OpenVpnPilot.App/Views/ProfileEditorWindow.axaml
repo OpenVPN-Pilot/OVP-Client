@@ -55,6 +55,13 @@
                    IsVisible="{Binding HasMoreRemotes}" />
 
         <Border CornerRadius="7" Padding="12,10"
+                Background="{DynamicResource AccentSoft}"
+                IsVisible="{Binding IsShared}">
+          <TextBlock Text="{loc:Translate library.editSharedNotice}" TextWrapping="Wrap" FontSize="12"
+                     Foreground="{DynamicResource TextPrimary}" />
+        </Border>
+
+        <Border CornerRadius="7" Padding="12,10"
                 Background="{DynamicResource StatePendingSoft}"
                 IsVisible="{Binding IsConnected}">
           <TextBlock Text="{loc:Translate editor.connectedNotice}" TextWrapping="Wrap" FontSize="12"
