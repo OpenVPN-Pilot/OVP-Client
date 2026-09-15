@@ -181,6 +181,11 @@ public enum SharedLibraryActivityKind
     DeletionsRestored,
 
     DeletionsConfirmed,
+
+    /// <summary>
+    /// A backup was written over the library. The argument is when the backup was taken.
+    /// </summary>
+    BackupRestored,
 }
 
 /// <summary>

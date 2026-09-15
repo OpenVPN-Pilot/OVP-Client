@@ -286,6 +286,11 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
         StoredSecretCount = (await secrets.ListAsync(cancellationToken)).Count(IsSignIn);
 
+        if (IsLibraryShared)
+        {
+            await LoadLibraryMembersAsync();
+        }
+
         // The registry is the truth for autostart, not the settings file, because the entry can be
         // removed from outside the application.
         StartWithSystem = autoStart.IsSupported && autoStart.IsEnabled();
@@ -621,6 +626,142 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     public string JoinWarning => localizer.Translate("library.joinWarning", LocalProfileCount);
 
+    /// <summary>
+    /// The machines using the library, as their notes beside the file say.
+    /// </summary>
+    public ObservableCollection<LibraryMemberViewModel> LibraryMembers { get; } = [];
+
+    [ObservableProperty]
+    public partial bool HasLibraryMembers { get; set; }
+
+    /// <summary>
+    /// The copies there are to restore from, once asked for.
+    /// </summary>
+    public ObservableCollection<LibraryBackupViewModel> LibraryBackups { get; } = [];
+
+    [ObservableProperty]
+    public partial bool IsShowingBackups { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsLoadingBackups { get; set; }
+
+    /// <summary>
+    /// The copy somebody chose to restore, waiting for them to confirm it.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsConfirmingRestore))]
+    [NotifyPropertyChangedFor(nameof(RestoreQuestion))]
+    public partial LibraryBackupViewModel? PendingRestore { get; set; }
+
+    public bool IsConfirmingRestore => PendingRestore is not null;
+
+    public string RestoreQuestion => PendingRestore is { } pending
+        ? localizer.Translate("library.restoreQuestion", pending.When, pending.Contents)
+        : string.Empty;
+
+    /// <summary>
+    /// Reads who uses the library from the notes beside the file.
+    /// </summary>
+    public async Task LoadLibraryMembersAsync()
+    {
+        IReadOnlyList<SharedLibraryMember> members = await library.ReadMembersAsync();
+        string me = Environment.UserName + "@" + Environment.MachineName;
+
+        LibraryMembers.Clear();
+
+        foreach (SharedLibraryMember member in members
+            .OrderBy(member => member.LeftAt is not null)
+            .ThenByDescending(member => member.LastSynchronisedAt))
+        {
+            string detail = member.LeftAt is { } left
+                ? localizer.Translate("library.memberLeft", Time(left))
+                : localizer.Translate(
+                    "library.memberSeen",
+                    member.LastSynchronisedAt is { } seen ? Time(seen) : localizer["common.never"],
+                    member.Version ?? localizer["common.unknown"]);
+
+            LibraryMembers.Add(new LibraryMemberViewModel(
+                string.Equals(member.DisplayName, me, StringComparison.Ordinal)
+                    ? localizer.Translate("library.memberThisMachine", member.DisplayName)
+                    : member.DisplayName,
+                detail,
+                member.LeftAt is not null));
+        }
+
+        HasLibraryMembers = LibraryMembers.Count > 0;
+    }
+
+    private static string Time(DateTimeOffset value) =>
+        value.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture);
+
+    [RelayCommand]
+    private async Task ToggleLibraryBackupsAsync()
+    {
+        if (IsShowingBackups)
+        {
+            IsShowingBackups = false;
+            PendingRestore = null;
+            return;
+        }
+
+        IsShowingBackups = true;
+        IsLoadingBackups = true;
+
+        try
+        {
+            IReadOnlyList<SharedLibraryBackupSummary> summaries = await library.ListBackupsAsync();
+
+            LibraryBackups.Clear();
+
+            foreach (SharedLibraryBackupSummary summary in summaries.Take(60))
+            {
+                LibraryBackups.Add(new LibraryBackupViewModel(
+                    summary.Backup.Path,
+                    Time(summary.Backup.WrittenAt),
+                    summary.Backup.Member is { } member
+                        ? localizer.Translate("library.backupFrom", member)
+                        : localizer["library.backupLocal"],
+                    summary.ProfileCount is { } count
+                        ? localizer.Translate("library.backupProfiles", count)
+                        : localizer["library.backupUnopenable"],
+                    summary.ProfileCount is not null));
+            }
+        }
+        finally
+        {
+            IsLoadingBackups = false;
+        }
+    }
+
+    [RelayCommand]
+    private void AskToRestore(LibraryBackupViewModel? backup) => PendingRestore = backup is { CanRestore: true } ? backup : null;
+
+    [RelayCommand]
+    private void CancelRestore() => PendingRestore = null;
+
+    [RelayCommand]
+    private async Task RestoreLibraryBackupAsync()
+    {
+        if (PendingRestore is not { } backup)
+        {
+            return;
+        }
+
+        string? refusal = await RunLibraryAsync(() => library.RestoreBackupAsync(backup.Path));
+
+        if (refusal is not null)
+        {
+            StatusMessage = refusal;
+            return;
+        }
+
+        PendingRestore = null;
+        IsShowingBackups = false;
+        StatusMessage = localizer.Translate("library.restored", backup.When);
+        ProfileReloadRequested?.Invoke(this, EventArgs.Empty);
+        await LoadLibraryMembersAsync();
+    }
+
     [ObservableProperty]
     public partial bool IsLibraryBusy { get; set; }
 
@@ -778,6 +919,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         }
 
         IsConfirmingLeave = false;
+        IsShowingBackups = false;
+        LibraryMembers.Clear();
+        HasLibraryMembers = false;
         StatusMessage = localizer[keep ? "library.left" : "library.leftRemoved"];
 
         if (!keep)
@@ -799,6 +943,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         {
             SharedLibraryStatus status = await action();
             StatusMessage = SharedLibraryText.Describe(status, localizer);
+            await LoadLibraryMembersAsync();
             return null;
         }
         catch (Exception exception) when (SharedLibraryText.Refusal(exception, localizer) is not null)

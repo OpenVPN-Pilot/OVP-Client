@@ -301,10 +301,78 @@
                         Command="{Binding SyncLibraryNowCommand}" />
                 <Button Name="LibraryPassphraseButton" Content="{Binding LibraryPassphraseLabel}"
                         IsEnabled="{Binding !IsLibraryBusy}" />
+                <Button Content="{loc:Translate library.backups}"
+                        IsEnabled="{Binding !IsLibraryBusy}"
+                        Command="{Binding ToggleLibraryBackupsCommand}" />
                 <Button Content="{loc:Translate library.leave}" Classes="danger"
                         IsEnabled="{Binding !IsLibraryBusy}"
                         Command="{Binding AskToLeaveLibraryCommand}" />
               </WrapPanel>
+              <!-- Every copy there is to restore from, and the question before one is restored. -->
+              <Border CornerRadius="7" Padding="12,10"
+                      Background="{DynamicResource SurfaceCardHover}"
+                      IsVisible="{Binding IsShowingBackups}">
+                <StackPanel Spacing="8">
+                  <TextBlock Text="{loc:Translate library.backupsHint}" Classes="muted" TextWrapping="Wrap" />
+                  <TextBlock Text="{loc:Translate library.backupsLoading}" Classes="muted"
+                             IsVisible="{Binding IsLoadingBackups}" />
+                  <ScrollViewer MaxHeight="220">
+                    <ItemsControl ItemsSource="{Binding LibraryBackups}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:LibraryBackupViewModel">
+                          <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                            <StackPanel Grid.Column="0" Spacing="1" VerticalAlignment="Center">
+                              <TextBlock FontSize="13" Foreground="{DynamicResource TextPrimary}">
+                                <Run Text="{Binding When}" />
+                                <Run Text=" · " />
+                                <Run Text="{Binding Contents}" />
+                              </TextBlock>
+                              <TextBlock Text="{Binding Source}" Classes="muted" FontSize="12" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="{loc:Translate library.restore}" Classes="quiet"
+                                    IsEnabled="{Binding CanRestore}"
+                                    Command="{Binding $parent[ItemsControl].((vm:SettingsViewModel)DataContext).AskToRestoreCommand}"
+                                    CommandParameter="{Binding}" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </ScrollViewer>
+                  <Border CornerRadius="6" Padding="10,8"
+                          Background="{DynamicResource StateFailedSoft}"
+                          IsVisible="{Binding IsConfirmingRestore}">
+                    <StackPanel Spacing="8">
+                      <TextBlock Text="{Binding RestoreQuestion}" TextWrapping="Wrap" FontSize="12"
+                                 Foreground="{DynamicResource TextPrimary}" />
+                      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                        <Button Content="{loc:Translate common.cancel}" Classes="quiet"
+                                Command="{Binding CancelRestoreCommand}" />
+                        <Button Content="{loc:Translate library.restoreForEveryone}" Classes="destructive"
+                                IsEnabled="{Binding !IsLibraryBusy}"
+                                Command="{Binding RestoreLibraryBackupCommand}" />
+                      </StackPanel>
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+              </Border>
+
+              <!-- Who uses the library, from the notes every machine leaves beside the file. -->
+              <StackPanel Spacing="4" IsVisible="{Binding HasLibraryMembers}">
+                <TextBlock Text="{loc:Translate library.members}" Classes="overline" Margin="0,4,0,0" />
+                <ItemsControl ItemsSource="{Binding LibraryMembers}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LibraryMemberViewModel">
+                      <Grid ColumnDefinitions="Auto,*" Margin="0,1">
+                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12" Margin="0,0,10,0"
+                                   Foreground="{DynamicResource TextPrimary}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Detail}" FontSize="12" Classes="muted"
+                                   TextTrimming="CharacterEllipsis" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+
               <Border CornerRadius="7" Padding="12,10"
                       Background="{DynamicResource StateFailedSoft}"
                       IsVisible="{Binding IsConfirmingLeave}">

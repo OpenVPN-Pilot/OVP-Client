@@ -80,6 +80,8 @@ public static class SharedLibraryText
                 localizer.Translate(key, OpenVpnPilot.App.Converters.AppConverters.FormatBytes(size)),
             { Kind: SharedLibraryActivityKind.RetryScheduled, Arguments: [DateTimeOffset at, ..] } =>
                 localizer.Translate(key, at.ToLocalTime().ToString("T", CultureInfo.CurrentCulture)),
+            { Kind: SharedLibraryActivityKind.BackupRestored, Arguments: [DateTimeOffset taken, ..] } =>
+                localizer.Translate(key, Time(taken)),
             _ => localizer.Translate(key, [.. entry.Arguments]),
         };
     }

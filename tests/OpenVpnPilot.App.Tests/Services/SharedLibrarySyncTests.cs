@@ -515,6 +515,80 @@ public sealed class SharedLibrarySyncTests : IAsyncLifetime
     public void WhatCountsAsUnusuallyMany(int deleted, int held, bool expected) =>
         Assert.Equal(expected, SharedLibrarySync.IsUnusuallyMany(deleted, held));
 
+    /// <summary>
+    /// Every machine leaves a copy of the version it synchronised with and a note beside the file,
+    /// and the note says so when the machine stops using the library.
+    /// </summary>
+    [Fact]
+    public async Task EveryMachine_LeavesACopyAndANoteBesideTheFile()
+    {
+        (Machine first, Machine second, _) = await TwoJoinedMachinesAsync();
+        string folder = Path.Combine(Path.GetDirectoryName(LibraryPath)!, Path.GetFileNameWithoutExtension(LibraryPath) + ".backups");
+
+        Assert.True(File.Exists(Path.Combine(folder, "tester@first.ovppkg")));
+        Assert.True(File.Exists(Path.Combine(folder, "tester@second.ovppkg")));
+
+        IReadOnlyList<SharedLibraryMember> members = await first.Sync.ReadMembersAsync();
+        Assert.Equal(["tester@first", "tester@second"], members.Select(member => member.DisplayName).Order());
+        Assert.All(members, member => Assert.NotNull(member.LastSynchronisedAt));
+
+        await second.Sync.LeaveAsync(keepProfiles: true);
+
+        SharedLibraryMember left = (await first.Sync.ReadMembersAsync()).Single(member => member.Machine == "second");
+        Assert.NotNull(left.LeftAt);
+        Assert.True(File.Exists(Path.Combine(folder, "tester@second.ovppkg")));
+    }
+
+    /// <summary>
+    /// A backup restored on one machine becomes the library on every machine, deleted profiles
+    /// included, and what the file held before is kept.
+    /// </summary>
+    [Fact]
+    public async Task ARestoredBackup_BecomesTheLibraryForEveryMachine()
+    {
+        (Machine first, Machine second) = await ThreeProfilesJoinedAsync();
+
+        await using (PilotDbContext context = await second.Factory.CreateDbContextAsync())
+        {
+            await context.Profiles.Where(profile => profile.Name == "site-beta").ExecuteDeleteAsync();
+        }
+
+        await second.ChangeAsync((await second.IdOfAsync("site-alpha")), profile => profile.Name = "site-alpha-renamed");
+        await second.Sync.SyncNowAsync();
+        await first.Sync.SyncNowAsync();
+        Assert.Equal(["site-alpha-renamed", "site-gamma"], await first.NamesAsync());
+
+        IReadOnlyList<SharedLibraryBackupSummary> backups = await first.Sync.ListBackupsAsync();
+        SharedLibraryBackupSummary original = backups.Last(backup => backup.Backup.Member is null);
+        Assert.Equal(3, original.ProfileCount);
+
+        SharedLibraryStatus restored = await first.Sync.RestoreBackupAsync(original.Backup.Path);
+
+        Assert.Equal(SharedLibraryCondition.Synchronised, restored.Condition);
+        Assert.Equal(["site-alpha", "site-beta", "site-gamma"], await first.NamesAsync());
+
+        await second.Sync.SyncNowAsync();
+        Assert.Equal(["site-alpha", "site-beta", "site-gamma"], await second.NamesAsync());
+
+        Assert.Contains(await first.Sync.ListBackupsAsync(), backup => backup.ProfileCount == 2);
+    }
+
+    [Fact]
+    public async Task RestoringABackup_BringsBackAMissingFile()
+    {
+        (Machine first, _, _) = await TwoJoinedMachinesAsync();
+        SharedLibraryBackupSummary backup = (await first.Sync.ListBackupsAsync()).First(entry => entry.Backup.Member is null);
+
+        File.Delete(LibraryPath);
+        Assert.Equal(SharedLibraryCondition.FileMissing, (await first.Sync.SyncNowAsync()).Condition);
+
+        SharedLibraryStatus restored = await first.Sync.RestoreBackupAsync(backup.Backup.Path);
+
+        Assert.Equal(SharedLibraryCondition.Synchronised, restored.Condition);
+        Assert.True(File.Exists(LibraryPath));
+        Assert.Equal(["site-alpha"], await first.NamesAsync());
+    }
+
     private async Task<(Machine First, Machine Second)> ThreeProfilesJoinedAsync()
     {
         Machine first = await CreateMachineAsync("first");
@@ -585,6 +659,7 @@ public sealed class SharedLibrarySyncTests : IAsyncLifetime
         {
             LockWait = lockWait ?? TimeSpan.FromSeconds(5),
             ActiveProfiles = () => running,
+            Identity = ("tester", name),
         };
 
         Machine machine = new(services, factory, secrets, observed, settings, connections, sync, running);
@@ -652,6 +727,12 @@ public sealed class SharedLibrarySyncTests : IAsyncLifetime
             change(profile);
             profile.UpdatedAt = DateTimeOffset.UtcNow;
             await context.SaveChangesAsync();
+        }
+
+        public async Task<Guid> IdOfAsync(string name)
+        {
+            await using PilotDbContext context = await Factory.CreateDbContextAsync();
+            return await context.Profiles.Where(profile => profile.Name == name).Select(profile => profile.Id).SingleAsync();
         }
 
         public async Task<List<string>> NamesAsync()

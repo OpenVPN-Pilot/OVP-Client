@@ -607,10 +607,26 @@
         "LeftRemovingProfiles": "Teilen beendet, {0} Profil(e) von diesem Rechner entfernt",
         "DeletionHeld": "{0} Löschung(en) angehalten, wartet auf eine Entscheidung",
         "DeletionsRestored": "{0} Profil(e) aus der geteilten Datei wiederhergestellt",
-        "DeletionsConfirmed": "Löschung von {0} Profil(en) bestätigt und geschrieben"
+        "DeletionsConfirmed": "Löschung von {0} Profil(en) bestätigt und geschrieben",
+        "BackupRestored": "Die Sicherung vom {0} wurde für alle Rechner wiederhergestellt"
       },
       "restoreDeleted": "Wiederherstellen",
-      "confirmDeletion": "Für alle löschen"
+      "confirmDeletion": "Für alle löschen",
+      "backups": "Sicherungen...",
+      "backupsHint": "Jeder Rechner hebt die Versionen auf, die er gesehen hat, die letzten und für einen Monat eine pro Tag, und legt eine Kopie seines letzten Stands neben die Datei, in einen Ordner mit ihrem Namen und .backups. Wiederherstellen macht die gewählte Version für alle Rechner wieder zur Bibliothek; der Stand davor wird vorher gesichert.",
+      "backupsLoading": "Sicherungen werden geöffnet...",
+      "backupLocal": "Auf diesem Rechner gesichert",
+      "backupFrom": "Kopie neben der Datei von {0}",
+      "backupProfiles": "{0} Profil(e)",
+      "backupUnopenable": "öffnet nicht mit der jetzt gespeicherten Passphrase",
+      "restore": "Wiederherstellen...",
+      "restoreQuestion": "Die Version vom {0} mit {1} wiederherstellen? Sie ersetzt die Bibliothek für alle Rechner: seitdem hinzugefügte Profile werden gelöscht, seitdem gelöschte kommen zurück. Der jetzige Stand wird vorher gesichert.",
+      "restoreForEveryone": "Für alle wiederherstellen",
+      "restored": "Die Version vom {0} ist wieder die Bibliothek.",
+      "members": "RECHNER MIT DIESER BIBLIOTHEK",
+      "memberSeen": "zuletzt abgeglichen {0}, Version {1}",
+      "memberLeft": "hat das Teilen beendet {0}",
+      "memberThisMachine": "{0} (dieser Rechner)"
     }
   }
 }

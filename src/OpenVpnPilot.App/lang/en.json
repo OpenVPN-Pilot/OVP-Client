@@ -607,10 +607,26 @@
         "LeftRemovingProfiles": "Stopped sharing, {0} profile(s) removed from this machine",
         "DeletionHeld": "{0} deletion(s) held back, waiting for a decision",
         "DeletionsRestored": "{0} profile(s) restored from the shared file",
-        "DeletionsConfirmed": "Deletion of {0} profile(s) confirmed and written"
+        "DeletionsConfirmed": "Deletion of {0} profile(s) confirmed and written",
+        "BackupRestored": "The backup of {0} was restored for every machine"
       },
       "restoreDeleted": "Restore them",
-      "confirmDeletion": "Delete for everyone"
+      "confirmDeletion": "Delete for everyone",
+      "backups": "Backups...",
+      "backupsHint": "Every machine keeps the versions it saw, recent ones and one a day for a month, and leaves a copy of the version it last synchronised with beside the file, in a folder named after it with .backups. Restoring makes the chosen version the library again for every machine; what the file held before is kept as a backup first.",
+      "backupsLoading": "Opening the backups...",
+      "backupLocal": "Kept on this machine",
+      "backupFrom": "Copy beside the file from {0}",
+      "backupProfiles": "{0} profile(s)",
+      "backupUnopenable": "does not open with the passphrase stored now",
+      "restore": "Restore...",
+      "restoreQuestion": "Restore the version of {0} with {1}? It replaces the library for every machine: profiles added since are deleted and profiles deleted since come back. What the file holds now is kept as a backup first.",
+      "restoreForEveryone": "Restore for everyone",
+      "restored": "The version of {0} is the library again.",
+      "members": "MACHINES USING THIS LIBRARY",
+      "memberSeen": "last synchronised {0}, version {1}",
+      "memberLeft": "stopped sharing {0}",
+      "memberThisMachine": "{0} (this machine)"
     }
   }
 }

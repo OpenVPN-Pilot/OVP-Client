@@ -29,6 +29,24 @@ internal static partial class SharedLibraryLog
     public static partial void DeletionHeld(ILogger logger, string path, int count);
 
     [LoggerMessage(
+        EventId = 3212,
+        Level = LogLevel.Warning,
+        Message = "A backup of the shared library could not be kept in {Location}.")]
+    public static partial void BackupNotKept(ILogger logger, string location, Exception exception);
+
+    [LoggerMessage(
+        EventId = 3213,
+        Level = LogLevel.Warning,
+        Message = "A backup of the shared library in {Location} could not be read.")]
+    public static partial void BackupUnreadable(ILogger logger, string location, Exception exception);
+
+    [LoggerMessage(
+        EventId = 3214,
+        Level = LogLevel.Warning,
+        Message = "Shared library {Path} could not be opened before restoring a backup over it.")]
+    public static partial void RestoringOverUnreadable(ILogger logger, string path, Exception exception);
+
+    [LoggerMessage(
         EventId = 3201,
         Level = LogLevel.Warning,
         Message = "Shared library {Path} could not be reached.")]
