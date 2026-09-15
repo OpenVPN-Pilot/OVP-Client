@@ -8,6 +8,46 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged. A release tag is `v<version>`, for example `v1.2.0`.
 
+## [1.6.0] - 2026-09-15
+
+### Added
+
+- **A shared library.** The profiles and their saved sign ins can live in one encrypted file that
+  several machines use together, meant for a folder a sync client such as OneDrive keeps in step.
+  The settings create one, join one, change its passphrase and stop sharing it. The passphrase is
+  asked for once per machine and kept in the operating system's protected storage; favourites,
+  shortcut slots, shortcuts, settings and history stay personal.
+- It is reconciled at start, with what this machine changed while the application was closed going
+  first, again within seconds of a change made here, and whenever the file's contents changed, which
+  is checked every minute by its hash rather than by its date. Writing takes a lock file beside the
+  shared one, replaces the file in one step, and merges again if another machine wrote it in the
+  meantime. What cannot be written is recorded as waiting, retried with a growing pause and written
+  on the way out.
+- Every machine remembers what the file held when it last synchronised, so a change is merged field
+  by field and only the same field changed on two machines is a conflict, which the later change
+  wins. A deletion never wins over a later change, is remembered for a year so a machine that was
+  away does not bring the profile back, and waits while the profile is connected. The same
+  configuration imported on two machines ends up as the same single profile everywhere.
+- A banner in the main window for what stands in the way of the shared library, with the passphrase
+  prompt or another attempt, and for conflicts that were resolved and copies of the file a sync
+  client left behind. The status bar says what a synchronisation changed, and the list reloads.
+- **Choosing what a package carries.** An export picks its profiles by ticking them or by tag, and
+  includes the shortcuts, the settings and the saved sign ins each on its own. Opening a package lists
+  every profile it holds, marked as new or as already stored, and what else it carries, and takes
+  only what is ticked. Shortcuts are added only where they clash with nothing, and the settings
+  replace this machine's only when asked to. What belongs to one machine, its window positions,
+  OpenVPN path, autostart and shared library, never travels.
+
+### Changed
+
+- The package format is version 2. It records when each profile last changed, carries the settings
+  and which profiles were deleted, and a version that finds a newer format refuses the package with
+  the version that wrote it rather than reading part of it. Packages written by earlier versions
+  still open.
+- A profile's change time moves only when something shared about it changes. Marking a favourite,
+  connecting and an edit that changes nothing leave it alone, which is what lets two machines tell a
+  real change from a visit.
+
 ## [1.5.0] - 2026-09-15
 
 ### Added

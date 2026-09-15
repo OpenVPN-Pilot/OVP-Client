@@ -15,7 +15,7 @@ installation directory and the data directory are `OpenVpnPilot`, and the compan
 `ovp`. On macOS the bundle is `OpenVPN Pilot.app`, because the Finder labels an application with its
 file name and with nothing else.
 
-> **Status: version 1.5.0.** The integration layer and the interface are proven end to end against
+> **Status: version 1.6.0.** The integration layer and the interface are proven end to end against
 > OpenVPN Community 2.7.6 and against the ten server lab in this repository. Windows is released as
 > an unsigned installer. **macOS is built from the source and is not released as a download**, which
 > is one command and is explained in [docs/macos.md](docs/macos.md). See [Roadmap](#roadmap).
@@ -32,7 +32,7 @@ The rest is one page per subject, so this one stays short:
 | --- | --- |
 | [Windows](docs/windows.md) | What it needs, installing it, deploying it with group policy, and what it writes |
 | [macOS](docs/macos.md) | What it needs, the helper package, Gatekeeper, and what it writes |
-| [Using it](docs/usage.md) | Tags and favourites, several tunnels at once, languages, what reaches OpenVPN |
+| [Using it](docs/usage.md) | Tags and favourites, several tunnels at once, packages, a shared library, languages, what reaches OpenVPN |
 | [The `ovp` command](docs/cli.md) | The companion command, and driving the application from other software |
 | [Working on it](docs/development.md) | Architecture, building, the artwork, the ten server test lab, contributing |
 | [Changelog](CHANGELOG.md) | What changed in each version |
@@ -60,7 +60,11 @@ The rest is one page per subject, so this one stays short:
 - Opening a `.ovpn` file from the shell brings up the import wizard with it, once you have picked
   this application in the Open with menu
 - Export as plain configurations, or as an encrypted `.ovppkg` package for another machine, which
-  can carry the saved sign ins so a whole set arrives ready to connect
+  can carry the shortcuts, the settings and the saved sign ins so a whole set arrives ready to
+  connect; opening one lists what it carries and takes only what is ticked
+- A shared library: one encrypted file in a synchronised folder, such as OneDrive, that several
+  machines keep their profiles and sign ins in step with, merged field by field, working offline and
+  saying when it cannot reach the file
 - A command line on both the application and `ovp`, so other software can bring a tunnel up before
   it needs one
 - Notifications for connected, lost, reconnecting and failed, suppressible per event
