@@ -13,7 +13,7 @@ public sealed class PilotSettings
     /// <summary>
     /// The newest layout this build knows how to write.
     /// </summary>
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     /// <summary>
     /// Which layout the file was written by. Zero for a file written before this existed.
@@ -47,10 +47,14 @@ public sealed class PilotSettings
     /// </summary>
     /// <returns>True when something was changed and the file should be written again.</returns>
     /// <remarks>
-    /// One step so far. The update check and the repository it asks about were both stored and
+    /// Two steps. The first: the update check and the repository it asks about were both stored and
     /// neither was ever reachable: there was no switch, no field and no caller. Every value in an
     /// existing file is therefore a serialized default rather than an answer anybody gave, which is
     /// what makes adopting the new ones legitimate here and would not make it legitimate again.
+    ///
+    /// The second: the project moved to another repository, so a file still naming the one it was
+    /// published from before is pointed at the new one. Only that exact value is replaced, because
+    /// anything else in the field is a fork somebody typed and follows its own releases.
     /// </remarks>
     public bool Migrate()
     {
@@ -59,10 +63,20 @@ public sealed class PilotSettings
             return false;
         }
 
+        PilotSettings defaults = new();
+
         if (SchemaVersion < 1)
         {
-            PilotSettings defaults = new();
             Advanced.CheckForUpdates = defaults.Advanced.CheckForUpdates;
+            Advanced.UpdateRepository = defaults.Advanced.UpdateRepository;
+        }
+
+        if (SchemaVersion < 2
+            && string.Equals(
+                Advanced.UpdateRepository?.Trim(),
+                AdvancedSettings.FormerUpdateRepository,
+                StringComparison.OrdinalIgnoreCase))
+        {
             Advanced.UpdateRepository = defaults.Advanced.UpdateRepository;
         }
 
@@ -342,7 +356,16 @@ public sealed class AdvancedSettings
     /// The project's own repository by default, so turning the check on is a switch rather than an
     /// invitation to type a name correctly. A fork changes it to its own and the check follows.
     /// </remarks>
-    public string? UpdateRepository { get; set; } = "Schecher1/OpenVpnPilot";
+    public string? UpdateRepository { get; set; } = "OpenVPN-Pilot/OVP-Client";
+
+    /// <summary>
+    /// Where the project was published from until 1.8.0.
+    /// </summary>
+    /// <remarks>
+    /// Kept so a settings file carrying it can be recognised as never having been answered and moved
+    /// to the current one, which <see cref="PilotSettings.Migrate"/> does once.
+    /// </remarks>
+    internal const string FormerUpdateRepository = "Schecher1/OpenVpnPilot";
 
     public AdvancedSettings Clone() => (AdvancedSettings)MemberwiseClone();
 }
