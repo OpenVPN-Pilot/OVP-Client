@@ -174,6 +174,7 @@ internal static class AppHost
         services.AddSingleton<ISecretStore>(provider => provider.GetRequiredService<ObservedSecretStore>());
         services.AddSingleton<IAutoStartManager, RegistryAutoStartManager>();
         services.AddSingleton<IGlobalHotkeyService, WindowsGlobalHotkeyService>();
+        services.AddSingleton<IWindowCloseOrigin, WindowsCloseOrigin>();
 
         // The icon and the notifications are one entry in the notification area, so they are one
         // object registered under both interfaces rather than two that would each add an icon.

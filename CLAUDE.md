@@ -516,6 +516,13 @@ to the running process. These are test results, not assumptions.
   `WindowCloseReason` is `OSShutdown` answers `WM_QUERYENDSESSION` with zero, and Windows reports
   the application as the reason the machine will not shut down. Only `WindowClosing` is a person
   expressing a preference; the other reasons must be allowed to proceed.
+- **A close another program sends is not a person closing the window.** Task Manager's End task and
+  `taskkill` without `/F` send `WM_CLOSE`, which Avalonia reports as `WindowClosing`, the same as the
+  close button. Hiding to the notification area in answer left the process running, and Task Manager
+  reported it as not responding. The close button, Alt+F4, the system menu and the taskbar arrive as
+  `WM_SYSCOMMAND` with `SC_CLOSE` first, so `WindowsCloseOrigin` watches for that through Avalonia's
+  window procedure hook and anything else ends the application. Measured with `taskkill`, against the
+  window shown and hidden, and with the close button.
 - **Shutting down from inside a `Closing` handler recurses.** The shutdown closes the same window,
   which enters the handler again, until the stack runs out. Post the request instead.
 - **An exception in these handlers is an exception inside `WndProc`.** Nothing catches it, the

@@ -34,6 +34,11 @@ public sealed class WindowCoordinator
     /// The platform's list of running applications, on a platform that keeps one apart from windows.
     /// </summary>
     private readonly IDockPresence? dock;
+
+    /// <summary>
+    /// Who asked the main window to close, on a platform where another program can.
+    /// </summary>
+    private readonly IWindowCloseOrigin? closeOrigin;
     private readonly List<string> pendingImports = [];
     private bool importQueued;
 
@@ -54,6 +59,7 @@ public sealed class WindowCoordinator
         // the container that answers this is one of the things being disposed.
         settings = services.GetRequiredService<ISettingsService>();
         dock = services.GetService<IDockPresence>();
+        closeOrigin = services.GetService<IWindowCloseOrigin>();
 
         this.mainWindow = mainWindow;
         this.viewModel = viewModel;
@@ -79,13 +85,24 @@ public sealed class WindowCoordinator
                 ScreenInfo.From(mainWindow.Screens.All));
         };
 
+        if (closeOrigin is { } origin)
+        {
+            Win32Properties.AddWndProcHookCallback(mainWindow, (IntPtr _, uint message, IntPtr wParam, IntPtr _, ref bool _) =>
+            {
+                origin.Observe(message, wParam);
+                return IntPtr.Zero;
+            });
+        }
+
         mainWindow.Closing += (_, args) =>
         {
             // First, because the window may be about to be hidden, closed or taken away with the
             // session, and where it was is worth the same in all three cases.
             RememberMainWindowPlacement();
 
-            switch (DecideClose(args.CloseReason, settings.Current.General.CloseToTray))
+            bool askedFromWindow = closeOrigin?.TakeAskedFromWindow() ?? true;
+
+            switch (DecideClose(args.CloseReason, settings.Current.General.CloseToTray, askedFromWindow))
             {
                 case CloseIntent.HideToTray:
                     args.Cancel = true;
@@ -227,15 +244,20 @@ public sealed class WindowCoordinator
     /// refused: refusing the last one answers <c>WM_QUERYENDSESSION</c> with a veto, which Windows
     /// reports as this application preventing the machine from shutting down.
     /// </remarks>
-    public static CloseIntent DecideClose(WindowCloseReason reason, bool closeToTray)
+    /// <param name="askedFromWindow">
+    /// False when another program asked the window to close, which is a request to end the
+    /// application and waits for the process to end.
+    /// </param>
+    public static CloseIntent DecideClose(WindowCloseReason reason, bool closeToTray, bool askedFromWindow = true)
     {
         if (reason is not WindowCloseReason.WindowClosing)
         {
             return CloseIntent.Proceed;
         }
 
-        // Closing keeps the tunnels running; the tray icon is the way back in.
-        return closeToTray ? CloseIntent.HideToTray : CloseIntent.Quit;
+        // Closing keeps the tunnels running; the tray icon is the way back in. Only for a person
+        // closing the window, though: a program that asked is waiting for the process to end.
+        return closeToTray && askedFromWindow ? CloseIntent.HideToTray : CloseIntent.Quit;
     }
 
     /// <summary>

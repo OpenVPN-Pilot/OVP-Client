@@ -72,6 +72,14 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   connecting and an edit that changes nothing leave it alone, which is what lets two machines tell a
   real change from a visit.
 
+### Fixed
+
+- Ending the application from Task Manager reported it as not responding. The request arrived as an
+  ordinary close of the window, which with closing to the notification area turned on hid the window
+  and kept the process running. A close that another program asks for, Task Manager or `taskkill`,
+  now ends the application with the usual teardown; the close button, Alt+F4 and the taskbar still
+  keep it in the notification area.
+
 ## [1.5.0] - 2026-09-15
 
 ### Added
