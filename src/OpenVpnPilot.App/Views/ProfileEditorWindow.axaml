@@ -31,7 +31,13 @@
 
         <TextBlock Text="{loc:Translate editor.server}" Classes="section" />
 
-        <Grid ColumnDefinitions="*,120,110" ColumnSpacing="10" RowDefinitions="Auto,Auto" RowSpacing="5">
+        <!--
+          The port is a fixed width rather than a share, and it is wider than the number needs: a
+          NumericUpDown spends part of it on the buttons, and five digits in 120 were clipped. The
+          host gives the room up, because it is the one field here that is longer than the box
+          whatever the box is.
+        -->
+        <Grid ColumnDefinitions="*,160,110" ColumnSpacing="10" RowDefinitions="Auto,Auto" RowSpacing="5">
           <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Translate editor.host}" Classes="muted" />
           <TextBlock Grid.Row="0" Grid.Column="1" Text="{loc:Translate editor.port}" Classes="muted" />
           <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Translate editor.protocol}" Classes="muted" />
