@@ -1,8 +1,7 @@
 using OpenVpnPilot.Data.Entities;
-using OpenVpnPilot.Data.Import;
 using OpenVpnPilot.OpenVpn.Configuration;
 
-namespace OpenVpnPilot.Data.Library;
+namespace OpenVpnPilot.Data.Import;
 
 /// <summary>
 /// Sets a profile's configuration together with everything the list reads from it.
@@ -10,9 +9,8 @@ namespace OpenVpnPilot.Data.Library;
 /// <remarks>
 /// The server, the port, whether a sign in is needed and whether the profile can run on its own are
 /// all read from the configuration, and a profile whose configuration changed without them lists
-/// the old server. Editing a profile and taking a colleague's change from a shared library are the
-/// two ways a configuration changes after it was imported, and both come through here so that either
-/// looks exactly as the same file imported fresh would.
+/// the old server. Editing a profile is how a configuration changes after it was imported, and it
+/// comes through here so that the result looks exactly as the same file imported fresh would.
 /// </remarks>
 public static class ProfileConfigurationFacts
 {

@@ -1,9 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Avalonia.Threading;
 using OpenVpnPilot.App.Services;
-using OpenVpnPilot.App.Services.Library;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.Core.Settings;
@@ -20,7 +18,7 @@ namespace OpenVpnPilot.App.ViewModels;
 /// OpenVPN is. The form edits a clone, so closing without saving leaves the running application
 /// exactly as it was.
 /// </remarks>
-public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
+public sealed partial class SettingsViewModel : ViewModelBase
 {
     private readonly ISettingsService settings;
     private readonly ILocalizer localizer;
@@ -32,8 +30,6 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     private readonly ISessionStore sessions;
     private readonly DiagnosticsBundle diagnostics;
     private readonly UpdateCoordinator updates;
-    private readonly SharedLibrarySync library;
-    private bool disposed;
 
     private PilotSettings draft;
 
@@ -47,8 +43,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         IAutoStartManager autoStart,
         ISessionStore sessions,
         DiagnosticsBundle diagnostics,
-        UpdateCoordinator updates,
-        SharedLibrarySync library)
+        UpdateCoordinator updates)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(localizer);
@@ -60,7 +55,6 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         ArgumentNullException.ThrowIfNull(sessions);
         ArgumentNullException.ThrowIfNull(diagnostics);
         ArgumentNullException.ThrowIfNull(updates);
-        ArgumentNullException.ThrowIfNull(library);
 
         this.settings = settings;
         this.localizer = localizer;
@@ -72,9 +66,6 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         this.sessions = sessions;
         this.diagnostics = diagnostics;
         this.updates = updates;
-        this.library = library;
-
-        library.StatusChanged += OnLibraryStatusChanged;
 
         draft = settings.Current.Clone();
 
@@ -284,12 +275,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
             Hotkeys.Add(editor);
         }
 
-        StoredSecretCount = (await secrets.ListAsync(cancellationToken)).Count(IsSignIn);
-
-        if (IsLibraryShared)
-        {
-            await LoadLibraryMembersAsync();
-        }
+        StoredSecretCount = (await secrets.ListAsync(cancellationToken)).Count;
 
         // The registry is the truth for autostart, not the settings file, because the entry can be
         // removed from outside the application.
@@ -466,22 +452,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private async Task ForgetStoredCredentialsAsync()
     {
-        // One by one rather than clearing the store, which would take the passphrase of a shared
-        // library with it: that is not a sign in, and losing it would stop this machine synchronising
-        // without anything on this page having said so.
-        int removed = 0;
-
-        foreach (string reference in (await secrets.ListAsync()).Where(IsSignIn))
-        {
-            await secrets.DeleteAsync(reference);
-            removed++;
-        }
-
+        int removed = await secrets.ClearAsync();
         StoredSecretCount = 0;
         StatusMessage = localizer.Translate("settings.credentialsCleared", removed);
     }
-
-    private static bool IsSignIn(string reference) => SecretReference.TryParse(reference, out _, out _);
 
     /// <summary>
     /// Checks now, whatever the switch says, and reports whatever came back.
@@ -565,422 +539,6 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     /// The language the system asks for, shown next to the follow system entry.
     /// </summary>
     public string SystemLanguageDisplay => languages.SystemLanguage;
-
-    /// <summary>
-    /// The shared file, or null while the library is only on this machine.
-    /// </summary>
-    public string? LibraryPath => library.SharedPath;
-
-    public bool IsLibraryShared => library.SharedPath is not null;
-
-    public bool LibraryNeedsPassphrase => library.Status.NeedsPassphrase;
-
-    /// <summary>
-    /// When the library was last reconciled, or what stands in the way.
-    /// </summary>
-    public string LibraryStatusText => SharedLibraryText.Describe(library.Status, localizer);
-
-    public string LibraryPassphraseLabel =>
-        localizer[LibraryNeedsPassphrase ? "library.enterPassphrase" : "library.changePassphrase"];
-
-    /// <summary>
-    /// Shown after asking to stop sharing, which asks what becomes of the profiles.
-    /// </summary>
-    [ObservableProperty]
-    public partial bool IsConfirmingLeave { get; set; }
-
-    /// <summary>
-    /// Leaving goes on with the shared profiles as this machine's own.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanLeave))]
-    public partial bool LeaveKeepsProfiles { get; set; }
-
-    /// <summary>
-    /// Leaving starts again with an empty library.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanLeave))]
-    public partial bool LeaveRemovesProfiles { get; set; }
-
-    /// <summary>
-    /// Neither answer is chosen in advance, so leaving is always a decision somebody made.
-    /// </summary>
-    public bool CanLeave => LeaveKeepsProfiles || LeaveRemovesProfiles;
-
-    /// <summary>
-    /// Shown before joining when this machine has profiles of its own, which joining replaces.
-    /// </summary>
-    [ObservableProperty]
-    public partial bool IsConfirmingJoin { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(JoinWarning))]
-    public partial int LocalProfileCount { get; set; }
-
-    /// <summary>
-    /// Ticked by the person to say they understood that the profiles here are replaced.
-    /// </summary>
-    [ObservableProperty]
-    public partial bool JoinAcknowledged { get; set; }
-
-    public string JoinWarning => localizer.Translate("library.joinWarning", LocalProfileCount);
-
-    /// <summary>
-    /// The machines using the library, as their notes beside the file say.
-    /// </summary>
-    public ObservableCollection<LibraryMemberViewModel> LibraryMembers { get; } = [];
-
-    [ObservableProperty]
-    public partial bool HasLibraryMembers { get; set; }
-
-    /// <summary>
-    /// The copies there are to restore from, once asked for.
-    /// </summary>
-    public ObservableCollection<LibraryBackupViewModel> LibraryBackups { get; } = [];
-
-    [ObservableProperty]
-    public partial bool IsShowingBackups { get; set; }
-
-    [ObservableProperty]
-    public partial bool IsLoadingBackups { get; set; }
-
-    /// <summary>
-    /// The copy somebody chose to restore, waiting for them to confirm it.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsConfirmingRestore))]
-    [NotifyPropertyChangedFor(nameof(RestoreQuestion))]
-    public partial LibraryBackupViewModel? PendingRestore { get; set; }
-
-    public bool IsConfirmingRestore => PendingRestore is not null;
-
-    public string RestoreQuestion => PendingRestore is { } pending
-        ? localizer.Translate("library.restoreQuestion", pending.When, pending.Contents)
-        : string.Empty;
-
-    /// <summary>
-    /// Reads who uses the library from the notes beside the file.
-    /// </summary>
-    public async Task LoadLibraryMembersAsync()
-    {
-        IReadOnlyList<SharedLibraryMember> members = await library.ReadMembersAsync();
-        string me = Environment.UserName + "@" + Environment.MachineName;
-
-        LibraryMembers.Clear();
-
-        foreach (SharedLibraryMember member in members
-            .OrderBy(member => member.LeftAt is not null)
-            .ThenByDescending(member => member.LastSynchronisedAt))
-        {
-            string detail = member.LeftAt is { } left
-                ? localizer.Translate("library.memberLeft", Time(left))
-                : localizer.Translate(
-                    "library.memberSeen",
-                    member.LastSynchronisedAt is { } seen ? Time(seen) : localizer["common.never"],
-                    member.Version ?? localizer["common.unknown"]);
-
-            LibraryMembers.Add(new LibraryMemberViewModel(
-                string.Equals(member.DisplayName, me, StringComparison.Ordinal)
-                    ? localizer.Translate("library.memberThisMachine", member.DisplayName)
-                    : member.DisplayName,
-                detail,
-                member.LeftAt is not null));
-        }
-
-        HasLibraryMembers = LibraryMembers.Count > 0;
-    }
-
-    private static string Time(DateTimeOffset value) =>
-        value.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture);
-
-    [RelayCommand]
-    private async Task ToggleLibraryBackupsAsync()
-    {
-        if (IsShowingBackups)
-        {
-            IsShowingBackups = false;
-            PendingRestore = null;
-            return;
-        }
-
-        IsShowingBackups = true;
-        IsLoadingBackups = true;
-
-        try
-        {
-            IReadOnlyList<SharedLibraryBackupSummary> summaries = await library.ListBackupsAsync();
-
-            LibraryBackups.Clear();
-
-            foreach (SharedLibraryBackupSummary summary in summaries.Take(60))
-            {
-                LibraryBackups.Add(new LibraryBackupViewModel(
-                    summary.Backup.Path,
-                    Time(summary.Backup.WrittenAt),
-                    summary.Backup.Member is { } member
-                        ? localizer.Translate("library.backupFrom", member)
-                        : localizer["library.backupLocal"],
-                    summary.ProfileCount is { } count
-                        ? localizer.Translate("library.backupProfiles", count)
-                        : localizer["library.backupUnopenable"],
-                    summary.ProfileCount is not null));
-            }
-        }
-        finally
-        {
-            IsLoadingBackups = false;
-        }
-    }
-
-    [RelayCommand]
-    private void AskToRestore(LibraryBackupViewModel? backup) => PendingRestore = backup is { CanRestore: true } ? backup : null;
-
-    [RelayCommand]
-    private void CancelRestore() => PendingRestore = null;
-
-    [RelayCommand]
-    private async Task RestoreLibraryBackupAsync()
-    {
-        if (PendingRestore is not { } backup)
-        {
-            return;
-        }
-
-        string? refusal = await RunLibraryAsync(() => library.RestoreBackupAsync(backup.Path));
-
-        if (refusal is not null)
-        {
-            StatusMessage = refusal;
-            return;
-        }
-
-        PendingRestore = null;
-        IsShowingBackups = false;
-        StatusMessage = localizer.Translate("library.restored", backup.When);
-        ProfileReloadRequested?.Invoke(this, EventArgs.Empty);
-        await LoadLibraryMembersAsync();
-    }
-
-    [ObservableProperty]
-    public partial bool IsLibraryBusy { get; set; }
-
-    /// <summary>
-    /// Joins an existing shared file. The path comes from the view, which owns the picker.
-    /// </summary>
-    /// <returns>Why the passphrase was not accepted, or null when joining succeeded.</returns>
-    public Task<string?> JoinLibraryAsync(string path, string passphrase) =>
-        RunLibraryAsync(() => library.JoinAsync(path, passphrase));
-
-    /// <summary>
-    /// Starts sharing this machine's library as a new file.
-    /// </summary>
-    public Task<string?> CreateLibraryAsync(string path, string passphrase) =>
-        RunLibraryAsync(() => library.CreateAsync(path, passphrase));
-
-    /// <summary>
-    /// Stores the passphrase the shared file opens with now.
-    /// </summary>
-    public Task<string?> ProvideLibraryPassphraseAsync(string passphrase) =>
-        RunLibraryAsync(() => library.ProvidePassphraseAsync(passphrase));
-
-    /// <summary>
-    /// Encrypts the shared file with a new passphrase.
-    /// </summary>
-    public Task<string?> ChangeLibraryPassphraseAsync(string passphrase) =>
-        RunLibraryAsync(async () =>
-        {
-            SharedLibraryStatus status = await library.ChangePassphraseAsync(passphrase);
-
-            // Nothing was changed when the library could not be reconciled first, and the prompt
-            // says why rather than closing as if it had worked.
-            return status.Condition == SharedLibraryCondition.Synchronised
-                ? status
-                : throw new SharedLibraryUnavailableException(SharedLibraryText.Describe(status, localizer));
-        });
-
-    public PassphrasePromptViewModel CreateJoinPrompt(string path) => new(
-        localizer,
-        localizer["library.joinTitle"],
-        localizer.Translate("library.joinMessage", Path.GetFileName(path)),
-        isNew: false,
-        passphrase => JoinLibraryAsync(path, passphrase));
-
-    public PassphrasePromptViewModel CreateCreatePrompt(string path) => new(
-        localizer,
-        localizer["library.createTitle"],
-        localizer.Translate("library.createMessage", Path.GetFileName(path)),
-        isNew: true,
-        passphrase => CreateLibraryAsync(path, passphrase));
-
-    public PassphrasePromptViewModel CreatePassphrasePrompt() => LibraryNeedsPassphrase
-        ? new(
-            localizer,
-            localizer["library.enterPassphrase"],
-            localizer["library.enterPassphraseMessage"],
-            isNew: false,
-            ProvideLibraryPassphraseAsync)
-        : new(
-            localizer,
-            localizer["library.changePassphrase"],
-            localizer["library.changePassphraseMessage"],
-            isNew: true,
-            ChangeLibraryPassphraseAsync);
-
-    [RelayCommand]
-    private async Task SyncLibraryNowAsync()
-    {
-        IsLibraryBusy = true;
-
-        try
-        {
-            await library.SyncNowAsync();
-        }
-        finally
-        {
-            IsLibraryBusy = false;
-            RaiseLibrary();
-        }
-    }
-
-    /// <summary>
-    /// Begins joining a library, and says whether the file can be chosen straight away.
-    /// </summary>
-    /// <returns>
-    /// True when this machine has no profiles to replace. Otherwise false, and the confirmation is
-    /// shown; choosing the file follows once it has been given.
-    /// </returns>
-    public async Task<bool> BeginJoinAsync()
-    {
-        LocalProfileCount = await library.CountLocalProfilesAsync();
-
-        if (LocalProfileCount == 0)
-        {
-            return true;
-        }
-
-        JoinAcknowledged = false;
-        IsConfirmingJoin = true;
-        return false;
-    }
-
-    /// <summary>
-    /// Puts the confirmation away once it was given and the file is being chosen.
-    /// </summary>
-    public bool CompleteJoinConfirmation()
-    {
-        if (!JoinAcknowledged)
-        {
-            return false;
-        }
-
-        IsConfirmingJoin = false;
-        JoinAcknowledged = false;
-        return true;
-    }
-
-    [RelayCommand]
-    private void CancelJoinLibrary()
-    {
-        IsConfirmingJoin = false;
-        JoinAcknowledged = false;
-    }
-
-    [RelayCommand]
-    private void AskToLeaveLibrary()
-    {
-        LeaveKeepsProfiles = false;
-        LeaveRemovesProfiles = false;
-        IsConfirmingLeave = true;
-    }
-
-    [RelayCommand]
-    private void CancelLeaveLibrary() => IsConfirmingLeave = false;
-
-    [RelayCommand]
-    private async Task LeaveLibraryAsync()
-    {
-        if (!CanLeave)
-        {
-            return;
-        }
-
-        bool keep = LeaveKeepsProfiles;
-
-        try
-        {
-            await library.LeaveAsync(keep);
-        }
-        catch (SharedLibraryInUseException)
-        {
-            // Said beside the choice, which stays open: disconnecting and asking again is the way on.
-            StatusMessage = localizer["library.disconnectFirst"];
-            return;
-        }
-
-        IsConfirmingLeave = false;
-        IsShowingBackups = false;
-        LibraryMembers.Clear();
-        HasLibraryMembers = false;
-        StatusMessage = localizer[keep ? "library.left" : "library.leftRemoved"];
-
-        if (!keep)
-        {
-            ProfileReloadRequested?.Invoke(this, EventArgs.Empty);
-        }
-
-        RaiseLibrary();
-    }
-
-    /// <summary>
-    /// Runs one of the actions that reach the shared file, and turns what can go wrong into a sentence.
-    /// </summary>
-    private async Task<string?> RunLibraryAsync(Func<Task<SharedLibraryStatus>> action)
-    {
-        IsLibraryBusy = true;
-
-        try
-        {
-            SharedLibraryStatus status = await action();
-            StatusMessage = SharedLibraryText.Describe(status, localizer);
-            await LoadLibraryMembersAsync();
-            return null;
-        }
-        catch (Exception exception) when (SharedLibraryText.Refusal(exception, localizer) is not null)
-        {
-            // A wrong passphrase, a file that is not a library or a folder out of reach is said in the
-            // prompt, which stays open for another try.
-            return SharedLibraryText.Refusal(exception, localizer);
-        }
-        finally
-        {
-            IsLibraryBusy = false;
-            RaiseLibrary();
-        }
-    }
-
-    private void OnLibraryStatusChanged(object? sender, SharedLibraryStatus status) =>
-        Dispatcher.UIThread.Post(RaiseLibrary);
-
-    private void RaiseLibrary()
-    {
-        OnPropertyChanged(nameof(LibraryPath));
-        OnPropertyChanged(nameof(IsLibraryShared));
-        OnPropertyChanged(nameof(LibraryNeedsPassphrase));
-        OnPropertyChanged(nameof(LibraryStatusText));
-        OnPropertyChanged(nameof(LibraryPassphraseLabel));
-    }
-
-    public void Dispose()
-    {
-        if (disposed)
-        {
-            return;
-        }
-
-        disposed = true;
-        library.StatusChanged -= OnLibraryStatusChanged;
-    }
 }
 
 /// <summary>

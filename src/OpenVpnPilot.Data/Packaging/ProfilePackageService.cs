@@ -211,7 +211,6 @@ public sealed class ProfilePackageService
         Notes = profile.Notes,
         Colour = profile.Colour,
         Tags = tags.TryGetValue(profile.Id, out List<string>? names) ? names : [],
-        UpdatedAt = profile.UpdatedAt,
     };
 
     /// <summary>

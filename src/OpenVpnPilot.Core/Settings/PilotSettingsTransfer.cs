@@ -45,7 +45,6 @@ public static class PilotSettingsTransfer
         copy.General.StartWithSystem = false;
         copy.Advanced.OpenVpnPath = null;
         copy.Advanced.PortableMode = false;
-        copy.Library = new LibrarySettings();
 
         return JsonSerializer.SerializeToElement(copy, SerializerOptions);
     }
@@ -84,7 +83,6 @@ public static class PilotSettingsTransfer
         incoming.General.StartWithSystem = current.General.StartWithSystem;
         incoming.Advanced.OpenVpnPath = current.Advanced.OpenVpnPath;
         incoming.Advanced.PortableMode = current.Advanced.PortableMode;
-        incoming.Library = current.Library.Clone();
 
         return incoming;
     }

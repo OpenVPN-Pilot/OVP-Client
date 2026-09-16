@@ -5,7 +5,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenVpnPilot.App.Localization;
 using OpenVpnPilot.App.Services;
-using OpenVpnPilot.App.Services.Library;
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
@@ -80,7 +79,6 @@ internal static class AppHost
         builder.Services.AddSingleton<DiagnosticsBundle>();
         builder.Services.AddSingleton<EnvironmentGate>();
         builder.Services.AddSingleton<UpdateCoordinator>();
-        builder.Services.AddSingleton<SharedLibrarySync>();
 
         RegisterSettings(builder.Services, paths);
         RegisterLocalization(builder.Services, paths);
@@ -170,8 +168,7 @@ internal static class AppHost
         services.AddSingleton<IOpenVpnLauncher, WindowsOpenVpnLauncher>();
         services.AddSingleton<IProfileMaterializer, WindowsProfileMaterializer>();
         services.AddSingleton<IOpenVpnEnvironmentProbe, WindowsOpenVpnEnvironmentProbe>();
-        services.AddSingleton(_ => new ObservedSecretStore(new DpapiSecretStore(paths.SecretsDirectory)));
-        services.AddSingleton<ISecretStore>(provider => provider.GetRequiredService<ObservedSecretStore>());
+        services.AddSingleton<ISecretStore>(_ => new DpapiSecretStore(paths.SecretsDirectory));
         services.AddSingleton<IAutoStartManager, RegistryAutoStartManager>();
         services.AddSingleton<IGlobalHotkeyService, WindowsGlobalHotkeyService>();
         services.AddSingleton<IWindowCloseOrigin, WindowsCloseOrigin>();
@@ -202,9 +199,7 @@ internal static class AppHost
         services.AddSingleton<IProfileMaterializer>(
             _ => new MacProfileMaterializer(Path.Combine(paths.DataDirectory, "runtime")));
         services.AddSingleton<IOpenVpnEnvironmentProbe>(_ => new MacOpenVpnEnvironmentProbe(HelperSetupUrl));
-        services.AddSingleton<KeychainSecretStore>();
-        services.AddSingleton(provider => new ObservedSecretStore(provider.GetRequiredService<KeychainSecretStore>()));
-        services.AddSingleton<ISecretStore>(provider => provider.GetRequiredService<ObservedSecretStore>());
+        services.AddSingleton<ISecretStore, KeychainSecretStore>();
         services.AddSingleton<IAutoStartManager, LaunchAgentAutoStartManager>();
         services.AddSingleton<IGlobalHotkeyService, MacGlobalHotkeyService>();
         services.AddSingleton<ISystemTrayIcon, MacStatusItem>();

@@ -16,16 +16,12 @@
     <Border Grid.Row="0" Background="{DynamicResource SurfaceSidebar}"
             BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1"
             Padding="16,12">
-      <StackPanel Spacing="8">
-        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <Button Name="PickFilesButton" Content="{loc:Translate import.pickFiles}" />
-          <Button Name="PickFolderButton" Content="{loc:Translate import.pickFolder}" />
-          <CheckBox Content="{loc:Translate import.includeSubfolders}"
-                    IsChecked="{Binding IncludeSubfolders}"
-                    VerticalAlignment="Center" Margin="8,0,0,0" />
-        </StackPanel>
-        <TextBlock Text="{loc:Translate library.importSharedNotice}" Classes="muted" FontSize="12"
-                   TextWrapping="Wrap" IsVisible="{Binding IsShared}" />
+      <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <Button Name="PickFilesButton" Content="{loc:Translate import.pickFiles}" />
+        <Button Name="PickFolderButton" Content="{loc:Translate import.pickFolder}" />
+        <CheckBox Content="{loc:Translate import.includeSubfolders}"
+                  IsChecked="{Binding IncludeSubfolders}"
+                  VerticalAlignment="Center" Margin="8,0,0,0" />
       </StackPanel>
     </Border>
 

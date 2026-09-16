@@ -3,7 +3,6 @@ using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.Data.Import;
-using OpenVpnPilot.Data.Library;
 using OpenVpnPilot.Data.Tagging;
 
 namespace OpenVpnPilot.App.Services;
@@ -102,10 +101,9 @@ public sealed record ConfigurationUpdate(bool Saved, string? DuplicateOf);
 /// Entity Framework backed implementation.
 /// </summary>
 /// <remarks>
-/// When a profile was last changed is what a shared library settles two people's changes by, so it
-/// moves only when something that is shared changes, and only when it actually changes. Saving the
-/// editor without touching a field, or marking a favourite, which is nobody else's business, must
-/// not make this machine's copy look newer than a colleague's real edit.
+/// When a profile was last changed moves only when something about the profile itself changes, and
+/// only when it actually changes. Saving the editor without touching a field, or marking a
+/// favourite, is not a change to the profile.
 /// </remarks>
 public sealed class ProfileStore : IProfileStore
 {

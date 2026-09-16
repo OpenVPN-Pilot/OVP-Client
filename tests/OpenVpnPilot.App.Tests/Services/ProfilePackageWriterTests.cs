@@ -217,7 +217,6 @@ public sealed class ProfilePackageWriterTests : IAsyncLifetime
         settings.Current.General.Language = "de";
         settings.Current.General.MainWindow.X = 1200;
         settings.Current.Advanced.OpenVpnPath = "/written/openvpn";
-        settings.Current.Library.SharedPath = "/written/library.ovppkg";
 
         PackageWriteResult written = await writer.WriteAsync(
             PackagePath,
@@ -239,7 +238,6 @@ public sealed class ProfilePackageWriterTests : IAsyncLifetime
         Assert.Equal("de", otherSettings.Current.General.Language);
         Assert.Equal(40, otherSettings.Current.General.MainWindow.X);
         Assert.Equal("/receiving/openvpn", otherSettings.Current.Advanced.OpenVpnPath);
-        Assert.Null(otherSettings.Current.Library.SharedPath);
     }
 
     [Fact]

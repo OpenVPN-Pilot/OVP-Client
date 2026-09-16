@@ -67,8 +67,7 @@ public static class ProfilePackageFile
     /// The bytes of a package, encrypted with the given passphrase.
     /// </summary>
     /// <remarks>
-    /// Separate from writing, because a shared library is written to a temporary file beside the
-    /// real one and moved over it, and has to know the hash of exactly what it put there.
+    /// Separate from writing, so a package can be produced and checked without a file.
     /// </remarks>
     public static byte[] Encode(ProfilePackageContent content, string passphrase)
     {
@@ -163,8 +162,8 @@ public static class ProfilePackageFile
             ProfilePackageContent content = JsonSerializer.Deserialize<ProfilePackageContent>(payload, SerializerOptions)
                 ?? throw new InvalidOperationException("The package is empty.");
 
-            // A newer layout may mean something this build would misread, and a shared library
-            // written back from a misreading would take the newer version's data with it.
+            // A newer layout may mean something this build would misread, and taking half of a
+            // package quietly is worse than saying which version is needed to open it.
             if (content.FormatVersion > ProfilePackageContent.CurrentFormatVersion)
             {
                 throw new PackageTooNewException(content.FormatVersion, content.WrittenBy);

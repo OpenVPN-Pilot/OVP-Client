@@ -297,8 +297,8 @@ public sealed class ProfilePackageTests : IDisposable
     }
 
     /// <summary>
-    /// A layout this build does not know may mean something it would misread, and a shared library
-    /// written back from a misreading would lose what the newer version put there.
+    /// A layout this build does not know may mean something it would misread, so it is refused with
+    /// the version that wrote it rather than read in part.
     /// </summary>
     [Fact]
     public void APackageFromANewerFormat_IsRefused()
@@ -314,7 +314,7 @@ public sealed class ProfilePackageTests : IDisposable
     }
 
     /// <summary>
-    /// A package from before the layout carried settings and deletions still opens.
+    /// A package from before the layout carried settings still opens.
     /// </summary>
     [Fact]
     public void APackageOfFormatOne_ReadsWithNothingOfTheLaterParts()
@@ -329,8 +329,7 @@ public sealed class ProfilePackageTests : IDisposable
 
         Assert.Equal(1, read.FormatVersion);
         Assert.Null(read.Settings);
-        Assert.Empty(read.DeletedProfiles);
-        Assert.Null(Assert.Single(read.Profiles).UpdatedAt);
+        Assert.Single(read.Profiles);
     }
 
     [Fact]

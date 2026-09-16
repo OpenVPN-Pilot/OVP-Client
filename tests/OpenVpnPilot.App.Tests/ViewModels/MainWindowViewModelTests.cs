@@ -1,7 +1,5 @@
 using OpenVpnPilot.App.Services;
-using OpenVpnPilot.App.Services.Library;
 using OpenVpnPilot.App.ViewModels;
-using OpenVpnPilot.Data.Library;
 using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.OpenVpn.Runtime;
 
@@ -43,10 +41,7 @@ public sealed class MainWindowViewModelTests : IAsyncLifetime
             ReadyEnvironmentProbe.Gate(),
             SilentUpdates.Coordinator(),
             new StubLocalizer(),
-            TimeProvider.System)
-        {
-            MinimumSyncingDisplay = TimeSpan.FromMilliseconds(150),
-        };
+            TimeProvider.System);
 
         await model.LoadAsync();
     }
@@ -264,163 +259,5 @@ public sealed class MainWindowViewModelTests : IAsyncLifetime
         await model.DeleteTickedCommand.ExecuteAsync(null);
 
         Assert.Equal([doomed], store.Deleted);
-    }
-
-    /// <summary>
-    /// A missing passphrase offers the prompt, anything else offers another attempt, and the banner
-    /// goes once the library is in step again.
-    /// </summary>
-    [Fact]
-    public void LibraryBanner_OffersWhatTheProblemNeedsAndGoesWhenItIsSolved()
-    {
-        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.PassphraseNeeded));
-
-        Assert.True(model.IsLibraryBannerVisible);
-        Assert.True(model.IsLibraryProblem);
-        Assert.True(model.LibraryBannerOffersPassphrase);
-        Assert.False(model.LibraryBannerOffersRetry);
-
-        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.Unreachable));
-
-        Assert.False(model.LibraryBannerOffersPassphrase);
-        Assert.True(model.LibraryBannerOffersRetry);
-
-        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.Synchronised, DateTimeOffset.UtcNow));
-
-        Assert.False(model.IsLibraryBannerVisible);
-        Assert.False(model.IsLibraryProblem);
-    }
-
-    /// <summary>
-    /// A conflict that was resolved is worth a notice, and one that is dismissed is not brought back
-    /// by the library merely staying in step.
-    /// </summary>
-    [Fact]
-    public void LibraryBanner_TellsOfResolvedConflictsUntilDismissed()
-    {
-        SharedLibraryReport report = new(
-            [], ["alpha"], [], 0,
-            [new LibraryConflict("alpha", LibraryConflictKind.ChangedOnBothSides, KeptHere: false)],
-            0, []);
-
-        model.ShowLibraryReport(report);
-
-        Assert.True(model.IsLibraryBannerVisible);
-        Assert.False(model.IsLibraryProblem);
-        Assert.False(model.LibraryBannerOffersRetry);
-        Assert.Equal("library.reconciled", model.StatusMessage);
-
-        model.DismissLibraryBannerCommand.Execute(null);
-        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.Synchronised, DateTimeOffset.UtcNow));
-
-        Assert.False(model.IsLibraryBannerVisible);
-    }
-
-    /// <summary>
-    /// A problem is what somebody has to act on, so a conflict notice does not cover it up.
-    /// </summary>
-    [Fact]
-    public void LibraryBanner_KeepsAProblemInViewOverAConflictNotice()
-    {
-        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.PassphraseRejected));
-
-        model.ShowLibraryReport(new SharedLibraryReport(
-            [], [], [], 0,
-            [new LibraryConflict("beta", LibraryConflictKind.DeletedHereChangedThere, KeptHere: false)],
-            0, []));
-
-        Assert.True(model.IsLibraryProblem);
-        Assert.True(model.LibraryBannerOffersPassphrase);
-    }
-
-    [Fact]
-    public void StatusBar_SaysWhereTheLibraryStandsAndHowItIsGoing()
-    {
-        Assert.False(model.IsLibraryShared);
-
-        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.Synchronised, DateTimeOffset.UtcNow));
-
-        Assert.True(model.IsLibraryShared);
-        Assert.Equal("library.state.Synchronised", model.LibraryStateText);
-        Assert.False(model.IsLibraryRetrying || model.IsLibraryStuck);
-
-        model.ShowLibraryStatus(new SharedLibraryStatus(
-            SharedLibraryCondition.Unreachable,
-            WaitingSince: DateTimeOffset.UtcNow,
-            RetryAt: DateTimeOffset.UtcNow.AddSeconds(30)));
-
-        Assert.True(model.IsLibraryRetrying);
-        Assert.Equal("library.state.Unreachable · library.state.retry · library.state.waiting", model.LibraryStateText);
-
-        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.PassphraseNeeded));
-
-        Assert.True(model.IsLibraryStuck);
-        Assert.False(model.IsLibraryRetrying);
-
-        model.ShowLibraryStatus(SharedLibraryStatus.NotShared);
-
-        Assert.False(model.IsLibraryShared);
-    }
-
-    /// <summary>
-    /// A synchronisation that is over in a moment still shows as one, long enough to be read.
-    /// </summary>
-    [Fact]
-    public async Task StatusBar_KeepsSynchronisingInViewForAMoment()
-    {
-        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.Synchronising));
-        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.Synchronised, DateTimeOffset.UtcNow));
-
-        Assert.True(model.IsLibrarySyncing);
-
-        await Task.Delay(600);
-
-        Assert.False(model.IsLibrarySyncing);
-        Assert.Equal("library.state.Synchronised", model.LibraryStateText);
-    }
-
-    [Fact]
-    public void LibraryActivity_ShowsTheNewestStepFirst()
-    {
-        model.AddLibraryActivity(new SharedLibraryActivity(DateTimeOffset.UtcNow, SharedLibraryActivityKind.ChangedHere, []));
-        model.AddLibraryActivity(new SharedLibraryActivity(DateTimeOffset.UtcNow, SharedLibraryActivityKind.Written, [2048L]));
-
-        Assert.True(model.HasLibraryActivity);
-        Assert.Equal(["library.activity.Written", "library.activity.ChangedHere"], model.LibraryActivity.Select(entry => entry.Text));
-    }
-
-    [Fact]
-    public void LibraryBanner_AsksWhetherHeldDeletionsWereMeant()
-    {
-        int restores = 0;
-        int confirmations = 0;
-        model.LibraryRestoreRequested += (_, _) => restores++;
-        model.LibraryDeletionConfirmed += (_, _) => confirmations++;
-
-        model.ShowLibraryStatus(new SharedLibraryStatus(SharedLibraryCondition.DeletionHeld, Detail: "12"));
-
-        Assert.True(model.LibraryBannerOffersDecision);
-        Assert.False(model.LibraryBannerOffersRetry);
-        Assert.False(model.LibraryBannerOffersPassphrase);
-
-        model.RestoreLibraryDeletionsCommand.Execute(null);
-        model.ConfirmLibraryDeletionsCommand.Execute(null);
-
-        Assert.Equal((1, 1), (restores, confirmations));
-    }
-
-    [Fact]
-    public void LibraryBanner_Commands_AskTheOwnerToAct()
-    {
-        int retries = 0;
-        int prompts = 0;
-        model.LibraryRetryRequested += (_, _) => retries++;
-        model.LibraryPassphraseRequested += (_, _) => prompts++;
-
-        model.RetryLibraryCommand.Execute(null);
-        model.EnterLibraryPassphraseCommand.Execute(null);
-
-        Assert.Equal(1, retries);
-        Assert.Equal(1, prompts);
     }
 }

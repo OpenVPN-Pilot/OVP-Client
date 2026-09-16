@@ -17,10 +17,6 @@ namespace OpenVpnPilot.Data.Packaging;
 /// secret is protected by the operating system for one user on one machine, so moving it means
 /// re-protecting it with something the recipient can supply, and writing it in the clear because
 /// that was easier would be a leak the user did not agree to.
-///
-/// The same file is what a shared library is kept in. That is why a profile carries when it was
-/// last changed and the package carries the profiles that were deleted: two people changing one set
-/// can only be reconciled by knowing which change came last and what went away.
 /// </remarks>
 public sealed record ProfilePackageContent
 {
@@ -28,8 +24,7 @@ public sealed record ProfilePackageContent
     /// The newest layout this build reads and writes.
     /// </summary>
     /// <remarks>
-    /// Two added the settings, when a profile last changed and the deletions. A file of one reads as
-    /// one of two that has none of them.
+    /// Two added the settings. A file of one reads as one of two that carries none.
     /// </remarks>
     public const int CurrentFormatVersion = 2;
 
@@ -65,24 +60,6 @@ public sealed record ProfilePackageContent
     /// </summary>
     [JsonPropertyName("settings")]
     public JsonElement? Settings { get; init; }
-
-    /// <summary>
-    /// Profiles that were deleted from a shared library, so the deletion reaches everyone using it.
-    /// </summary>
-    [JsonPropertyName("deletedProfiles")]
-    public IReadOnlyList<PackagedDeletion> DeletedProfiles { get; init; } = [];
-
-    /// <summary>
-    /// The hashes of the shared file's earlier versions this one was merged from, oldest first.
-    /// </summary>
-    /// <remarks>
-    /// How a machine tells a version that continued its own write from one written beside it. A
-    /// sync client that saw two writes at once keeps one of them, and the machine whose write was not
-    /// kept has to merge against what both started from, or its changes read as taken back. A reader
-    /// that does not know the field ignores it.
-    /// </remarks>
-    [JsonPropertyName("lineage")]
-    public IReadOnlyList<string> Lineage { get; init; } = [];
 }
 
 /// <summary>
@@ -128,12 +105,6 @@ public sealed record PackagedProfile
 
     [JsonPropertyName("tags")]
     public IReadOnlyList<string> Tags { get; init; } = [];
-
-    /// <summary>
-    /// When what is shared about the profile last changed. Absent from a package of format one.
-    /// </summary>
-    [JsonPropertyName("updatedAt")]
-    public DateTimeOffset? UpdatedAt { get; init; }
 }
 
 /// <summary>
@@ -153,9 +124,3 @@ public sealed record PackagedCredential(
     [property: JsonPropertyName("username")] string? Username,
     [property: JsonPropertyName("password")] string Password);
 
-/// <summary>
-/// A profile that was deleted, and when.
-/// </summary>
-public sealed record PackagedDeletion(
-    [property: JsonPropertyName("profileId")] Guid ProfileId,
-    [property: JsonPropertyName("deletedAt")] DateTimeOffset DeletedAt);

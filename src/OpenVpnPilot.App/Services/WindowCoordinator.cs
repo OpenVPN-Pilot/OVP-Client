@@ -3,11 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
-using OpenVpnPilot.App.Services.Library;
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.App.Views;
 using OpenVpnPilot.Core.Abstractions;
-using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.Core.Settings;
 
 namespace OpenVpnPilot.App.Services;
@@ -69,7 +67,6 @@ public sealed class WindowCoordinator
     public void Attach()
     {
         viewModel.ScreenRequested += (_, screen) => Open(screen);
-        viewModel.LibraryPassphraseRequested += async (_, _) => await AskForLibraryPassphraseAsync();
         mainWindow.FilesDropped += (_, paths) => QueueImport(paths);
         mainWindow.ProfilesDroppedOnTag += async (_, drop) =>
             await viewModel.AssignTagAsync(drop.ProfileIds, drop.TagName);
@@ -163,37 +160,6 @@ public sealed class WindowCoordinator
 
             dock.SetListed(anyWindow);
         });
-    }
-
-    /// <summary>
-    /// Asks for the passphrase the shared library opens with now, over the main window.
-    /// </summary>
-    private async Task AskForLibraryPassphraseAsync()
-    {
-        SharedLibrarySync library = services.GetRequiredService<SharedLibrarySync>();
-        ILocalizer localizer = services.GetRequiredService<ILocalizer>();
-
-        PassphrasePromptViewModel prompt = new(
-            localizer,
-            localizer["library.enterPassphrase"],
-            localizer["library.enterPassphraseMessage"],
-            isNew: false,
-            async passphrase =>
-            {
-                try
-                {
-                    await library.ProvidePassphraseAsync(passphrase);
-                    return null;
-                }
-                catch (Exception exception) when (SharedLibraryText.Refusal(exception, localizer) is not null)
-                {
-                    // Said in the prompt, which stays open for another try.
-                    return SharedLibraryText.Refusal(exception, localizer);
-                }
-            });
-
-        Reveal(mainWindow);
-        await PassphraseWindow.AskAsync(mainWindow, prompt);
     }
 
     /// <summary>
@@ -474,7 +440,6 @@ public sealed class WindowCoordinator
     {
         SettingsViewModel model = services.GetRequiredService<SettingsViewModel>();
         SettingsWindow window = new() { DataContext = model };
-        window.Closed += (_, _) => model.Dispose();
 
         model.Closed += (_, _) => window.Close();
         model.ScreenRequested += (_, screen) => Open(screen);
@@ -510,7 +475,6 @@ public sealed class WindowCoordinator
     private ImportWindow CreateImport()
     {
         ImportViewModel model = services.GetRequiredService<ImportViewModel>();
-        model.IsShared = settings.Current.Library.SharedPath is { Length: > 0 };
         ImportWindow window = new() { DataContext = model };
 
         model.Closed += async (_, imported) =>
@@ -550,10 +514,7 @@ public sealed class WindowCoordinator
             services.GetRequiredService<IProfileStore>(),
             services.GetRequiredService<Core.Localization.ILocalizer>(),
             profile,
-            startsInPlainText: settings.Current.General.ProfileEditor == ProfileEditorView.PlainText)
-        {
-            IsShared = settings.Current.Library.SharedPath is { Length: > 0 },
-        };
+            startsInPlainText: settings.Current.General.ProfileEditor == ProfileEditorView.PlainText);
 
         ProfileEditorWindow window = new() { DataContext = model };
 

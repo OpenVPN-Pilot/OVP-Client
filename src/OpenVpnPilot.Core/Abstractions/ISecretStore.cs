@@ -57,16 +57,6 @@ public sealed record StoredSecret(string? Username, string Password);
 /// </remarks>
 public static class SecretReference
 {
-    /// <summary>
-    /// Where the passphrase of the shared library is kept.
-    /// </summary>
-    /// <remarks>
-    /// Beside the sign ins rather than in the settings or the database, because it opens a file that
-    /// holds every sign in of the team. It is not a profile's, so nothing that walks the profiles'
-    /// secrets takes it for one.
-    /// </remarks>
-    public const string LibraryPassphrase = "library/passphrase";
-
     public static string ForProfile(Guid profileId, string realm)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(realm);
