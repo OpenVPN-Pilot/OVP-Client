@@ -8,6 +8,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged. A release tag is `v<version>`, for example `v1.2.0`.
 
+## [1.7.0] - 2026-09-16
+
+### Removed
+
+- **The shared library** that 1.6.0 kept in a file in a synchronised folder, with everything that
+  belonged to it: the section in the settings, the passphrase prompt, the banner and the state in the
+  status bar, the sync log, the backups and the notes beside the file, the notices on deleting,
+  editing and importing, and its documentation. A folder a sync client carries between machines
+  cannot make the guarantees keeping one library for several people needs: the lock only works once
+  the client has delivered it, two writes can cross, and every safeguard added on top was a way of
+  living with that rather than removing it. Keeping profiles in step between machines will come back
+  on a server the machines talk to instead.
+- Packages no longer carry when each profile last changed or which profiles were deleted. Only the
+  shared library read either, and a package written by 1.6.0 that has them still opens.
+- What a machine that used the shared library kept is not read and not removed: the `library`
+  folder in the data directory, the file and its `.backups` folder in the shared folder, and the
+  passphrase in the keystore, which **Forget all stored credentials** clears along with the sign ins.
+
+### Fixed
+
+- Ending the application from Task Manager reported it as not responding. The request arrived as an
+  ordinary close of the window, which with closing to the notification area turned on hid the window
+  and kept the process running. A close that another program asks for, Task Manager or `taskkill`,
+  now ends the application with the usual teardown; the close button, Alt+F4 and the taskbar still
+  keep it in the notification area.
+
 ## [1.6.0] - 2026-09-15
 
 ### Added
@@ -68,14 +94,6 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
 - A profile's change time moves only when something shared about it changes. Marking a favourite,
   connecting and an edit that changes nothing leave it alone, which is what lets two machines tell a
   real change from a visit.
-
-### Fixed
-
-- Ending the application from Task Manager reported it as not responding. The request arrived as an
-  ordinary close of the window, which with closing to the notification area turned on hid the window
-  and kept the process running. A close that another program asks for, Task Manager or `taskkill`,
-  now ends the application with the usual teardown; the close button, Alt+F4 and the taskbar still
-  keep it in the notification area.
 
 ## [1.5.0] - 2026-09-15
 
