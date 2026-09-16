@@ -48,6 +48,13 @@ Write("OpenVpnPilot.ico", WindowsIcon.Build(Mark.DrawMark));
 Write("status-item.png", Mark.MenuBarTemplate());
 Write("dmg-background.png", DiskImageBackground.Render());
 
+// The same mark the Windows icon carries, as a plain image, for the places that read one rather than
+// an icon container: the README, a repository's social preview, a release page.
+foreach (int size in Logo.Sizes)
+{
+    Write($"logo-{size}.png", Logo.Render(size));
+}
+
 namespace OpenVpnPilot.Artwork
 {
     /// <summary>
@@ -200,6 +207,25 @@ namespace OpenVpnPilot.Artwork
             // The dot separately, because adding it to the same path would cancel the hole it sits in.
             canvas.DrawOval(Circle(dot), paint);
         }
+    }
+
+    /// <summary>
+    /// The mark on its own as a PNG, at the sizes something that is not an icon asks for.
+    /// </summary>
+    /// <remarks>
+    /// The Windows drawing rather than the macOS one, because this is the mark itself with nothing
+    /// behind it, which is what a page puts on its own background. Each size is drawn rather than
+    /// scaled from one export, for the same reason the icons are: geometry is sharp at every size.
+    ///
+    /// Transparent, so the same file reads on a light page and on a dark one, which is what the two
+    /// appearances of a GitHub page need from one image.
+    /// </remarks>
+    internal static class Logo
+    {
+        public static readonly int[] Sizes = [128, 256, 512, 1024];
+
+        public static byte[] Render(int pixels) =>
+            Canvas.Render(pixels, canvas => Mark.DrawMark(canvas, pixels, pixels));
     }
 
     /// <summary>

@@ -135,15 +135,16 @@ dotnet run --project tools/artwork
 | `OpenVpnPilot.ico` | The same icon for Windows, in eight sizes, which the executable and the windows both use |
 | `status-item.png` | The menu bar entry on macOS: black shapes on transparency, which the menu bar tints itself |
 | `dmg-background.png` | The background of the disk image window |
+| `logo-128.png` to `logo-1024.png` | The Windows drawing as plain images, for the README and anywhere else that reads an image rather than an icon container |
 
-All four are committed, and the projects link them from there rather than keeping copies. Below 32
+All of them are committed, and the projects link them from there rather than keeping copies. Below 32
 points the tile is dropped and the mark is drawn on its own: a tile and a mark inside it at 16 points
 leave the mark ten points across and the dot in its middle two, and what survives at that size is the
 mark filling the square.
 
 It runs on Windows as well as macOS, which is why it is a .NET program drawing with Skia rather than
 anything of either system: `System.Drawing` is Windows only and AppKit is macOS only, and the same
-four files have to come out of either. Avalonia already draws the interface with Skia, so the same
+files have to come out of either. Avalonia already draws the interface with Skia, so the same
 renderer draws what the interface is labelled with. Both container formats are written by hand, the
 `icns` because `iconutil` exists only on macOS and the `ico` because nothing in the toolchain draws
 one at all.
