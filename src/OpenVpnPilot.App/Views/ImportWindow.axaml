@@ -59,21 +59,104 @@
       </StackPanel>
 
       <!--
-        A package is encrypted, so there is nothing to preview: the screen asks for the passphrase
-        and reports what came out of it afterwards.
+        A package is encrypted, so there is nothing to preview until it is open: the screen asks for
+        the passphrase first.
       -->
       <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10"
-                  MaxWidth="420" IsVisible="{Binding IsPackage}">
+                  MaxWidth="420" IsVisible="{Binding IsPackageLocked}">
         <TextBlock Text="{loc:Translate import.packageTitle}" Classes="title"
                    HorizontalAlignment="Center" />
         <TextBlock Text="{Binding PackageName}" Classes="body" HorizontalAlignment="Center"
                    TextTrimming="CharacterEllipsis" />
         <TextBlock Text="{loc:Translate import.packageHint}" Classes="muted"
                    TextWrapping="Wrap" TextAlignment="Center" />
-        <TextBox Text="{Binding Passphrase}" PasswordChar="&#x2022;"
+        <TextBox Name="PassphraseBox" Text="{Binding Passphrase}" PasswordChar="&#x2022;"
                  PlaceholderText="{loc:Translate export.passphrase}" />
       </StackPanel>
+
+      <!-- Once open: what the package holds, and what of it to take. -->
+      <Grid RowDefinitions="Auto,Auto,*" IsVisible="{Binding IsPackageOpen}">
+
+        <StackPanel Grid.Row="0" Margin="16,12,16,4" Spacing="4">
+          <TextBlock Text="{Binding PackageName}" Classes="body" FontWeight="SemiBold"
+                     TextTrimming="CharacterEllipsis" />
+          <TextBlock Text="{Binding PackageOrigin}" Classes="muted" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Margin="16,8,16,0" Spacing="6">
+          <StackPanel Spacing="6" IsVisible="{Binding HasPackageTags}">
+            <TextBlock Text="{loc:Translate export.byTag}" Classes="overline" />
+            <ItemsControl ItemsSource="{Binding PackageTags}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" ItemSpacing="14" LineSpacing="2" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:TagChoiceViewModel">
+                  <CheckBox Content="{Binding Label}" IsChecked="{Binding IsSelected}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="{loc:Translate import.selectAll}" Classes="quiet"
+                    Command="{Binding SelectAllPackagedCommand}" />
+            <Button Content="{loc:Translate import.selectNone}" Classes="quiet"
+                    Command="{Binding SelectNonePackagedCommand}" />
+            <TextBlock Text="{Binding PackageSelectionSummary}" Classes="muted" VerticalAlignment="Center" />
+          </StackPanel>
+          <Border Classes="divider" />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="2">
+          <ItemsControl ItemsSource="{Binding PackageProfiles}" Margin="16,4,16,12">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:ImportPackageProfileViewModel">
+                <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3">
+                  <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Top" />
+                  <StackPanel Grid.Column="1" Spacing="1" Margin="2,0,12,0">
+                    <TextBlock Text="{Binding Name}" Classes="body" TextTrimming="CharacterEllipsis" />
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                      <TextBlock Text="{Binding Endpoint}" Classes="muted" />
+                      <TextBlock Text="{Binding TagsDisplay}" Classes="muted"
+                                 Foreground="{DynamicResource TextTertiary}"
+                                 IsVisible="{Binding HasTags}" />
+                    </StackPanel>
+                  </StackPanel>
+                  <Border Grid.Column="2" Classes="pill" VerticalAlignment="Top"
+                          Background="{DynamicResource SurfaceCardHover}">
+                    <TextBlock Text="{Binding StateDisplay}" Foreground="{DynamicResource TextSecondary}" />
+                  </Border>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Grid>
     </Grid>
+
+    <!-- What else an opened package offers, each taken only when ticked. -->
+    <Border Grid.Row="2" BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
+            Padding="16,12" IsVisible="{Binding IsPackageOpen}">
+      <StackPanel Spacing="4">
+        <TextBlock Text="{loc:Translate import.packageAlso}" Classes="overline" Margin="0,0,0,2" />
+        <CheckBox Content="{Binding PackageCredentialsLabel}"
+                  IsChecked="{Binding IncludePackageCredentials}"
+                  IsVisible="{Binding HasPackageCredentials}" />
+        <CheckBox Content="{Binding PackageHotkeysLabel}"
+                  IsChecked="{Binding IncludePackageHotkeys}"
+                  IsVisible="{Binding HasPackageHotkeys}" />
+        <TextBlock Text="{Binding PackageHotkeysClashing}" Classes="muted" TextWrapping="Wrap"
+                   IsVisible="{Binding HasPackageHotkeysClashing}" />
+        <CheckBox Content="{loc:Translate import.packageSettings}"
+                  IsChecked="{Binding IncludePackageSettings}"
+                  IsVisible="{Binding HasPackageSettings}" />
+        <TextBlock Text="{loc:Translate import.packageSettingsHint}" Classes="muted" TextWrapping="Wrap"
+                   IsVisible="{Binding IncludePackageSettings}" />
+      </StackPanel>
+    </Border>
 
     <Border Grid.Row="2" BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
             Padding="16,12" IsVisible="{Binding !IsPackage}">
@@ -96,9 +179,11 @@
         <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Classes="muted"
                    VerticalAlignment="Center" TextWrapping="Wrap" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-          <Button Content="{loc:Translate common.cancel}" MinWidth="96"
+          <!-- Return imports, which is what typing a passphrase is followed by; escape closes. -->
+          <Button Content="{loc:Translate common.cancel}" MinWidth="96" IsCancel="True"
                   Command="{Binding CancelCommand}" />
-          <Button Content="{loc:Translate import.commit}" Classes="primary" MinWidth="120"
+          <Button Content="{Binding CommitLabel}" Classes="primary" MinWidth="120"
+                  IsDefault="True"
                   Command="{Binding CommitCommand}"
                   IsEnabled="{Binding CanCommit}" />
         </StackPanel>

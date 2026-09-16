@@ -121,6 +121,29 @@ public sealed class ConnectionManagerTests
         Assert.True(manager.IsActive(ProfileId));
     }
 
+    /// <summary>
+    /// The terminator the platform registered reaches every supervisor the manager creates.
+    /// </summary>
+    [Fact]
+    public async Task DisconnectAsync_EndsTheProcessThroughTheRegisteredTerminator()
+    {
+        Harness harness = new();
+        harness.Launcher.Result = OpenVpnLaunchResult.Started(int.MaxValue);
+        RecordingTerminator terminator = new();
+
+        await using ConnectionManager manager = harness.CreateManager(terminator);
+        await harness.ConnectAsync(manager);
+
+        Task disconnect = manager.DisconnectAsync(ProfileId);
+
+        Assert.Equal("signal SIGTERM", await harness.Transport.ReceiveLineAsync());
+        harness.Transport.SendLine("SUCCESS: signal SIGTERM thrown");
+
+        await disconnect.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal([int.MaxValue], terminator.ProcessIds);
+    }
+
     private sealed class Harness
     {
         private readonly List<VpnConnectionStatus> states = [];
@@ -132,14 +155,15 @@ public sealed class ConnectionManagerTests
 
         public FakeManagementStream Transport { get; private set; } = new();
 
-        public ConnectionManager CreateManager()
+        public ConnectionManager CreateManager(IOpenVpnProcessTerminator? terminator = null)
         {
             ConnectionManager manager = new(
                 Launcher,
                 new FakeChannelFactory(() => Transport),
                 Credentials,
                 new FakeMaterializer(),
-                new FixedPortAllocator());
+                new FixedPortAllocator(),
+                terminator: terminator);
 
             manager.StateChanged += (_, change) =>
             {

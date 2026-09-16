@@ -79,7 +79,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.Active, "nav.active", localizer),
             SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.Favourites, "nav.favourites", localizer),
             SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.Recent, "nav.recent", localizer),
-            SidebarFilterViewModel.ForBuiltIn(SidebarFilterKind.New, "nav.new", localizer),
         ];
 
         // A connected row shows its uptime, which has to advance on its own because nothing in the
@@ -108,6 +107,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelection))]
+    [NotifyPropertyChangedFor(nameof(ProfileDeleteConfirmation))]
     public partial ProfileItemViewModel? SelectedProfile { get; set; }
 
     [ObservableProperty]
@@ -122,11 +122,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// </remarks>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectionSummary))]
+    [NotifyPropertyChangedFor(nameof(SelectToggleLabel))]
     public partial bool IsSelecting { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectionSummary))]
     [NotifyPropertyChangedFor(nameof(HasTicked))]
+    [NotifyPropertyChangedFor(nameof(DeleteConfirmation))]
     public partial int TickedCount { get; set; }
 
     /// <summary>
@@ -145,6 +147,28 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string DeleteConfirmation => localizer.Translate("select.confirmDelete", TickedCount);
 
     /// <summary>
+    /// What the selection switch does when pressed, which is to enter the mode or to leave it.
+    /// </summary>
+    public string SelectToggleLabel => localizer[IsSelecting ? "select.done" : "select.mode"];
+
+    /// <summary>
+    /// How many profiles the list shows, beside the name of what it is showing.
+    /// </summary>
+    public string VisibleSummary => localizer.Translate("select.shown", VisibleProfiles.Count);
+
+    /// <summary>
+    /// Shown after asking to delete the profile in the detail panel.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsConfirmingProfileDelete { get; set; }
+
+    /// <summary>
+    /// The question, naming the profile it is about.
+    /// </summary>
+    public string ProfileDeleteConfirmation =>
+        localizer.Translate("profile.deleteConfirm", SelectedProfile?.Name ?? string.Empty);
+
+    /// <summary>
     /// The filter the list is showing.
     /// </summary>
     /// <remarks>
@@ -154,7 +178,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// its own selection back. Both entries then looked chosen and the filter was neither.
     /// </remarks>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsNewSelected))]
     public partial SidebarFilterViewModel? SelectedFilter { get; set; }
 
     /// <summary>
@@ -173,11 +196,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// Set while one list is being cleared because the other was chosen from.
     /// </summary>
     private bool movingSelection;
-
-    /// <summary>
-    /// True while the new entry is selected, which is when marking everything seen makes sense.
-    /// </summary>
-    public bool IsNewSelected => SelectedFilter?.Kind == SidebarFilterKind.New;
 
     [ObservableProperty]
     public partial string StatusMessage { get; set; } = string.Empty;
@@ -201,6 +219,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// </summary>
     [ObservableProperty]
     public partial string EnvironmentProblems { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Where the banner's button leads: the place the platform named for what is missing, or the
+    /// OpenVPN Community download page when it named none.
+    /// </summary>
+    public string EnvironmentSetupUrl => environment.Report?.SetupUrl ?? OpenVpnDownloadUrl;
 
     /// <summary>
     /// True while a newer release has been found and the notice has not been dismissed.
@@ -493,6 +517,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     partial void OnSearchTermChanged(string value) => ApplyFilter();
 
+    // A confirmation belongs to the profile it was asked about. Moving the selection would otherwise
+    // leave the question standing over a different profile than the one the user meant.
+    partial void OnSelectedProfileChanged(ProfileItemViewModel? value) => IsConfirmingProfileDelete = false;
+
     partial void OnIsSelectingChanged(bool value)
     {
         IsConfirmingDelete = false;
@@ -580,6 +608,36 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     [RelayCommand]
     private void AskToDeleteTicked() => IsConfirmingDelete = TickedCount > 0;
+
+    [RelayCommand]
+    private void AskToDeleteSelected() => IsConfirmingProfileDelete = SelectedProfile is not null;
+
+    [RelayCommand]
+    private void CancelDeleteSelected() => IsConfirmingProfileDelete = false;
+
+    /// <summary>
+    /// Removes the profile shown in the detail panel, stopping it first when it is running.
+    /// </summary>
+    [RelayCommand]
+    private async Task DeleteSelectedAsync()
+    {
+        IsConfirmingProfileDelete = false;
+
+        if (SelectedProfile is not { } profile)
+        {
+            return;
+        }
+
+        if (!profile.IsIdle)
+        {
+            await DisconnectAsync(profile);
+        }
+
+        await store.DeleteProfileAsync(profile.Id);
+        await LoadAsync();
+
+        StatusMessage = localizer.Translate("status.profileDeleted", profile.Name);
+    }
 
     [RelayCommand]
     private void CancelDelete() => IsConfirmingDelete = false;
@@ -692,7 +750,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
                 SidebarFilterKind.Active => allProfiles.Count(profile => !profile.IsIdle),
                 SidebarFilterKind.Favourites => allProfiles.Count(profile => profile.IsFavourite),
                 SidebarFilterKind.Recent => allProfiles.Count(profile => profile.LastConnectedAt is not null),
-                SidebarFilterKind.New => allProfiles.Count(profile => profile.IsNew),
                 _ => 0,
             };
         }
@@ -719,9 +776,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
             SidebarFilterKind.Recent => matches
                 .Where(profile => profile.LastConnectedAt is not null)
                 .OrderByDescending(profile => profile.LastConnectedAt),
-            SidebarFilterKind.New => matches
-                .Where(profile => profile.IsNew)
-                .OrderByDescending(profile => profile.DiscoveredAt),
             SidebarFilterKind.Tag => matches.Where(profile =>
                 profile.Tags.Contains(filter!.TagName!, StringComparer.OrdinalIgnoreCase)),
             _ => matches,
@@ -739,6 +793,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         SelectedProfile = selectedId is { } id
             ? VisibleProfiles.FirstOrDefault(profile => profile.Id == id)
             : SelectedProfile;
+
+        OnPropertyChanged(nameof(VisibleSummary));
     }
 
     /// <summary>
@@ -786,7 +842,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             if (status.State == VpnConnectionState.Failed)
             {
-                StatusMessage = localizer.Translate("status.profileFailed", profile.Name, status.Message);
+                StatusMessage = localizer.Translate("status.profileFailed", profile.Name, localizer.Describe(status));
                 return;
             }
 
@@ -886,6 +942,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void DismissUpdate() => IsUpdateAvailable = false;
 
     /// <summary>
+    /// How long a tunnel is given to come up, or null when it may take as long as it likes.
+    /// </summary>
+    private TimeSpan? ConnectTimeout => settings.Current.Connections.ConnectTimeoutSeconds > 0
+        ? TimeSpan.FromSeconds(settings.Current.Connections.ConnectTimeoutSeconds)
+        : null;
+
+    /// <summary>
     /// The pull filters that stop a server from taking over the host routing table and DNS.
     /// </summary>
     /// <remarks>
@@ -893,13 +956,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// traffic needs the pushed default route while one that reaches a single network must not take
     /// the host's routing with it.
     /// </remarks>
-    /// <summary>
-    /// How long a tunnel is given to come up, or null when it may take as long as it likes.
-    /// </summary>
-    private TimeSpan? ConnectTimeout => settings.Current.Connections.ConnectTimeoutSeconds > 0
-        ? TimeSpan.FromSeconds(settings.Current.Connections.ConnectTimeoutSeconds)
-        : null;
-
     private string[] RouteProtectionFor(ProfileItemViewModel profile) =>
         profile.ProtectRoutes ?? settings.Current.Connections.ProtectRoutes
             ? RouteProtection
@@ -976,41 +1032,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         await store.SetFavouriteAsync(profile.Id, profile.IsFavourite);
         UpdateFilterCounts();
         ApplyFilter();
-    }
-
-    /// <summary>
-    /// Connects everything the current filter shows that is not already up.
-    /// </summary>
-    /// <remarks>
-    /// Acts on what is on screen rather than on a saved grouping, so a tag, a search term or both
-    /// together decide the set. That is the same thing the user is already looking at.
-    /// </remarks>
-    [RelayCommand]
-    private async Task ConnectVisibleAsync()
-    {
-        foreach (ProfileItemViewModel profile in VisibleProfiles.Where(profile => profile.IsIdle).ToList())
-        {
-            await ConnectAsync(profile);
-        }
-    }
-
-    /// <summary>
-    /// Clears the new marks, which is how the user says they have looked at what arrived.
-    /// </summary>
-    [RelayCommand]
-    private async Task MarkDiscoveriesSeenAsync()
-    {
-        int cleared = await store.ClearDiscoveriesAsync();
-
-        if (cleared == 0)
-        {
-            return;
-        }
-
-        SelectedBuiltIn = Filters[0];
-        await LoadAsync();
-
-        StatusMessage = localizer.Translate("status.discoveriesCleared", cleared);
     }
 
     /// <summary>
@@ -1184,6 +1205,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(EmptyStateTitle));
         OnPropertyChanged(nameof(EmptyStateDetail));
         OnPropertyChanged(nameof(ActiveSummary));
+        OnPropertyChanged(nameof(SelectToggleLabel));
+        OnPropertyChanged(nameof(VisibleSummary));
+        OnPropertyChanged(nameof(SelectionSummary));
+        OnPropertyChanged(nameof(ProfileDeleteConfirmation));
 
         // The status bar holds a sentence rather than a key, so it cannot re-translate itself.
         // Whatever it was reporting has been read by now, and the resting text is correct again.
@@ -1195,9 +1220,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             VpnConnectionState.Connected => localizer.Translate("status.profileConnected", profile.Name),
             VpnConnectionState.Reconnecting =>
-                localizer.Translate("status.profileReconnecting", profile.Name, status.Message).TrimEnd(),
+                localizer.Translate("status.profileReconnecting", profile.Name, localizer.Describe(status)).TrimEnd(),
             VpnConnectionState.Failed =>
-                localizer.Translate("status.profileFailed", profile.Name, status.Message),
+                localizer.Translate("status.profileFailed", profile.Name, localizer.Describe(status)),
             VpnConnectionState.Disconnected =>
                 localizer.Translate("status.profileDisconnected", profile.Name),
             _ => localizer.Translate("status.profileBusy", profile.Name, profile.StatusLabel),

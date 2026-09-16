@@ -47,19 +47,26 @@ public sealed class OvpnConfiguration
 
     public OvpnConfiguration(
         IReadOnlyList<OvpnDirective> directives,
-        IReadOnlyDictionary<string, OvpnInlineBlock> inlineBlocks)
+        IReadOnlyDictionary<string, OvpnInlineBlock> inlineBlocks,
+        OvpnBlockOpening? unclosedBlock = null)
     {
         ArgumentNullException.ThrowIfNull(directives);
         ArgumentNullException.ThrowIfNull(inlineBlocks);
 
         Directives = directives;
         InlineBlocks = inlineBlocks;
+        UnclosedBlock = unclosedBlock;
         Remotes = new ReadOnlyCollection<OvpnRemote>(ExtractRemotes(directives));
     }
 
     public IReadOnlyList<OvpnDirective> Directives { get; }
 
     public IReadOnlyDictionary<string, OvpnInlineBlock> InlineBlocks { get; }
+
+    /// <summary>
+    /// The inline block that was opened and never closed, or null when every block is closed.
+    /// </summary>
+    public OvpnBlockOpening? UnclosedBlock { get; }
 
     /// <summary>
     /// Every remote endpoint in declaration order. OpenVPN tries them in turn.
@@ -111,9 +118,13 @@ public sealed class OvpnConfiguration
             .FirstOrDefault(directive => directive.Name == "proto")?
             .FirstArgument;
 
+        // rport names the remote port alone and port names both ends, so the narrower one wins.
         int? defaultPort = ParsePort(directives
             .FirstOrDefault(directive => directive.Name == "rport")?
-            .FirstArgument);
+            .FirstArgument)
+            ?? ParsePort(directives
+                .FirstOrDefault(directive => directive.Name == "port")?
+                .FirstArgument);
 
         List<OvpnRemote> remotes = [];
 
@@ -173,6 +184,11 @@ public sealed record OvpnDirective(string Name, IReadOnlyList<string> Arguments,
 /// The contents of an inline block such as <c>&lt;ca&gt;...&lt;/ca&gt;</c>.
 /// </summary>
 public sealed record OvpnInlineBlock(string Name, string Content);
+
+/// <summary>
+/// Where an inline block was opened.
+/// </summary>
+public sealed record OvpnBlockOpening(string Name, int LineNumber);
 
 /// <summary>
 /// A remote endpoint the client may connect to.

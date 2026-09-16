@@ -15,7 +15,12 @@ public interface IOpenVpnEnvironmentProbe
 /// <summary>
 /// The outcome of every environment check, in the order they were evaluated.
 /// </summary>
-public sealed record OpenVpnEnvironmentReport(IReadOnlyList<EnvironmentCheck> Checks)
+/// <param name="Checks">Every check, in the order it was evaluated.</param>
+/// <param name="SetupUrl">
+/// Where whatever is missing is obtained, when the platform knows a better place than the OpenVPN
+/// Community download page. Null leaves the presentation layer to its default.
+/// </param>
+public sealed record OpenVpnEnvironmentReport(IReadOnlyList<EnvironmentCheck> Checks, string? SetupUrl = null)
 {
     /// <summary>
     /// True when nothing blocks a connection attempt.

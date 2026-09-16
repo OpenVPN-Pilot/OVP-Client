@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace OpenVpnPilot.Data.Packaging;
@@ -7,8 +8,10 @@ namespace OpenVpnPilot.Data.Packaging;
 /// </summary>
 /// <remarks>
 /// The package is a single file so a profile set can be moved without anyone having to know where
-/// the database lives. It carries the configurations, their tags and the shortcuts, and deliberately
-/// nothing about how they were used: the session history belongs to the machine it happened on.
+/// the database lives. It carries the configurations, their tags, and whichever of the shortcuts,
+/// the settings and the saved sign ins the person writing it chose to include, and deliberately
+/// nothing about how the profiles were used: the session history belongs to the machine it happened
+/// on.
 ///
 /// Credentials are not included unless the caller asks for them and supplies a passphrase. A stored
 /// secret is protected by the operating system for one user on one machine, so moving it means
@@ -18,10 +21,18 @@ namespace OpenVpnPilot.Data.Packaging;
 public sealed record ProfilePackageContent
 {
     /// <summary>
+    /// The newest layout this build reads and writes.
+    /// </summary>
+    /// <remarks>
+    /// Two added the settings. A file of one reads as one of two that carries none.
+    /// </remarks>
+    public const int CurrentFormatVersion = 2;
+
+    /// <summary>
     /// The layout this file was written with, so a later version can read an earlier one.
     /// </summary>
     [JsonPropertyName("formatVersion")]
-    public int FormatVersion { get; init; } = 1;
+    public int FormatVersion { get; init; } = CurrentFormatVersion;
 
     [JsonPropertyName("createdAt")]
     public DateTimeOffset CreatedAt { get; init; }
@@ -43,6 +54,12 @@ public sealed record ProfilePackageContent
     /// </summary>
     [JsonPropertyName("credentials")]
     public IReadOnlyList<PackagedCredential> Credentials { get; init; } = [];
+
+    /// <summary>
+    /// The settings, in the settings file's own form, when the writer chose to include them.
+    /// </summary>
+    [JsonPropertyName("settings")]
+    public JsonElement? Settings { get; init; }
 }
 
 /// <summary>
@@ -50,7 +67,7 @@ public sealed record ProfilePackageContent
 /// </summary>
 public sealed record PackagedProfile
 {
-    [property: JsonPropertyName("id")]
+    [JsonPropertyName("id")]
     public Guid Id { get; init; }
 
     [JsonPropertyName("name")]
@@ -106,3 +123,4 @@ public sealed record PackagedCredential(
     [property: JsonPropertyName("realm")] string Realm,
     [property: JsonPropertyName("username")] string? Username,
     [property: JsonPropertyName("password")] string Password);
+

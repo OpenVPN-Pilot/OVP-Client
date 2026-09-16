@@ -13,6 +13,11 @@ using OpenVpnPilot.Core.Storage;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.OpenVpn.Configuration;
 using OpenVpnPilot.OpenVpn.Runtime;
+using OpenVpnPilot.Platform.MacOS.Diagnostics;
+using OpenVpnPilot.Platform.MacOS.Helper;
+using OpenVpnPilot.Platform.MacOS.Runtime;
+using OpenVpnPilot.Platform.MacOS.Security;
+using OpenVpnPilot.Platform.MacOS.Shell;
 using OpenVpnPilot.Platform.Windows.Diagnostics;
 using OpenVpnPilot.Platform.Windows.InteractiveService;
 using OpenVpnPilot.Platform.Windows.Runtime;
@@ -29,6 +34,19 @@ namespace OpenVpnPilot.App;
 /// </summary>
 internal static class AppHost
 {
+    /// <summary>
+    /// Where a person is sent to get the macOS helper package.
+    /// </summary>
+    /// <remarks>
+    /// The macOS page rather than the releases, because there is nothing to download there. A macOS
+    /// build cannot be published without an Apple Developer ID to sign it with and a Mac to make it
+    /// on, and this project has neither, so both halves are built from the source. That page is
+    /// where the one command to do it is written down; the releases would be a page with nothing on
+    /// it for the reader.
+    /// </remarks>
+    private static readonly string HelperSetupUrl =
+        $"https://github.com/{new AdvancedSettings().UpdateRepository}/blob/master/docs/macos.md";
+
     public static IHost Build()
     {
         UserApplicationPaths paths = new();
@@ -58,8 +76,6 @@ internal static class AppHost
         builder.Services.AddSingleton<IHotkeyStore, HotkeyStore>();
         builder.Services.AddSingleton<IProfileImportService, ProfileImportService>();
         builder.Services.AddSingleton<IProfilePackageWriter, ProfilePackageWriter>();
-        builder.Services.AddSingleton<IWatchedFolderStore, WatchedFolderStore>();
-        builder.Services.AddSingleton<WatchedFolderMonitor>();
         builder.Services.AddSingleton<DiagnosticsBundle>();
         builder.Services.AddSingleton<EnvironmentGate>();
         builder.Services.AddSingleton<UpdateCoordinator>();
@@ -67,14 +83,20 @@ internal static class AppHost
         RegisterSettings(builder.Services, paths);
         RegisterLocalization(builder.Services, paths);
 
-        if (!OperatingSystem.IsWindows())
+        if (OperatingSystem.IsWindows())
+        {
+            RegisterWindowsServices(builder.Services, paths);
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            RegisterMacServices(builder.Services, paths);
+        }
+        else
         {
             throw new PlatformNotSupportedException(
-                "This build supports Windows only. Support for other systems means adding an "
+                "This build supports Windows and macOS. Support for another system means adding an "
                 + "implementation of the platform interfaces, not changing the rest of the application.");
         }
-
-        RegisterPlatformServices(builder.Services, paths);
 
         builder.Services.AddSingleton<IOvpnFileResolver, FileSystemOvpnFileResolver>();
         builder.Services.AddSingleton<OvpnConfigInliner>();
@@ -124,10 +146,14 @@ internal static class AppHost
 
     private static void RegisterLocalization(IServiceCollection services, UserApplicationPaths paths)
     {
+        // Wording that names a part of one system, a key or a component, is chosen by platform.
+        string? platform = OperatingSystem.IsMacOS() ? "macos" : null;
+
         // The installed directory comes first so a file the user drops in overrides it key by key.
         services.AddSingleton<ILanguageCatalogueSource>(provider => new JsonLanguageCatalogueSource(
             [paths.InstalledLanguageDirectory, paths.UserLanguageDirectory],
-            provider.GetRequiredService<ILogger<JsonLanguageCatalogueSource>>()));
+            provider.GetRequiredService<ILogger<JsonLanguageCatalogueSource>>(),
+            platform));
 
         services.AddSingleton<LocalizationManager>();
         services.AddSingleton<ILocalizer>(provider => provider.GetRequiredService<LocalizationManager>());
@@ -136,7 +162,7 @@ internal static class AppHost
     }
 
     [SupportedOSPlatform("windows")]
-    private static void RegisterPlatformServices(IServiceCollection services, UserApplicationPaths paths)
+    private static void RegisterWindowsServices(IServiceCollection services, UserApplicationPaths paths)
     {
         services.AddSingleton<InteractiveServicePipeClient>();
         services.AddSingleton<IOpenVpnLauncher, WindowsOpenVpnLauncher>();
@@ -145,6 +171,7 @@ internal static class AppHost
         services.AddSingleton<ISecretStore>(_ => new DpapiSecretStore(paths.SecretsDirectory));
         services.AddSingleton<IAutoStartManager, RegistryAutoStartManager>();
         services.AddSingleton<IGlobalHotkeyService, WindowsGlobalHotkeyService>();
+        services.AddSingleton<IWindowCloseOrigin, WindowsCloseOrigin>();
 
         // The icon and the notifications are one entry in the notification area, so they are one
         // object registered under both interfaces rather than two that would each add an icon.
@@ -152,6 +179,36 @@ internal static class AppHost
         services.AddSingleton<ISystemTrayIcon>(provider => provider.GetRequiredService<WindowsTrayIcon>());
         services.AddSingleton<INotificationPresenter>(
             provider => provider.GetRequiredService<WindowsTrayIcon>());
+    }
+
+    /// <summary>
+    /// The macOS implementations of the platform interfaces.
+    /// </summary>
+    /// <remarks>
+    /// One helper session serves the launcher and the terminator, because the helper ties every
+    /// tunnel to the session that started it and ends them together when it closes. The menu bar
+    /// entry and the notifications are separate objects here: a notification is not attached to the
+    /// status item the way a balloon is attached to a notification area icon.
+    /// </remarks>
+    [SupportedOSPlatform("macos")]
+    private static void RegisterMacServices(IServiceCollection services, UserApplicationPaths paths)
+    {
+        services.AddSingleton<HelperSession>();
+        services.AddSingleton<IOpenVpnLauncher, MacOpenVpnLauncher>();
+        services.AddSingleton<IOpenVpnProcessTerminator, HelperProcessTerminator>();
+        services.AddSingleton<IProfileMaterializer>(
+            _ => new MacProfileMaterializer(Path.Combine(paths.DataDirectory, "runtime")));
+        services.AddSingleton<IOpenVpnEnvironmentProbe>(_ => new MacOpenVpnEnvironmentProbe(HelperSetupUrl));
+        services.AddSingleton<ISecretStore, KeychainSecretStore>();
+        services.AddSingleton<IAutoStartManager, LaunchAgentAutoStartManager>();
+        services.AddSingleton<IGlobalHotkeyService, MacGlobalHotkeyService>();
+        services.AddSingleton<ISystemTrayIcon, MacStatusItem>();
+        services.AddSingleton<IDockPresence, MacDockPresence>();
+
+        // Without this the application menu was never filled and kept the framework's entry about
+        // itself, although everything that fills it existed.
+        services.AddSingleton<IApplicationMenu, MacApplicationMenu>();
+        services.AddSingleton<INotificationPresenter, MacNotificationPresenter>();
     }
 
     /// <summary>

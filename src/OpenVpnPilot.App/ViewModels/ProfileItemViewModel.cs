@@ -22,7 +22,6 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
 
         Id = profile.Id;
         Name = profile.Name;
-        DiscoveredAt = profile.DiscoveredAt;
         Endpoint = FormatEndpoint(profile);
         RequiresCredentials = profile.RequiresCredentials;
         HasUnsupportedOptions = profile.HasUnsupportedOptions;
@@ -48,13 +47,6 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
 
     public string Name { get; }
 
-    /// <summary>
-    /// Set while a profile a watched directory brought in has not been looked at yet.
-    /// </summary>
-    public DateTimeOffset? DiscoveredAt { get; }
-
-    public bool IsNew => DiscoveredAt is not null;
-
     public string Endpoint { get; }
 
     public bool RequiresCredentials { get; }
@@ -70,6 +62,8 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     public int ConnectCount { get; }
 
     public string? Notes { get; }
+
+    public bool HasNotes => !string.IsNullOrWhiteSpace(Notes);
 
     /// <summary>
     /// Per profile override for the route protection. Null follows the application wide setting.
@@ -125,6 +119,7 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsBusy))]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
     [NotifyPropertyChangedFor(nameof(HasFailureMessage))]
+    [NotifyPropertyChangedFor(nameof(FailureMessage))]
     [NotifyPropertyChangedFor(nameof(LocalAddressDisplay))]
     [NotifyPropertyChangedFor(nameof(ServerDisplay))]
     [NotifyPropertyChangedFor(nameof(UptimeDisplay))]
@@ -169,7 +164,12 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     public string StatusLabel => StatusText.Length == 0 ? localizer["state.disconnected"] : StatusText;
 
     public bool HasFailureMessage =>
-        Status.State == VpnConnectionState.Failed && Status.Message.Length > 0;
+        Status.State == VpnConnectionState.Failed && FailureMessage.Length > 0;
+
+    /// <summary>
+    /// Why the connection failed, translated where this client wrote the reason itself.
+    /// </summary>
+    public string FailureMessage => localizer.Describe(Status);
 
     public string LocalAddressDisplay => Status.LocalAddress ?? "-";
 

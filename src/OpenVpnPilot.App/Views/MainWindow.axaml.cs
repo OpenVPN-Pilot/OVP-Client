@@ -19,15 +19,16 @@ namespace OpenVpnPilot.App.Views;
 public partial class MainWindow : Window
 {
     /// <summary>
-    /// The profiles being dragged, carried inside the process only.
+    /// The profiles being dragged, written by <see cref="DraggedProfiles"/>.
     /// </summary>
     /// <remarks>
-    /// An in process format never reaches the platform clipboard, so a set of identifiers stays a
-    /// set of identifiers rather than being flattened into text that another application could pick
-    /// up and that this one would have to parse back.
+    /// An application format rather than an in process one, because an in process one never reaches
+    /// the platform and a drag that carries nothing ends the process on macOS. Why, and what that
+    /// looked like, is with the serializer. The identifier is namespaced by Avalonia rather than
+    /// passed to the platform as it stands. What the identifier may contain is with the serializer.
     /// </remarks>
-    private static readonly DataFormat<DraggedProfiles> ProfileFormat =
-        DataFormat.CreateInProcessFormat<DraggedProfiles>("openvpnpilot/profiles");
+    private static readonly DataFormat<string> ProfileFormat =
+        DataFormat.CreateStringApplicationFormat(DraggedProfiles.FormatIdentifier);
 
     /// <summary>
     /// How far the pointer has to travel before a press becomes a drag rather than a click.
@@ -90,13 +91,15 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Opens the page OpenVPN Community is downloaded from.
+    /// Opens the page that what the banner reports as missing is obtained from.
     /// </summary>
     private async Task OpenDownloadPageAsync()
     {
+        string url = ViewModel?.EnvironmentSetupUrl ?? MainWindowViewModel.OpenVpnDownloadUrl;
+
         if (TopLevel.GetTopLevel(this)?.Launcher is { } launcher)
         {
-            await launcher.LaunchUriAsync(new Uri(MainWindowViewModel.OpenVpnDownloadUrl));
+            await launcher.LaunchUriAsync(new Uri(url));
         }
     }
 
@@ -151,8 +154,13 @@ public partial class MainWindow : Window
         pressedProfile = Guid.Empty;
         pressedArgs = null;
 
+        if (dragging.Count == 0)
+        {
+            return;
+        }
+
         DataTransfer transfer = new();
-        transfer.Add(DataTransferItem.Create(ProfileFormat, new DraggedProfiles(dragging)));
+        transfer.Add(DataTransferItem.Create(ProfileFormat, DraggedProfiles.Format(dragging)));
 
         await DragDrop.DoDragDropAsync(pressed, transfer, DragDropEffects.Link);
     }
@@ -175,9 +183,9 @@ public partial class MainWindow : Window
     {
         if (e.DataTransfer.TryGetValue(ProfileFormat) is { } dragged)
         {
-            if (TagUnder(e.Source) is { } tag)
+            if (DraggedProfiles.Parse(dragged) is { Count: > 0 } profiles && TagUnder(e.Source) is { } tag)
             {
-                ProfilesDroppedOnTag?.Invoke(this, new ProfileTagDrop(dragged.ProfileIds, tag));
+                ProfilesDroppedOnTag?.Invoke(this, new ProfileTagDrop(profiles, tag));
             }
 
             return;
@@ -234,11 +242,6 @@ public partial class MainWindow : Window
         return null;
     }
 }
-
-/// <summary>
-/// The profiles a drag is carrying.
-/// </summary>
-public sealed record DraggedProfiles(IReadOnlyList<Guid> ProfileIds);
 
 /// <summary>
 /// Profiles that were dropped on a tag.

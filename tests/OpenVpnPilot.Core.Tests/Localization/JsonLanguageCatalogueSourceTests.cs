@@ -101,6 +101,89 @@ public sealed class JsonLanguageCatalogueSourceTests : IDisposable
         Assert.Empty(new JsonLanguageCatalogueSource([Path.Combine(root, "absent")]).Load());
     }
 
+    [Fact]
+    public void Load_PlatformVariant_ReplacesTheNeutralKeyOnThatPlatform()
+    {
+        WritePlatformCatalogue();
+
+        LanguageCatalogue catalogue = Assert.Single(
+            new JsonLanguageCatalogueSource([root], platform: "macos").Load());
+
+        Assert.Equal("Install the helper", catalogue.Strings["environment.hint"]);
+        Assert.Equal("Recheck", catalogue.Strings["environment.recheck"]);
+    }
+
+    /// <summary>
+    /// Only the resolved key may be visible, because the markup asks for the neutral one.
+    /// </summary>
+    [Fact]
+    public void Load_PlatformVariant_IsNotAKeyOfItsOwn()
+    {
+        WritePlatformCatalogue();
+
+        LanguageCatalogue catalogue = Assert.Single(
+            new JsonLanguageCatalogueSource([root], platform: "macos").Load());
+
+        Assert.DoesNotContain(catalogue.Strings.Keys, key => key.Contains('@', StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Load_WithoutAPlatform_KeepsTheNeutralWordingAndDropsEveryVariant()
+    {
+        WritePlatformCatalogue();
+
+        LanguageCatalogue catalogue = Assert.Single(Load());
+
+        Assert.Equal("Install the service", catalogue.Strings["environment.hint"]);
+        Assert.Equal(2, catalogue.Strings.Count);
+    }
+
+    [Fact]
+    public void Load_VariantForAnotherPlatform_IsIgnored()
+    {
+        WritePlatformCatalogue();
+
+        LanguageCatalogue catalogue = Assert.Single(
+            new JsonLanguageCatalogueSource([root], platform: "linux").Load());
+
+        Assert.Equal("Install the service", catalogue.Strings["environment.hint"]);
+    }
+
+    [Theory]
+    [InlineData("environment.hint@macos", "environment.hint", "macos")]
+    [InlineData("a@b", "a", "b")]
+    public void TrySplitPlatformKey_ReadsTheSuffix(string key, string neutral, string platform)
+    {
+        Assert.True(JsonLanguageCatalogueSource.TrySplitPlatformKey(key, out string readNeutral, out string readPlatform));
+        Assert.Equal(neutral, readNeutral);
+        Assert.Equal(platform, readPlatform);
+    }
+
+    [Theory]
+    [InlineData("environment.hint")]
+    [InlineData("group@name.key")]
+    [InlineData("@macos")]
+    [InlineData("key@")]
+    public void TrySplitPlatformKey_LeavesAnOrdinaryKeyAlone(string key)
+    {
+        Assert.False(JsonLanguageCatalogueSource.TrySplitPlatformKey(key, out string neutral, out _));
+        Assert.Equal(key, neutral);
+    }
+
+    private void WritePlatformCatalogue() =>
+        Write("en.json", """
+            {
+              "language": { "code": "en", "name": "English" },
+              "strings": {
+                "environment": {
+                  "hint": "Install the service",
+                  "hint@macos": "Install the helper",
+                  "recheck": "Recheck"
+                }
+              }
+            }
+            """);
+
     private IReadOnlyList<LanguageCatalogue> Load() => new JsonLanguageCatalogueSource([root]).Load();
 
     private void Write(string name, string content) =>

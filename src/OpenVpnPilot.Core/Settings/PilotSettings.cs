@@ -13,7 +13,7 @@ public sealed class PilotSettings
     /// <summary>
     /// The newest layout this build knows how to write.
     /// </summary>
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     /// <summary>
     /// Which layout the file was written by. Zero for a file written before this existed.
@@ -47,10 +47,14 @@ public sealed class PilotSettings
     /// </summary>
     /// <returns>True when something was changed and the file should be written again.</returns>
     /// <remarks>
-    /// One step so far. The update check and the repository it asks about were both stored and
+    /// Two steps. The first: the update check and the repository it asks about were both stored and
     /// neither was ever reachable: there was no switch, no field and no caller. Every value in an
     /// existing file is therefore a serialized default rather than an answer anybody gave, which is
     /// what makes adopting the new ones legitimate here and would not make it legitimate again.
+    ///
+    /// The second: the project moved to another repository, so a file still naming the one it was
+    /// published from before is pointed at the new one. Only that exact value is replaced, because
+    /// anything else in the field is a fork somebody typed and follows its own releases.
     /// </remarks>
     public bool Migrate()
     {
@@ -59,10 +63,20 @@ public sealed class PilotSettings
             return false;
         }
 
+        PilotSettings defaults = new();
+
         if (SchemaVersion < 1)
         {
-            PilotSettings defaults = new();
             Advanced.CheckForUpdates = defaults.Advanced.CheckForUpdates;
+            Advanced.UpdateRepository = defaults.Advanced.UpdateRepository;
+        }
+
+        if (SchemaVersion < 2
+            && string.Equals(
+                Advanced.UpdateRepository?.Trim(),
+                AdvancedSettings.FormerUpdateRepository,
+                StringComparison.OrdinalIgnoreCase))
+        {
             Advanced.UpdateRepository = defaults.Advanced.UpdateRepository;
         }
 
@@ -119,6 +133,15 @@ public sealed class GeneralSettings
     /// </summary>
     public WindowPlacementSettings MainWindow { get; set; } = new();
 
+    /// <summary>
+    /// What the profile editor shows first: the form, or the configuration as OpenVPN reads it.
+    /// </summary>
+    /// <remarks>
+    /// Both are one button apart in the editor. This is for the person who reaches for the text every
+    /// time and would otherwise press that button every time.
+    /// </remarks>
+    public ProfileEditorView ProfileEditor { get; set; } = ProfileEditorView.Form;
+
     public GeneralSettings Clone()
     {
         GeneralSettings copy = (GeneralSettings)MemberwiseClone();
@@ -157,6 +180,22 @@ public sealed class WindowPlacementSettings
     public bool HasPosition => X is not null && Y is not null;
 
     public WindowPlacementSettings Clone() => (WindowPlacementSettings)MemberwiseClone();
+}
+
+/// <summary>
+/// The two ways the profile editor can present a profile.
+/// </summary>
+public enum ProfileEditorView
+{
+    /// <summary>
+    /// Named fields for what is changed by hand: the server, the port, the protocol and the keys.
+    /// </summary>
+    Form,
+
+    /// <summary>
+    /// The whole configuration as text.
+    /// </summary>
+    PlainText,
 }
 
 public sealed class AppearanceSettings
@@ -212,22 +251,10 @@ public sealed class ConnectionSettings
     /// </summary>
     public int ReconnectDelaySeconds { get; set; } = 5;
 
-
     /// <summary>
     /// Reconnect the tunnels that were up when the application last closed.
     /// </summary>
     public bool RestoreOnStart { get; set; }
-
-    /// <summary>
-    /// How often a watched directory is re-read, in minutes. Zero rescans only at startup and when
-    /// the directory reports a change.
-    /// </summary>
-    /// <remarks>
-    /// A periodic scan is a backstop, not the mechanism: the watcher already reports what happens
-    /// while the application runs. It matters for directories the watcher cannot follow reliably,
-    /// such as a network share.
-    /// </remarks>
-    public int WatchIntervalMinutes { get; set; }
 
     public ConnectionSettings Clone() => (ConnectionSettings)MemberwiseClone();
 }
@@ -298,6 +325,15 @@ public sealed class AdvancedSettings
     public int LogRetentionDays { get; set; } = 7;
 
     /// <summary>
+    /// How large the log files may be together, in megabytes. Zero sets no limit.
+    /// </summary>
+    /// <remarks>
+    /// The retention alone does not bound the directory: a tunnel that logs the same failure for
+    /// every packet wrote more than a gigabyte a day. The oldest files go first when this is reached.
+    /// </remarks>
+    public int LogMaximumMegabytes { get; set; } = 1024;
+
+    /// <summary>
     /// Keep the database, logs and settings beside the executable instead of under the user profile.
     /// </summary>
     public bool PortableMode { get; set; }
@@ -320,7 +356,16 @@ public sealed class AdvancedSettings
     /// The project's own repository by default, so turning the check on is a switch rather than an
     /// invitation to type a name correctly. A fork changes it to its own and the check follows.
     /// </remarks>
-    public string? UpdateRepository { get; set; } = "Schecher1/OpenVpnPilot";
+    public string? UpdateRepository { get; set; } = "OpenVPN-Pilot/OVP-Client";
+
+    /// <summary>
+    /// Where the project was published from until 1.8.0.
+    /// </summary>
+    /// <remarks>
+    /// Kept so a settings file carrying it can be recognised as never having been answered and moved
+    /// to the current one, which <see cref="PilotSettings.Migrate"/> does once.
+    /// </remarks>
+    internal const string FormerUpdateRepository = "Schecher1/OpenVpnPilot";
 
     public AdvancedSettings Clone() => (AdvancedSettings)MemberwiseClone();
 }

@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenVpnPilot.Core\OpenVpnPilot.Core.csproj" />
+    <ProjectReference Include="..\OpenVpnPilot.OpenVpn\OpenVpnPilot.OpenVpn.csproj" />
+    <ProjectReference Include="..\OpenVpnPilot.Platform.MacOS.Protocol\OpenVpnPilot.Platform.MacOS.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The menu bar entry is Avalonia's status item, which already speaks to AppKit. Only what
+      Avalonia does not offer, notifications, shortcuts and the keychain, is called directly.
+    -->
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The menu bar template comes from assets/artwork, which is the one place any of the artwork is
+      drawn, and is linked to the path MacStatusItem names.
+    -->
+    <AvaloniaResource Include="..\..\assets\artwork\status-item.png" Link="Assets\status-item.png" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Required by the LibraryImport source generator used for the system framework calls. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenVpnPilot.Platform.MacOS.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -82,6 +82,13 @@ public sealed record VpnConnectionStatus
     public string Message { get; init; } = string.Empty;
 
     /// <summary>
+    /// The same reason as <see cref="Message"/>, in a form that can be translated, when this client
+    /// wrote it. Null when the message is text from OpenVPN or from an exception, which nobody can
+    /// translate, and null when there is no message at all.
+    /// </summary>
+    public VpnStatusReason? Reason { get; init; }
+
+    /// <summary>
     /// Routes the server pushed, as network and mask. Empty until a server sends any.
     /// </summary>
     /// <remarks>

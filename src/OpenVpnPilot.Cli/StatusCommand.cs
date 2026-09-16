@@ -23,7 +23,7 @@ internal static class StatusCommand
         }
 
         Console.WriteLine(reply);
-        return reply.StartsWith("Nothing", StringComparison.Ordinal) ? 1 : 0;
+        return reply.StartsWith(PilotCommands.NothingConnected, StringComparison.Ordinal) ? 1 : 0;
     }
 }
 
@@ -59,6 +59,6 @@ internal static class DisconnectCommand
         }
 
         Console.WriteLine(reply);
-        return reply.StartsWith("No stored profile", StringComparison.Ordinal) ? 1 : 0;
+        return reply.StartsWith(PilotCommands.NoSuchProfile, StringComparison.Ordinal) ? 1 : 0;
     }
 }

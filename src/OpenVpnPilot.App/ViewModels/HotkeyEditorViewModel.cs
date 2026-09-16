@@ -52,7 +52,48 @@ public sealed partial class HotkeyEditorViewModel : ViewModelBase
 
     public bool HasProblem => Problem is { Length: > 0 };
 
-    public string GestureDisplay => Gesture.Length > 0 ? Gesture : localizer["hotkey.unbound"];
+    /// <summary>
+    /// The combination as the platform writes it, or a note that there is none.
+    /// </summary>
+    /// <remarks>
+    /// The stored form names the modifiers the way Windows does, and that form is kept because it is
+    /// what the database holds. Only the display is translated: macOS writes a combination as the
+    /// symbols printed on its keys, and a Mac user reading Windows+Alt+V would reasonably wonder
+    /// which key that is.
+    /// </remarks>
+    public string GestureDisplay => Gesture.Length > 0 ? Describe(Gesture) : localizer["hotkey.unbound"];
+
+    private string Describe(string stored)
+    {
+        if (!HotkeyGesture.TryParse(stored, out HotkeyGesture? gesture))
+        {
+            return stored;
+        }
+
+        string text = string.Empty;
+
+        if (gesture.Modifiers.HasFlag(HotkeyModifiers.Control))
+        {
+            text += localizer["hotkey.modifierControl"];
+        }
+
+        if (gesture.Modifiers.HasFlag(HotkeyModifiers.Alt))
+        {
+            text += localizer["hotkey.modifierAlt"];
+        }
+
+        if (gesture.Modifiers.HasFlag(HotkeyModifiers.Shift))
+        {
+            text += localizer["hotkey.modifierShift"];
+        }
+
+        if (gesture.Modifiers.HasFlag(HotkeyModifiers.Windows))
+        {
+            text += localizer["hotkey.modifierWindows"];
+        }
+
+        return text + gesture.Key;
+    }
 
     [RelayCommand]
     private void StartRecording()

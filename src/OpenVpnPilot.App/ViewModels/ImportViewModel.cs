@@ -2,9 +2,11 @@ using System.Collections.ObjectModel;
 using System.Security.Cryptography;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.EntityFrameworkCore;
 using OpenVpnPilot.App.Services;
 using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.Data.Import;
+using OpenVpnPilot.Data.Packaging;
 
 namespace OpenVpnPilot.App.ViewModels;
 
@@ -17,9 +19,11 @@ namespace OpenVpnPilot.App.ViewModels;
 /// when the profile does not appear afterwards.
 ///
 /// A package is the other thing that can be imported, and it arrives the same way: picked or dropped
-/// on the window. It cannot be previewed file by file because it is encrypted, so the screen changes
-/// shape and asks for the passphrase instead. Handing someone a set of profiles is worth little if
-/// opening it needs a terminal.
+/// on the window. It cannot be previewed until it is decrypted, so the screen changes shape and asks
+/// for the passphrase first. Once open, it lists what the package holds: every profile, marked where
+/// the store already has it, the sign ins, the shortcuts and the settings, and nothing is taken that
+/// is not ticked. Handing someone a set of profiles is worth little if opening it needs a terminal,
+/// and a package somebody else assembled rarely holds only what the person opening it wants.
 /// </remarks>
 public sealed partial class ImportViewModel : ViewModelBase, IDisposable
 {
@@ -79,6 +83,7 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
     public partial string StatusMessage { get; set; } = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCommit))]
     public partial bool IsBusy { get; set; }
 
     [ObservableProperty]
@@ -96,7 +101,10 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPackage))]
+    [NotifyPropertyChangedFor(nameof(IsPackageLocked))]
+    [NotifyPropertyChangedFor(nameof(IsPackageOpen))]
     [NotifyPropertyChangedFor(nameof(PackageName))]
+    [NotifyPropertyChangedFor(nameof(CommitLabel))]
     [NotifyPropertyChangedFor(nameof(CanCommit))]
     [NotifyPropertyChangedFor(nameof(HasRows))]
     public partial string? PackagePath { get; set; }
@@ -105,12 +113,101 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(CanCommit))]
     public partial string Passphrase { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The package once its passphrase has opened it, or null before that.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPackageLocked))]
+    [NotifyPropertyChangedFor(nameof(IsPackageOpen))]
+    [NotifyPropertyChangedFor(nameof(CanCommit))]
+    [NotifyPropertyChangedFor(nameof(CommitLabel))]
+    [NotifyPropertyChangedFor(nameof(PackageOrigin))]
+    [NotifyPropertyChangedFor(nameof(HasPackageCredentials))]
+    [NotifyPropertyChangedFor(nameof(HasPackageHotkeys))]
+    [NotifyPropertyChangedFor(nameof(HasPackageSettings))]
+    [NotifyPropertyChangedFor(nameof(PackageHotkeysLabel))]
+    [NotifyPropertyChangedFor(nameof(PackageHotkeysClashing))]
+    [NotifyPropertyChangedFor(nameof(HasPackageHotkeysClashing))]
+    public partial OpenedPackage? OpenedPackage { get; set; }
+
     public bool IsPackage => PackagePath is not null;
+
+    public bool IsPackageLocked => IsPackage && OpenedPackage is null;
+
+    public bool IsPackageOpen => IsPackage && OpenedPackage is not null;
 
     public string PackageName => PackagePath is { } path ? Path.GetFileName(path) : string.Empty;
 
+    /// <summary>
+    /// The profiles an opened package holds, each ticked unless the person unticks it.
+    /// </summary>
+    public ObservableCollection<ImportPackageProfileViewModel> PackageProfiles { get; } = [];
+
+    /// <summary>
+    /// The tags the packaged profiles carry, each ticking the profiles that carry it.
+    /// </summary>
+    public ObservableCollection<TagChoiceViewModel> PackageTags { get; } = [];
+
+    public bool HasPackageTags => PackageTags.Count > 0;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCommit))]
+    [NotifyPropertyChangedFor(nameof(PackageSelectionSummary))]
+    [NotifyPropertyChangedFor(nameof(PackageCredentialsLabel))]
+    public partial int PackageSelectedCount { get; set; }
+
+    [ObservableProperty]
+    public partial bool IncludePackageCredentials { get; set; } = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCommit))]
+    public partial bool IncludePackageHotkeys { get; set; } = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCommit))]
+    public partial bool IncludePackageSettings { get; set; }
+
+    public string PackageOrigin => OpenedPackage is { } opened
+        ? localizer.Translate(
+            "import.packageOrigin",
+            opened.CreatedAt.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture),
+            opened.WrittenBy)
+        : string.Empty;
+
+    public string PackageSelectionSummary =>
+        localizer.Translate("import.packageSelected", PackageSelectedCount, PackageProfiles.Count);
+
+    public bool HasPackageCredentials => OpenedPackage?.Preview.Profiles.Any(profile => profile.Credentials > 0) == true;
+
+    public string PackageCredentialsLabel => localizer.Translate(
+        "import.packageCredentials",
+        PackageProfiles.Where(profile => profile.IsSelected).Sum(profile => profile.Credentials));
+
+    public bool HasPackageHotkeys => OpenedPackage?.Preview.HotkeysToAdd > 0;
+
+    public string PackageHotkeysLabel =>
+        localizer.Translate("import.packageHotkeys", OpenedPackage?.Preview.HotkeysToAdd ?? 0);
+
+    public bool HasPackageHotkeysClashing => OpenedPackage?.Preview.HotkeysClashing > 0;
+
+    public string PackageHotkeysClashing =>
+        localizer.Translate("import.packageHotkeysClashing", OpenedPackage?.Preview.HotkeysClashing ?? 0);
+
+    public bool HasPackageSettings => OpenedPackage?.Preview.HasSettings == true;
+
+    public string CommitLabel => localizer[IsPackageLocked ? "import.open" : "import.commit"];
+
+    /// <summary>
+    /// Set while ticks are being changed on behalf of a tag, so they are not counted one by one.
+    /// </summary>
+    private bool applyingTag;
+
     public bool CanCommit => IsPackage
-        ? !IsBusy && Passphrase.Length > 0
+        ? !IsBusy && (OpenedPackage is null
+            ? Passphrase.Length > 0
+            : PackageSelectedCount > 0
+                || (IncludePackageHotkeys && HasPackageHotkeys)
+                || (IncludePackageSettings && HasPackageSettings))
         : ImportableCount > 0 && !IsBusy;
 
     public bool HasRows => !IsPackage && Rows.Count > 0;
@@ -209,9 +306,155 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
         DuplicateCount = 0;
         RejectedCount = 0;
 
+        ClosePackage();
+
         PackagePath = path;
         Passphrase = string.Empty;
         StatusMessage = localizer.Translate("import.packageChosen", Path.GetFileName(path));
+    }
+
+    /// <summary>
+    /// Forgets an opened package, which holds decrypted keys and sign ins for as long as it is kept.
+    /// </summary>
+    private void ClosePackage()
+    {
+        OpenedPackage = null;
+        PackageProfiles.Clear();
+        PackageTags.Clear();
+        PackageSelectedCount = 0;
+        OnPropertyChanged(nameof(HasPackageTags));
+    }
+
+    /// <summary>
+    /// Decrypts the package and lists what it holds.
+    /// </summary>
+    private async Task OpenPackageAsync()
+    {
+        IsBusy = true;
+
+        try
+        {
+            OpenedPackage opened = await packages.OpenAsync(PackagePath!, Passphrase);
+
+            // The passphrase has done its job and has no reason to stay in memory.
+            Passphrase = string.Empty;
+
+            foreach (PackagePreviewProfile preview in opened.Preview.Profiles)
+            {
+                ImportPackageProfileViewModel row = new(preview, localizer);
+                row.PropertyChanged += (_, args) =>
+                {
+                    if (args.PropertyName == nameof(ImportPackageProfileViewModel.IsSelected) && !applyingTag)
+                    {
+                        RecountPackageSelection();
+                    }
+                };
+
+                PackageProfiles.Add(row);
+            }
+
+            foreach (string tag in PackageProfiles
+                .SelectMany(profile => profile.Tags)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.OrdinalIgnoreCase))
+            {
+                TagChoiceViewModel choice = new(tag, PackageProfiles.Count(profile => profile.Carries(tag)));
+                choice.PropertyChanged += (_, args) =>
+                {
+                    if (args.PropertyName == nameof(TagChoiceViewModel.IsSelected) && !applyingTag)
+                    {
+                        ApplyPackageTag(choice);
+                    }
+                };
+
+                PackageTags.Add(choice);
+            }
+
+            IncludePackageCredentials = opened.Preview.Profiles.Any(profile => profile.Credentials > 0);
+            IncludePackageHotkeys = opened.Preview.HotkeysToAdd > 0;
+            IncludePackageSettings = false;
+
+            OpenedPackage = opened;
+            OnPropertyChanged(nameof(HasPackageTags));
+            RecountPackageSelection();
+
+            StatusMessage = localizer["import.packageChoose"];
+        }
+        catch (CryptographicException)
+        {
+            // The mode is authenticated, so this is a wrong passphrase or a file that was altered.
+            StatusMessage = localizer["import.packageRefused"];
+        }
+        catch (InvalidOperationException exception)
+        {
+            StatusMessage = exception.Message;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The file was picked a moment ago and can have been moved or locked since.
+            StatusMessage = localizer.Translate("import.packageUnreadable", exception.Message);
+        }
+        finally
+        {
+            IsBusy = false;
+            OnPropertyChanged(nameof(CanCommit));
+        }
+    }
+
+    private void RecountPackageSelection() =>
+        PackageSelectedCount = PackageProfiles.Count(profile => profile.IsSelected);
+
+    /// <summary>
+    /// Ticks the profiles a tag covers, or unticks the ones no other ticked tag still covers.
+    /// </summary>
+    private void ApplyPackageTag(TagChoiceViewModel tag)
+    {
+        applyingTag = true;
+
+        try
+        {
+            foreach (ImportPackageProfileViewModel profile in PackageProfiles.Where(profile => profile.Carries(tag.Name)))
+            {
+                profile.IsSelected = tag.IsSelected
+                    || PackageTags.Any(other => other.IsSelected && profile.Carries(other.Name));
+            }
+        }
+        finally
+        {
+            applyingTag = false;
+        }
+
+        RecountPackageSelection();
+    }
+
+    [RelayCommand]
+    private void SelectAllPackaged() => SetAllPackaged(true);
+
+    [RelayCommand]
+    private void SelectNonePackaged() => SetAllPackaged(false);
+
+    private void SetAllPackaged(bool selected)
+    {
+        applyingTag = true;
+
+        try
+        {
+            foreach (TagChoiceViewModel tag in PackageTags)
+            {
+                tag.IsSelected = selected;
+            }
+
+            foreach (ImportPackageProfileViewModel profile in PackageProfiles)
+            {
+                profile.IsSelected = selected;
+            }
+        }
+        finally
+        {
+            applyingTag = false;
+        }
+
+        RecountPackageSelection();
     }
 
     [RelayCommand]
@@ -224,7 +467,15 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
 
         if (IsPackage)
         {
-            await ApplyPackageAsync();
+            if (OpenedPackage is null)
+            {
+                await OpenPackageAsync();
+            }
+            else
+            {
+                await ApplyPackageAsync(OpenedPackage);
+            }
+
             return;
         }
 
@@ -244,6 +495,12 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
 
             Closed?.Invoke(this, true);
         }
+        catch (DbUpdateException exception)
+        {
+            // Anything that escapes a command ends the application, and an import is exactly where a
+            // store written by another version, or a set somebody else assembled, meets this one.
+            StatusMessage = localizer.Translate("import.storeRefused", Innermost(exception).Message);
+        }
         finally
         {
             IsBusy = false;
@@ -251,37 +508,44 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
-    /// Opens the package and writes what it holds into the store.
+    /// Writes what was ticked from the opened package into the store.
     /// </summary>
-    private async Task ApplyPackageAsync()
+    private async Task ApplyPackageAsync(OpenedPackage opened)
     {
         IsBusy = true;
 
         try
         {
-            PackageImportResult result = await packages.ApplyAsync(PackagePath!, Passphrase);
+            PackageImportResult result = await packages.ApplyAsync(
+                opened,
+                new PackageImportChoice(PackageProfiles.Where(profile => profile.IsSelected).Select(profile => profile.Id).ToList())
+                {
+                    IncludeCredentials = IncludePackageCredentials,
+                    IncludeHotkeys = IncludePackageHotkeys,
+                    IncludeSettings = IncludePackageSettings,
+                });
 
-            StatusMessage = result.Credentials > 0
-                ? localizer.Translate(
-                    "import.packageAppliedWithCredentials",
-                    result.Added,
-                    result.Skipped,
-                    result.Credentials)
-                : localizer.Translate("import.packageApplied", result.Added, result.Skipped);
+            StatusMessage = localizer.Translate(
+                "import.packageAppliedParts",
+                result.Added,
+                result.Skipped,
+                result.Credentials,
+                result.Hotkeys,
+                localizer[result.Settings ? "common.yes" : "common.no"]);
 
-            // The passphrase has done its job and has no reason to stay in memory.
-            Passphrase = string.Empty;
-
+            ClosePackage();
             Closed?.Invoke(this, true);
         }
-        catch (CryptographicException)
+        catch (DbUpdateException exception)
         {
-            // The mode is authenticated, so this is a wrong passphrase or a file that was altered.
-            StatusMessage = localizer["import.packageRefused"];
+            // What ended the application when a package with shared tags was opened. That cause is
+            // fixed; this is here so the next thing a store refuses is reported on this screen.
+            StatusMessage = localizer.Translate("import.storeRefused", Innermost(exception).Message);
         }
-        catch (InvalidOperationException exception)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            StatusMessage = exception.Message;
+            // The file was picked a moment ago and can have been moved or locked since.
+            StatusMessage = localizer.Translate("import.packageUnreadable", exception.Message);
         }
         finally
         {
@@ -290,11 +554,28 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>
+    /// The exception that says what actually went wrong.
+    /// </summary>
+    /// <remarks>
+    /// Entity Framework wraps the database's refusal in a message that only says to look inside it.
+    /// </remarks>
+    private static Exception Innermost(Exception exception)
+    {
+        while (exception.InnerException is { } inner)
+        {
+            exception = inner;
+        }
+
+        return exception;
+    }
+
     [RelayCommand]
     private void Cancel()
     {
         selection?.Dispose();
         selection = null;
+        ClosePackage();
         Closed?.Invoke(this, false);
     }
 
@@ -308,7 +589,60 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
         disposed = true;
         selection?.Dispose();
         selection = null;
+        ClosePackage();
     }
+}
+
+/// <summary>
+/// One profile an opened package holds.
+/// </summary>
+public sealed partial class ImportPackageProfileViewModel : ViewModelBase
+{
+    public ImportPackageProfileViewModel(PackagePreviewProfile preview, ILocalizer localizer)
+    {
+        ArgumentNullException.ThrowIfNull(preview);
+        ArgumentNullException.ThrowIfNull(localizer);
+
+        Id = preview.Profile.Id;
+        Name = preview.Profile.Name ?? string.Empty;
+        Tags = preview.Profile.Tags ?? [];
+        Credentials = preview.Credentials;
+
+        Endpoint = preview.Profile.RemoteHost is { Length: > 0 } host
+            ? $"{host}:{preview.Profile.RemotePort}/{preview.Profile.Protocol}"
+            : string.Empty;
+
+        // Ticked either way. A profile the store already has is skipped when applied, and its sign
+        // ins still arrive, which is what a package sent only to fill those in is for.
+        StateDisplay = preview.StoredAs is { } stored
+            ? localizer.Translate("import.packageStoredAs", stored)
+            : localizer["import.packageNew"];
+
+        IsStored = preview.IsStored;
+    }
+
+    public Guid Id { get; }
+
+    public string Name { get; }
+
+    public string Endpoint { get; }
+
+    public IReadOnlyList<string> Tags { get; }
+
+    public string TagsDisplay => string.Join(", ", Tags);
+
+    public bool HasTags => Tags.Count > 0;
+
+    public int Credentials { get; }
+
+    public bool IsStored { get; }
+
+    public string StateDisplay { get; }
+
+    [ObservableProperty]
+    public partial bool IsSelected { get; set; } = true;
+
+    public bool Carries(string tag) => Tags.Contains(tag, StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>

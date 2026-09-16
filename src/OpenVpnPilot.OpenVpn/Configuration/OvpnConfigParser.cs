@@ -20,6 +20,7 @@ public static class OvpnConfigParser
         Dictionary<string, OvpnInlineBlock> inlineBlocks = new(StringComparer.Ordinal);
 
         string? openBlockName = null;
+        int openBlockLine = 0;
         StringBuilder openBlockContent = new();
         int lineNumber = 0;
 
@@ -54,21 +55,28 @@ public static class OvpnConfigParser
             if (TryReadOpeningTag(line, out string? blockName))
             {
                 openBlockName = blockName;
+                openBlockLine = lineNumber;
                 continue;
             }
 
             directives.Add(ParseDirective(line, lineNumber));
         }
 
-        // An unterminated block still carries usable content, so it is kept rather than discarded.
+        // An unterminated block still carries usable content, so it is kept rather than discarded. It
+        // is also reported, because OpenVPN refuses the whole file over it and an editor has to say
+        // which line opened it.
+        OvpnBlockOpening? unclosed = null;
+
         if (openBlockName is not null)
         {
             inlineBlocks[openBlockName] = new OvpnInlineBlock(
                 openBlockName,
                 openBlockContent.ToString().TrimEnd('\r', '\n'));
+
+            unclosed = new OvpnBlockOpening(openBlockName, openBlockLine);
         }
 
-        return new OvpnConfiguration(directives, inlineBlocks);
+        return new OvpnConfiguration(directives, inlineBlocks, unclosed);
     }
 
     private static IEnumerable<string> SplitLines(string content)

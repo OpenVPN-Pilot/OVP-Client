@@ -19,7 +19,7 @@ internal static partial class AppLog
         EventId = 2999,
         Level = LogLevel.Information,
         Message = "OpenVpnPilot {Version} started on {Platform}.")]
-    public static partial void Started(ILogger logger, string version, string platform);
+    public static partial void Started(ILogger logger, Version? version, string platform);
 
     [LoggerMessage(
         EventId = 3000,

@@ -98,7 +98,7 @@
             <Button Content="{loc:Translate history.clear}" Classes="quiet" MinWidth="96"
                     Command="{Binding AskToClearCommand}" />
             <Button Name="ExportButton" Content="{loc:Translate history.export}" MinWidth="120" />
-            <Button Name="CloseButton" Content="{loc:Translate common.close}" MinWidth="96" />
+            <Button Name="CloseButton" Content="{loc:Translate common.close}" MinWidth="96" IsCancel="True" />
           </StackPanel>
         </Grid>
 

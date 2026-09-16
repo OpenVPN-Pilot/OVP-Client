@@ -105,9 +105,6 @@ namespace OpenVpnPilot.Data.Migrations
                     b.Property<Guid?>("CredentialSetId")
                         .HasColumnType("TEXT");
 
-                    b.Property<long?>("DiscoveredAt")
-                        .HasColumnType("INTEGER");
-
                     b.Property<int?>("FavouriteSlot")
                         .HasColumnType("INTEGER");
 
@@ -282,34 +279,6 @@ namespace OpenVpnPilot.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Tags");
-                });
-
-            modelBuilder.Entity("OpenVpnPilot.Data.Entities.WatchedFolder", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("AutoImport")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsRecursive")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long?>("LastScanAt")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Path")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Path")
-                        .IsUnique();
-
-                    b.ToTable("WatchedFolders");
                 });
 
             modelBuilder.Entity("OpenVpnPilot.Data.Entities.Profile", b =>

@@ -96,7 +96,7 @@
                   Command="{Binding ClearViewCommand}" />
           <Button Name="OpenFolderButton" Content="{loc:Translate log.openFolder}" Classes="quiet" />
           <Button Name="SaveButton" Content="{loc:Translate log.save}" MinWidth="110" />
-          <Button Name="CloseButton" Content="{loc:Translate common.close}" MinWidth="96" />
+          <Button Name="CloseButton" Content="{loc:Translate common.close}" MinWidth="96" IsCancel="True" />
         </StackPanel>
       </Grid>
     </Border>

@@ -1,7 +1,5 @@
 using System.Runtime.Versioning;
 using OpenVpnPilot.Core.Abstractions;
-using OpenVpnPilot.Platform.Windows.Diagnostics;
-using OpenVpnPilot.Platform.Windows.InteractiveService;
 
 namespace OpenVpnPilot.Cli;
 
@@ -13,16 +11,15 @@ namespace OpenVpnPilot.Cli;
 /// connect on a machine without the interactive service would otherwise fail with whatever exception
 /// the pipe produced, which names a pipe and nothing a user can act on.
 /// </remarks>
-[SupportedOSPlatform("windows")]
 internal static class EnvironmentReadiness
 {
     /// <summary>
-    /// Where OpenVPN Community is obtained.
+    /// Where the missing part is obtained. Which part that is depends on the platform.
     /// </summary>
-    public const string DownloadUrl = "https://openvpn.net/community-downloads/";
+    public static string DownloadUrl => PlatformServices.SetupUrl;
 
     public static Task<OpenVpnEnvironmentReport> ProbeAsync() =>
-        new WindowsOpenVpnEnvironmentProbe(new InteractiveServicePipeClient()).ProbeAsync();
+        PlatformServices.CreateEnvironmentProbe().ProbeAsync();
 
     /// <summary>
     /// Writes every check, in the order they were evaluated.
@@ -47,8 +44,24 @@ internal static class EnvironmentReadiness
     /// <summary>
     /// Says what has to be installed, in the same words wherever it is said.
     /// </summary>
+    /// <remarks>
+    /// What is missing is not the same thing on both platforms. On Windows it is OpenVPN itself,
+    /// which is installed separately and has to include the interactive service. On macOS there is
+    /// no such service, so the application brings its own privileged helper and its own OpenVPN in
+    /// one package, and that package is what has to be installed.
+    /// </remarks>
     public static void WriteGuidance()
     {
+        if (OperatingSystem.IsMacOS())
+        {
+            Console.WriteLine("The helper package is built from the source, because a macOS build");
+            Console.WriteLine("cannot be published without an Apple Developer ID to sign it with:");
+            Console.WriteLine("  bash installer/build-macos.sh");
+            Console.WriteLine($"Step by step: {DownloadUrl}");
+            Console.WriteLine("It carries the OpenVPN this application runs, and installing it asks for a password.");
+            return;
+        }
+
         Console.WriteLine($"OpenVPN Community can be installed from {DownloadUrl}");
         Console.WriteLine("Make sure the OpenVPN Interactive Service component is included.");
     }

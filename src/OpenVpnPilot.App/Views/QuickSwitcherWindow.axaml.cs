@@ -1,5 +1,7 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
 using OpenVpnPilot.App.Services;
@@ -14,6 +16,11 @@ namespace OpenVpnPilot.App.Views;
 /// The keyboard is handled here rather than through key bindings because the arrow keys have to move
 /// the list while the focus stays in the text box. Losing the window to another application closes
 /// the palette: it is a transient surface, not a window to manage.
+///
+/// Both handlers tunnel, so the palette decides what a key means before the search box does. Handling
+/// them on the way back up worked on Windows and not on macOS, where a text box that has the focus
+/// is served by the system's input method first: a space reached the box as typed text and was
+/// never seen here as a key, and the arrows could be taken by the box before the window saw them.
 /// </remarks>
 public partial class QuickSwitcherWindow : Window
 {
@@ -21,6 +28,9 @@ public partial class QuickSwitcherWindow : Window
     {
         InitializeComponent();
         Deactivated += (_, _) => Close();
+
+        AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(TextInputEvent, OnPreviewTextInput, RoutingStrategies.Tunnel);
     }
 
     /// <summary>
@@ -97,10 +107,31 @@ public partial class QuickSwitcherWindow : Window
         }
     }
 
-    protected override void OnKeyDown(KeyEventArgs e)
-    {
-        ArgumentNullException.ThrowIfNull(e);
+    /// <summary>
+    /// The modifier the platform uses for application shortcuts.
+    /// </summary>
+    private static KeyModifiers CommandModifier =>
+        Application.Current?.PlatformSettings?.HotkeyConfiguration.CommandModifiers ?? KeyModifiers.Control;
 
+    /// <summary>
+    /// Ticks the highlighted row when a space is typed into the disconnect palette.
+    /// </summary>
+    /// <remarks>
+    /// Taken from the text rather than from the key. Text is what every platform delivers for a
+    /// space, whether or not a key event came first, and taking it here is also what keeps the space
+    /// out of the search box. In the connect palette a space belongs to whatever is being typed.
+    /// </remarks>
+    private void OnPreviewTextInput(object? sender, TextInputEventArgs e)
+    {
+        if (ViewModel is { IsDisconnecting: true } model && e.Text == " ")
+        {
+            model.ToggleTick();
+            e.Handled = true;
+        }
+    }
+
+    private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
+    {
         switch (e.Key)
         {
             case Key.Escape:
@@ -110,8 +141,9 @@ public partial class QuickSwitcherWindow : Window
 
             case Key.Enter:
                 // Return connects and leaves you where you were, which is the whole point of a
-                // palette. Control and return says you want to watch it happen.
-                if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+                // palette. The command modifier and return says you want to watch it happen: control
+                // on Windows, command on macOS, as the platform defines it for every shortcut.
+                if (e.KeyModifiers.HasFlag(CommandModifier))
                 {
                     ViewModel?.AcceptAndShowCommand.Execute(null);
                 }
@@ -120,13 +152,6 @@ public partial class QuickSwitcherWindow : Window
                     ViewModel?.AcceptCommand.Execute(null);
                 }
 
-                e.Handled = true;
-                return;
-
-            case Key.Space when ViewModel?.IsDisconnecting == true:
-                // Only where choosing several is the point. In the connect palette a space belongs
-                // to whatever is being typed.
-                ViewModel.ToggleTick();
                 e.Handled = true;
                 return;
 
@@ -158,7 +183,6 @@ public partial class QuickSwitcherWindow : Window
                 return;
 
             default:
-                base.OnKeyDown(e);
                 return;
         }
     }

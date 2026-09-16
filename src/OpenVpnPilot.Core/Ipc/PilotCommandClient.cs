@@ -30,10 +30,7 @@ public static class PilotCommandClient
     /// </summary>
     public static bool IsApplicationRunning(string? identity = null)
     {
-        using Mutex probe = new(
-            initiallyOwned: false,
-            $"Local\\OpenVpnPilot.Instance.{identity ?? Environment.UserName}",
-            out bool created);
+        using Mutex probe = ApplicationInstance.CreateClaim(initiallyOwned: false, identity, out bool created);
 
         return !created;
     }
@@ -150,4 +147,21 @@ public static class PilotCommands
     /// another process can ask for.
     /// </remarks>
     public const string Quit = "quit";
+
+    /// <summary>
+    /// The answer to <see cref="Status"/> when no tunnel is up.
+    /// </summary>
+    /// <remarks>
+    /// Named here because both sides depend on the exact words: the application writes it and the
+    /// companion command reads it to decide an exit code. Everything that crosses this channel is
+    /// English whatever language the window is in, for the same reason. This used to be two string
+    /// literals in two projects, which is a thing that stays in agreement right up until it does not.
+    /// </remarks>
+    public const string NothingConnected = "Nothing is connected.";
+
+    /// <summary>
+    /// How the answer to <see cref="Connect"/> or <see cref="Disconnect"/> begins when the name
+    /// matched no profile.
+    /// </summary>
+    public const string NoSuchProfile = "No stored profile matches";
 }

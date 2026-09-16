@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
+using OpenVpnPilot.Data.Import;
+using OpenVpnPilot.Data.Tagging;
 
 namespace OpenVpnPilot.App.Services;
 
@@ -55,6 +57,19 @@ public interface IProfileStore
     public Task SetProfileNotesAsync(Guid profileId, string? notes, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Replaces a profile's configuration, and everything the list reads from it.
+    /// </summary>
+    /// <remarks>
+    /// Refused when another profile already holds exactly this configuration, because an identical
+    /// configuration is how an import recognises a duplicate, and an edit must not create one that an
+    /// import would have refused.
+    /// </remarks>
+    public Task<ConfigurationUpdate> UpdateConfigurationAsync(
+        Guid profileId,
+        string configuration,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Overrides the route protection for one profile, or returns it to the global setting.
     /// </summary>
     public Task SetRouteProtectionAsync(
@@ -68,13 +83,6 @@ public interface IProfileStore
         CancellationToken cancellationToken = default);
 
     public Task DeleteProfileAsync(Guid profileId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Clears the discovery marks, which is how the user says they have seen what a watched
-    /// directory brought in.
-    /// </summary>
-    /// <returns>How many profiles were marked as seen.</returns>
-    public Task<int> ClearDiscoveriesAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -83,8 +91,20 @@ public interface IProfileStore
 public sealed record TagSummary(Guid Id, string Name, string? Colour, int ProfileCount);
 
 /// <summary>
+/// What replacing a configuration did.
+/// </summary>
+/// <param name="Saved">True when the configuration was written.</param>
+/// <param name="DuplicateOf">The profile that already holds this configuration, when that is why not.</param>
+public sealed record ConfigurationUpdate(bool Saved, string? DuplicateOf);
+
+/// <summary>
 /// Entity Framework backed implementation.
 /// </summary>
+/// <remarks>
+/// When a profile was last changed moves only when something about the profile itself changes, and
+/// only when it actually changes. Saving the editor without touching a field, or marking a
+/// favourite, is not a change to the profile.
+/// </remarks>
 public sealed class ProfileStore : IProfileStore
 {
     private readonly IDbContextFactory<PilotDbContext> contextFactory;
@@ -113,7 +133,6 @@ public sealed class ProfileStore : IProfileStore
                 Name = profile.Name,
                 Configuration = string.Empty,
                 ContentHash = profile.ContentHash,
-                DiscoveredAt = profile.DiscoveredAt,
                 RemoteHost = profile.RemoteHost,
                 RemotePort = profile.RemotePort,
                 Protocol = profile.Protocol,
@@ -209,7 +228,6 @@ public sealed class ProfileStore : IProfileStore
             profile.FavouriteSlot = null;
         }
 
-        profile.UpdatedAt = timeProvider.GetUtcNow();
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -249,7 +267,6 @@ public sealed class ProfileStore : IProfileStore
         }
 
         profile.FavouriteSlot = slot;
-        profile.UpdatedAt = timeProvider.GetUtcNow();
 
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -287,7 +304,7 @@ public sealed class ProfileStore : IProfileStore
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
-        if (profile is null)
+        if (profile is null || string.Equals(profile.Name, name.Trim(), StringComparison.Ordinal))
         {
             return;
         }
@@ -304,15 +321,55 @@ public sealed class ProfileStore : IProfileStore
     {
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
+        string? normalised = string.IsNullOrWhiteSpace(notes) ? null : notes;
+
         Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
-        if (profile is null)
+        if (profile is null || string.Equals(profile.Notes, normalised, StringComparison.Ordinal))
         {
             return;
         }
 
-        profile.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes;
+        profile.Notes = normalised;
         profile.UpdatedAt = timeProvider.GetUtcNow();
         await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<ConfigurationUpdate> UpdateConfigurationAsync(
+        Guid profileId,
+        string configuration,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        string hash = ProfileImporter.ComputeHash(configuration);
+
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        string? duplicate = await context.Profiles
+            .AsNoTracking()
+            .Where(other => other.ContentHash == hash && other.Id != profileId)
+            .Select(other => other.Name)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (duplicate is not null)
+        {
+            return new ConfigurationUpdate(false, duplicate);
+        }
+
+        Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
+        if (profile is null)
+        {
+            return new ConfigurationUpdate(false, null);
+        }
+
+        // Read the way an import reads it, so an edited profile looks in the list exactly as the
+        // same file imported fresh would.
+        ProfileConfigurationFacts.Apply(profile, configuration);
+        profile.UpdatedAt = timeProvider.GetUtcNow();
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        return new ConfigurationUpdate(true, null);
     }
 
     public async Task SetRouteProtectionAsync(
@@ -323,7 +380,7 @@ public sealed class ProfileStore : IProfileStore
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
-        if (profile is null)
+        if (profile is null || profile.ProtectRoutes == protectRoutes)
         {
             return;
         }
@@ -349,23 +406,37 @@ public sealed class ProfileStore : IProfileStore
             .ToList();
 
         List<ProfileTag> existing = await context.ProfileTags
+            .Include(link => link.Tag)
             .Where(link => link.ProfileId == profileId)
             .ToListAsync(cancellationToken);
 
+        HashSet<string> current = new(existing.Select(link => link.Tag!.Name), StringComparer.OrdinalIgnoreCase);
+
+        if (current.SetEquals(wanted))
+        {
+            return;
+        }
+
+        Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
+
+        if (profile is not null)
+        {
+            profile.UpdatedAt = timeProvider.GetUtcNow();
+        }
+
         context.ProfileTags.RemoveRange(existing);
+
+        TagCatalogue tags = await TagCatalogue.LoadAsync(context, cancellationToken);
+        HashSet<Guid> linked = [];
 
         foreach (string name in wanted)
         {
-            Tag? tag = await context.Tags
-                .FirstOrDefaultAsync(candidate => candidate.Name == name, cancellationToken);
+            Tag tag = tags.Resolve(name);
 
-            if (tag is null)
+            if (linked.Add(tag.Id))
             {
-                tag = new Tag { Name = name };
-                context.Tags.Add(tag);
+                context.ProfileTags.Add(new ProfileTag { ProfileId = profileId, TagId = tag.Id, Tag = tag });
             }
-
-            context.ProfileTags.Add(new ProfileTag { ProfileId = profileId, TagId = tag.Id, Tag = tag });
         }
 
         await context.SaveChangesAsync(cancellationToken);
@@ -387,17 +458,6 @@ public sealed class ProfileStore : IProfileStore
         await context.Tags
             .Where(tag => !tag.Profiles.Any())
             .ExecuteDeleteAsync(cancellationToken);
-    }
-
-    public async Task<int> ClearDiscoveriesAsync(CancellationToken cancellationToken = default)
-    {
-        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
-
-        return await context.Profiles
-            .Where(profile => profile.DiscoveredAt != null)
-            .ExecuteUpdateAsync(
-                setters => setters.SetProperty(profile => profile.DiscoveredAt, (DateTimeOffset?)null),
-                cancellationToken);
     }
 
     private sealed record TagLink(Guid ProfileId, string Name);

@@ -61,4 +61,11 @@
   <CornerRadius x:Key="RadiusLarge">10</CornerRadius>
   <CornerRadius x:Key="RadiusPill">20</CornerRadius>
 
+  <!--
+    The favourite marker. The same path as assets/artwork/favourite-star.svg, which is where it is
+    drawn and readable; Avalonia cannot render an SVG without a further dependency, so the geometry
+    is repeated here rather than the file being loaded. The two must be changed together.
+  -->
+  <StreamGeometry x:Key="FavouriteStar">M8.00 1.45 L9.68 5.69 L14.23 5.98 L10.72 8.88 L11.85 13.30 L8.00 10.86 L4.15 13.30 L5.28 8.88 L1.77 5.98 L6.32 5.69 Z</StreamGeometry>
+
 </ResourceDictionary>

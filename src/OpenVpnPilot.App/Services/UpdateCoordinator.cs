@@ -81,7 +81,7 @@ public sealed class UpdateCoordinator : IDisposable
 
         UpdateCheckResult result = await checker.CheckAsync(cancellationToken);
 
-        UpdateLog.Checked(logger, result.Outcome.ToString(), result.LatestVersion?.ToString() ?? "-");
+        UpdateLog.Checked(logger, result.Outcome, result.LatestVersion);
 
         return result;
     }
@@ -116,9 +116,13 @@ public sealed class UpdateCoordinator : IDisposable
 /// </summary>
 internal static partial class UpdateLog
 {
+    /// <remarks>
+    /// The values are passed as they are rather than as text, so they are only formatted when the
+    /// line is actually written. A check that found no release reports its version as null.
+    /// </remarks>
     [LoggerMessage(
         EventId = 3500,
         Level = LogLevel.Information,
         Message = "The update check reported {Outcome}, latest {Version}.")]
-    public static partial void Checked(ILogger logger, string outcome, string version);
+    public static partial void Checked(ILogger logger, UpdateOutcome outcome, Version? version);
 }

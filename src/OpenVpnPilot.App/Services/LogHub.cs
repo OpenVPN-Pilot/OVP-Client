@@ -16,8 +16,15 @@ namespace OpenVpnPilot.App.Services;
 /// that failed left nothing behind to look at.
 ///
 /// Both are kept here in a bounded ring, so the window can show them live, and both are written to
-/// one file per day, so they can be looked at afterwards and in the order they actually happened.
+/// one file per hour, so they can be looked at afterwards and in the order they actually happened.
 /// Two files would put the answer in one and the question in the other.
+///
+/// One file per hour rather than per day, and a limit on the whole directory as well as on its age.
+/// A tunnel that repeats the same complaint for every packet, or a verbosity turned up and forgotten,
+/// wrote daily files of more than a gigabyte, and a week of those is a disk. An hour of it is a file
+/// that still opens, and the limit removes the oldest files before the directory outgrows it. An hour
+/// that writes more than a share of the limit continues in a second file, so the limit holds even
+/// while the file being written is the large one.
 ///
 /// Writing happens on a single background reader rather than on whichever thread logged. A log
 /// statement must never be the thing that blocks a connection, and the OpenVPN lines arrive on the
@@ -43,7 +50,19 @@ public sealed class LogHub : IAsyncDisposable
     private readonly CancellationTokenSource lifetime = new();
     private readonly Task writer;
 
-    private DateOnly openFor = DateOnly.MinValue;
+    /// <summary>
+    /// The smallest a file is allowed to grow to before the hour continues in another one.
+    /// </summary>
+    private const long MinimumPartBytes = 1024 * 1024;
+
+    /// <summary>
+    /// How large a file may grow when the directory has no limit.
+    /// </summary>
+    private const long UnlimitedPartBytes = 256 * 1024 * 1024;
+
+    private LogFileName openFor;
+    private string? openPath;
+    private long openBytes;
     private StreamWriter? file;
     private bool disposed;
 
@@ -75,6 +94,11 @@ public sealed class LogHub : IAsyncDisposable
     /// How many days of files to keep. Zero keeps everything.
     /// </summary>
     public int RetentionDays { get; set; } = 7;
+
+    /// <summary>
+    /// How large the files may be together, in bytes. Zero sets no limit.
+    /// </summary>
+    public long MaximumTotalBytes { get; set; } = 1024L * 1024 * 1024;
 
     /// <summary>
     /// The entries still in the ring, oldest first.
@@ -143,14 +167,21 @@ public sealed class LogHub : IAsyncDisposable
     {
         try
         {
-            DateOnly day = DateOnly.FromDateTime(entry.Timestamp.LocalDateTime);
+            DateTime local = entry.Timestamp.LocalDateTime;
+            DateTime hour = new(local.Year, local.Month, local.Day, local.Hour, 0, 0, DateTimeKind.Unspecified);
 
-            if (file is null || day != openFor)
+            if (file is null || hour != openFor.Hour)
             {
-                Roll(day);
+                Roll(new LogFileName(hour, 1));
+            }
+            else if (openBytes >= PartBytes)
+            {
+                Roll(openFor with { Part = openFor.Part + 1 });
             }
 
-            file?.WriteLine(entry.ToFileLine());
+            string line = entry.ToFileLine();
+            file?.WriteLine(line);
+            openBytes += Encoding.UTF8.GetByteCount(line) + Environment.NewLine.Length;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -162,68 +193,138 @@ public sealed class LogHub : IAsyncDisposable
     }
 
     /// <summary>
-    /// Opens the file for one day, closing the previous one and clearing out what has expired.
+    /// How large one file may grow before the hour continues in the next.
     /// </summary>
     /// <remarks>
-    /// One file per calendar day, named for that day. A client left running across midnight rolls
-    /// here rather than continuing to write yesterday's file.
+    /// A twentieth of the limit, so the directory can be brought back under it by removing whole
+    /// files while the one being written is left alone.
     /// </remarks>
-    private void Roll(DateOnly day)
+    private long PartBytes => MaximumTotalBytes > 0
+        ? Math.Max(MinimumPartBytes, MaximumTotalBytes / 20)
+        : UnlimitedPartBytes;
+
+    /// <summary>
+    /// Opens the file for one hour, or the next part of it, closing the previous one and clearing
+    /// out what has expired.
+    /// </summary>
+    /// <remarks>
+    /// A client left running across the hour rolls here rather than continuing to write the previous
+    /// hour's file. A part that already exists, from a copy that ran earlier in the same hour, is
+    /// appended to until it is full rather than started again.
+    /// </remarks>
+    private void Roll(LogFileName name)
     {
         file?.Flush();
         file?.Dispose();
+        file = null;
 
         System.IO.Directory.CreateDirectory(directory);
 
-        // Cleared out before the new file is opened rather than after, so the directory is never
-        // briefly holding both today's file and the ones that should already be gone.
-        RemoveExpired(day);
+        string path = Path.Combine(directory, name.ToFileName());
 
-        string path = Path.Combine(
-            directory,
-            day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".log");
+        while (File.Exists(path) && new FileInfo(path).Length >= PartBytes)
+        {
+            name = name with { Part = name.Part + 1 };
+            path = Path.Combine(directory, name.ToFileName());
+        }
+
+        // Cleared out before the new file is opened rather than after, so the directory is never
+        // briefly holding both the new file and the ones that should already be gone.
+        RemoveExpired(DateOnly.FromDateTime(name.Hour), path);
 
         file = new StreamWriter(path, append: true, new UTF8Encoding(false)) { AutoFlush = true };
-        openFor = day;
+        openFor = name;
+        openPath = path;
+        openBytes = new FileInfo(path).Length;
     }
 
     /// <summary>
-    /// Deletes the files older than the retention, judged by the date in the name.
+    /// Deletes the files older than the retention, then the oldest files while the directory is over
+    /// its limit, judged by the time in the name.
     /// </summary>
     /// <remarks>
     /// The name rather than the timestamp on disk. A file copied or restored keeps its name and
-    /// loses its timestamp, and the name is what the user reads when deciding what to send on.
+    /// loses its timestamp, and the name is what the user reads when deciding what to send on. Files
+    /// whose name this did not write, such as the record of a failed start, are left alone.
     /// </remarks>
-    private void RemoveExpired(DateOnly today)
+    private void RemoveExpired(DateOnly today, string opening)
     {
-        if (RetentionDays <= 0)
+        List<(string Path, LogFileName Name, long Bytes)> ours = [];
+
+        foreach (string path in Files())
+        {
+            if (LogFileName.TryParse(Path.GetFileName(path), out LogFileName name))
+            {
+                ours.Add((path, name, LengthOf(path)));
+            }
+        }
+
+        ours.Sort((left, right) => left.Name.CompareTo(right.Name));
+
+        if (RetentionDays > 0)
+        {
+            DateOnly oldest = today.AddDays(-RetentionDays + 1);
+
+            foreach ((string path, LogFileName name, _) in ours.ToList())
+            {
+                if (DateOnly.FromDateTime(name.Hour) < oldest && TryDelete(path))
+                {
+                    ours.RemoveAll(item => item.Path == path);
+                }
+            }
+        }
+
+        if (MaximumTotalBytes <= 0)
         {
             return;
         }
 
-        DateOnly oldest = today.AddDays(-RetentionDays + 1);
+        long total = ours.Sum(item => item.Bytes);
 
-        foreach (string path in Files())
+        foreach ((string path, _, long bytes) in ours)
         {
-            if (!DateOnly.TryParseExact(
-                    Path.GetFileNameWithoutExtension(path),
-                    "yyyy-MM-dd",
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.None,
-                    out DateOnly named)
-                || named >= oldest)
+            if (total <= MaximumTotalBytes)
+            {
+                break;
+            }
+
+            if (string.Equals(path, opening, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(path, openPath, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            try
+            if (TryDelete(path))
             {
-                File.Delete(path);
+                total -= bytes;
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                // Held open by something else. It will be tried again on the next roll.
-            }
+        }
+    }
+
+    private static long LengthOf(string path)
+    {
+        try
+        {
+            return new FileInfo(path).Length;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Gone or unreadable since it was listed; it counts for nothing either way.
+            return 0;
+        }
+    }
+
+    private static bool TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Held open by something else. It will be tried again on the next roll.
+            return false;
         }
     }
 
@@ -248,6 +349,73 @@ public sealed class LogHub : IAsyncDisposable
 
         await lifetime.CancelAsync();
         lifetime.Dispose();
+    }
+}
+
+/// <summary>
+/// The name of one log file: the hour it covers, and which part of that hour it is.
+/// </summary>
+/// <remarks>
+/// Written as <c>2026-09-15_14.log</c>, with <c>_2</c> and onwards before the extension for the
+/// parts after the first, so the name says when without opening the file. A name of the form
+/// <c>2026-09-15.log</c> is a whole day written by an earlier version, and is read as its first hour
+/// so that retention and the limit apply to it in the same order.
+/// </remarks>
+internal readonly record struct LogFileName(DateTime Hour, int Part) : IComparable<LogFileName>
+{
+    public string ToFileName() => Part <= 1
+        ? Hour.ToString("yyyy-MM-dd_HH", CultureInfo.InvariantCulture) + ".log"
+        : string.Create(CultureInfo.InvariantCulture, $"{Hour:yyyy-MM-dd_HH}_{Part}.log");
+
+    public int CompareTo(LogFileName other)
+    {
+        int byHour = Hour.CompareTo(other.Hour);
+        return byHour != 0 ? byHour : Part.CompareTo(other.Part);
+    }
+
+    public static bool TryParse(string fileName, out LogFileName name)
+    {
+        name = default;
+
+        if (!fileName.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string stem = fileName[..^4];
+        string[] pieces = stem.Split('_');
+
+        if (!DateTime.TryParseExact(pieces[0], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime day))
+        {
+            return false;
+        }
+
+        if (pieces.Length == 1)
+        {
+            name = new LogFileName(day, 1);
+            return true;
+        }
+
+        if (!int.TryParse(pieces[1], NumberStyles.None, CultureInfo.InvariantCulture, out int hour) || hour > 23 || pieces[1].Length != 2)
+        {
+            return false;
+        }
+
+        int part = 1;
+
+        if (pieces.Length == 3
+            && !(int.TryParse(pieces[2], NumberStyles.None, CultureInfo.InvariantCulture, out part) && part >= 2))
+        {
+            return false;
+        }
+
+        if (pieces.Length > 3)
+        {
+            return false;
+        }
+
+        name = new LogFileName(day.AddHours(hour), part);
+        return true;
     }
 }
 

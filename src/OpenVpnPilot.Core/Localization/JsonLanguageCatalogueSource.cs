@@ -14,9 +14,20 @@ namespace OpenVpnPilot.Core.Localization;
 ///
 /// A file that cannot be read is reported and skipped. Refusing to start because one translation is
 /// malformed would be a worse outcome than running with the fallback language for those keys.
+///
+/// A key may carry a platform suffix, such as <c>environment.hint@macos</c>. On that platform it
+/// replaces the key without the suffix, and everywhere else it is dropped. Wording that names a part
+/// of one operating system therefore sits beside the neutral key in the same file, instead of in a
+/// view that asks which system it runs on. Every consumer sees the resolved key only, which is what
+/// lets the markup keep asking for <c>environment.hint</c> on every platform.
 /// </remarks>
 public sealed class JsonLanguageCatalogueSource : ILanguageCatalogueSource
 {
+    /// <summary>
+    /// Separates a key from the platform its wording belongs to.
+    /// </summary>
+    public const char PlatformSeparator = '@';
+
     private static readonly JsonDocumentOptions ParseOptions = new()
     {
         CommentHandling = JsonCommentHandling.Skip,
@@ -25,19 +36,49 @@ public sealed class JsonLanguageCatalogueSource : ILanguageCatalogueSource
 
     private readonly IReadOnlyList<string> directories;
     private readonly ILogger<JsonLanguageCatalogueSource> logger;
+    private readonly string? platform;
 
     /// <param name="directories">
     /// Searched in order. A language present in more than one is taken from the last, and its
     /// strings are layered on top of the earlier ones so a partial override stays valid.
     /// </param>
+    /// <param name="platform">
+    /// The platform whose suffixed keys replace the neutral ones, such as <c>macos</c>. Null keeps
+    /// the neutral wording throughout.
+    /// </param>
     public JsonLanguageCatalogueSource(
         IEnumerable<string> directories,
-        ILogger<JsonLanguageCatalogueSource>? logger = null)
+        ILogger<JsonLanguageCatalogueSource>? logger = null,
+        string? platform = null)
     {
         ArgumentNullException.ThrowIfNull(directories);
 
         this.directories = directories.ToList();
         this.logger = logger ?? NullLogger<JsonLanguageCatalogueSource>.Instance;
+        this.platform = platform;
+    }
+
+    /// <summary>
+    /// Splits a key into the key it stands for and the platform it is meant for.
+    /// </summary>
+    /// <returns>False for a key that carries no platform.</returns>
+    public static bool TrySplitPlatformKey(string key, out string neutralKey, out string platform)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        int separator = key.LastIndexOf(PlatformSeparator);
+
+        // A separator inside an earlier segment is part of that segment's name, not a platform.
+        if (separator <= 0 || separator == key.Length - 1 || key.IndexOf('.', separator) >= 0)
+        {
+            neutralKey = key;
+            platform = string.Empty;
+            return false;
+        }
+
+        neutralKey = key[..separator];
+        platform = key[(separator + 1)..];
+        return true;
     }
 
     public IReadOnlyList<LanguageCatalogue> Load()
@@ -58,7 +99,7 @@ public sealed class JsonLanguageCatalogueSource : ILanguageCatalogueSource
         }
 
         return byCode.Values
-            .Select(builder => builder.Build())
+            .Select(builder => builder.Build(platform))
             .OrderBy(catalogue => catalogue.Descriptor.NativeName, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -201,6 +242,37 @@ public sealed class JsonLanguageCatalogueSource : ILanguageCatalogueSource
             }
         }
 
-        public LanguageCatalogue Build() => new(descriptor, strings);
+        /// <summary>
+        /// Produces the catalogue one platform sees.
+        /// </summary>
+        /// <remarks>
+        /// The variants are applied after every layer has been merged, so a file the user adds can
+        /// override the neutral wording and the platform wording independently.
+        /// </remarks>
+        public LanguageCatalogue Build(string? platform)
+        {
+            Dictionary<string, string> resolved = new(StringComparer.OrdinalIgnoreCase);
+            List<(string Key, string Value)> variants = [];
+
+            foreach ((string key, string value) in strings)
+            {
+                if (!TrySplitPlatformKey(key, out string neutralKey, out string variant))
+                {
+                    resolved.TryAdd(key, value);
+                }
+                else if (platform is not null
+                    && string.Equals(variant, platform, StringComparison.OrdinalIgnoreCase))
+                {
+                    variants.Add((neutralKey, value));
+                }
+            }
+
+            foreach ((string key, string value) in variants)
+            {
+                resolved[key] = value;
+            }
+
+            return new LanguageCatalogue(descriptor, resolved);
+        }
     }
 }

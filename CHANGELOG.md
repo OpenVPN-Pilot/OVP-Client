@@ -8,6 +8,292 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged. A release tag is `v<version>`, for example `v1.2.0`.
 
+## [1.8.0] - 2026-09-16
+
+### Changed
+
+- **The project moved to another repository.** The check for a newer release follows it: a settings
+  file naming the repository this was published from before is pointed at the new one, once, and a
+  field naming anything else is left alone, because that is a fork somebody typed and it follows its
+  own releases.
+- The port in the profile editor has room for the number in it. Five digits were clipped by the box
+  the buttons of a spinner share, and the field that gave the width up is the address, which is
+  longer than its box whatever the box is.
+
+### Added
+
+- The mark as plain images, `logo-128` to `logo-1024` in `assets/artwork`, drawn by the same command
+  as the icons. An icon container is what a system asks for and an image is what a page asks for,
+  and until now the second had to be exported by hand.
+
+## [1.7.0] - 2026-09-16
+
+### Removed
+
+- **The shared library** that 1.6.0 kept in a file in a synchronised folder, with everything that
+  belonged to it: the section in the settings, the passphrase prompt, the banner and the state in the
+  status bar, the sync log, the backups and the notes beside the file, the notices on deleting,
+  editing and importing, and its documentation. A folder a sync client carries between machines
+  cannot make the guarantees keeping one library for several people needs: the lock only works once
+  the client has delivered it, two writes can cross, and every safeguard added on top was a way of
+  living with that rather than removing it. Keeping profiles in step between machines will come back
+  on a server the machines talk to instead.
+- Packages no longer carry when each profile last changed or which profiles were deleted. Only the
+  shared library read either, and a package written by 1.6.0 that has them still opens.
+- What a machine that used the shared library kept is not read and not removed: the `library`
+  folder in the data directory, the file and its `.backups` folder in the shared folder, and the
+  passphrase in the keystore, which **Forget all stored credentials** clears along with the sign ins.
+
+### Fixed
+
+- Ending the application from Task Manager reported it as not responding. The request arrived as an
+  ordinary close of the window, which with closing to the notification area turned on hid the window
+  and kept the process running. A close that another program asks for, Task Manager or `taskkill`,
+  now ends the application with the usual teardown; the close button, Alt+F4 and the taskbar still
+  keep it in the notification area.
+
+## [1.6.0] - 2026-09-15
+
+### Added
+
+- **A shared library.** The profiles and their saved sign ins can live in one encrypted file that
+  several machines use together, meant for a folder a sync client such as OneDrive keeps in step.
+  The settings create one, join one, change its passphrase and stop sharing it. The passphrase is
+  asked for once per machine and kept in the operating system's protected storage; favourites,
+  shortcut slots, shortcuts, settings and history stay personal.
+- A machine uses a shared library or its own, never a mixture. Joining replaces the profiles on the
+  machine and adds none of them to the file; the settings say how many there are, offer an export
+  first and ask for a tick before the file is chosen. Stopping asks whether to keep the profiles as
+  the machine's own library or to start again with an empty one. Both are refused while a tunnel is
+  connected where profiles would be replaced or removed.
+- It is reconciled at start, with what this machine changed while the application was closed going
+  first, again within seconds of a change made here, and whenever the file's contents changed, which
+  is checked every minute by its hash rather than by its date. Writing takes a lock file beside the
+  shared one, replaces the file in one step, and merges again if another machine wrote it in the
+  meantime. What cannot be written is recorded as waiting, retried with a growing pause and written
+  on the way out.
+- Every machine remembers what the file held when it last synchronised, so a change is merged field
+  by field and only the same field changed on two machines is a conflict, which the later change
+  wins. A deletion never wins over a later change, is remembered for a year so a machine that was
+  away does not bring the profile back, and waits while the profile is connected. The same
+  configuration imported on two machines ends up as the same single profile everywhere.
+- A banner in the main window for what stands in the way of the shared library, with the passphrase
+  prompt or another attempt, and for conflicts that were resolved and copies of the file a sync
+  client left behind. The status bar says what a synchronisation changed, and the list reloads.
+- Every version of the shared file names the versions it descends from, so a machine whose write the
+  sync client replaced with another machine's, as happens when one of them was offline, merges
+  against where both started and keeps its changes instead of losing them.
+- Deleting ten or more profiles for everyone at once, or two or more that are most of the library, is
+  held back and asked about, restore on this machine or delete for everyone. A machine whose
+  database was started again empty no longer empties the library for every machine.
+- **Backups of the shared library.** Every machine keeps the versions it saw, the last twenty and one
+  a day for thirty days, and leaves a copy of the version it last synchronised with and a note
+  beside the file, in a `.backups` folder. The settings list the machines using the library and every
+  backup, and restore one for every machine, which is also the way back from a missing or damaged
+  file.
+- Deleting, editing and importing say that the change reaches every machine while a library is shared.
+- The status bar shows where the shared library stands at all times, synchronising, synchronised
+  with the time, or what stands in the way with the next attempt and whether changes are waiting.
+  **Sync log** beside it lists the steps taken: changes noticed, the file read and written, what was
+  taken in, conflicts, failures and retries.
+- **Choosing what a package carries.** An export picks its profiles by ticking them or by tag, and
+  includes the shortcuts, the settings and the saved sign ins each on its own. Opening a package lists
+  every profile it holds, marked as new or as already stored, and what else it carries, and takes
+  only what is ticked. Shortcuts are added only where they clash with nothing, and the settings
+  replace this machine's only when asked to. What belongs to one machine, its window positions,
+  OpenVPN path, autostart and shared library, never travels.
+
+### Changed
+
+- The package format is version 2. It records when each profile last changed, carries the settings
+  and which profiles were deleted, and a version that finds a newer format refuses the package with
+  the version that wrote it rather than reading part of it. Packages written by earlier versions
+  still open.
+- A profile's change time moves only when something shared about it changes. Marking a favourite,
+  connecting and an edit that changes nothing leave it alone, which is what lets two machines tell a
+  real change from a visit.
+
+## [1.5.0] - 2026-09-15
+
+### Added
+
+- **The configuration can be edited.** It was not editable at all, on the reasoning that a slip would
+  break a working profile, and what that left was re-importing a whole file to change a port. The
+  profile editor now has a form for what is changed by hand, the server, its port and protocol and
+  the certificates and keys, and a changed field replaces only the lines it is about, leaving
+  comments, ordering and line endings as they were. The whole configuration is one button away as
+  plain text for everything else, the edit carries across in both directions, and the general
+  settings decide which of the two the editor opens with.
+- Every edit is checked as it is made against what OpenVPN is known to refuse, in a sentence that
+  names the value and, in the plain text, the line: no server, a port or protocol it cannot read,
+  nothing to verify the server with, a block that is never closed, a closing tag with no opening, and
+  a certificate or key pasted into the wrong block. Those stop a save. A reference to a file on disk
+  and a directive that runs a program are reported and do not. A save refreshes what the list reads
+  from the configuration, and a configuration another profile already holds is refused the way an
+  import would refuse it.
+- A profile can be deleted from the detail panel, which asks first and names the profile it is about.
+- The detail panel shows a profile's notes under when it was last used, selectable so an address or a
+  contact in them can be copied.
+- A limit on how large the log directory may grow, a gigabyte by default and changeable in the
+  advanced settings. The oldest files go first when it is reached.
+
+### Changed
+
+- The log is written one file per hour rather than one per day. A tunnel that logged the same failure
+  for every packet wrote daily files of more than a gigabyte, and the retention kept a week of them.
+  An hour that writes more than a twentieth of the limit continues in a second file, so the limit
+  holds even while the file being written is the large one. Daily files an earlier version wrote
+  expire by the same rules.
+- **Select** is called **Select several**, sits above the list it acts on rather than in the header,
+  and reads **Done selecting** while it is on. It gave no sign of having done anything, or of how to
+  leave the mode it had entered.
+- The bar under a selection is two lines, what is ticked and then what to do with it, with delete set
+  apart at the far end. What cannot be undone shares one red style, outlined where it asks and filled
+  where it confirms, in the list, the detail panel and the profile editor.
+- Return presses the primary button of the profile editor, the settings, the import and the export,
+  and escape closes each of them and the history and log windows without saving. A field that holds
+  several lines keeps return for a new line.
+- The profile editor window can be resized.
+- Tag names are matched without regard to case wherever a tag is looked up, as the sidebar already
+  counted them, so importing `Office` into a store that has `office` no longer makes a second entry.
+
+### Removed
+
+- **Watched folders**, with their settings, the section on the profiles page and the **New** entry in
+  the library that listed what they brought in. Keeping the store in step with a directory caused
+  more trouble than it saved, and importing or opening a package does the same job when somebody asks
+  for it. A migration drops the table and the column; profiles a directory brought in stay, recorded
+  as ordinary imports.
+- **Connect everything shown** in the sidebar. Ticking what is shown and connecting the selection does
+  the same on purpose rather than by accident.
+
+### Fixed
+
+- Opening a package ended the application when two of its profiles shared a tag the store did not
+  have yet. Each profile looked its tags up in the database, where the tag the previous profile had
+  just added was not saved, so the same tag was added twice and the unique index refused the save;
+  the exception escaped the import. Tags are now resolved once per import and remembered, and
+  anything else a store refuses during an import is reported on the import screen.
+- In the disconnect palette on macOS, space was typed into the search box instead of ticking a row,
+  and the arrow keys could be taken by the box. The palette handled its keys after the box, and on
+  macOS the system's input method serves the box first and delivers a space as text. Keys are now
+  taken before the box sees them, and a space is taken from the text.
+- On macOS the application stayed in the Dock with its window closed, although it lives in the menu
+  bar and on Windows leaves the taskbar with the window. It now leaves the Dock while no window of its
+  own is open and comes back when one is shown.
+- On macOS the application menu kept the framework's entry about itself. The platform part that fills
+  the menu was never registered, and the menu was set after the platform had already read it, which
+  it does once. Both are fixed, and the application's own about entry and settings sit in front of
+  the entries macOS adds for hiding and quitting.
+- A configuration that sets its port with `port` rather than on the remote line was listed with port
+  1194.
+
+## [1.4.0] - 2026-09-13
+
+### Added
+
+- **macOS.** The application, the companion command and the installers all run there, driving the
+  same `openvpn` through the same management interface as on Windows. What differs is the privileged
+  part that starts it: Windows has OpenVPN's own interactive service and macOS has nothing like it,
+  so this project brings its own helper. `Core`, `OpenVpn`, `Data` and `App` did not change for any
+  of it; macOS is an implementation of the platform interfaces that already existed.
+- A privileged helper, `Platform.MacOS.Helper`, which is the only part that runs as root and depends
+  on nothing else in the repository except the protocol it shares with the application. It is a
+  launchd daemon started by the first connection through socket activation and ending itself when it
+  has been idle, so nothing of it runs while the application is closed, and installing it asks for a
+  password once rather than every time a tunnel comes up. The caller sends values and never options:
+  the helper parses the configuration with a port of OpenVPN's own `parse_line`, refuses anything
+  that would run a program or read a file the caller chose, writes its own root owned copy, and
+  builds the command line itself. What a tunnel changed to the name servers is written down before it
+  is changed and restored when it ends, including after a crash, checked against the boot time so a
+  stale record cannot undo a newer setting.
+- The helper package carries the OpenVPN it runs, built from pinned sources by
+  `installer/build-openvpn-macos.sh` and linked statically against nothing but the system. An OpenVPN
+  from a package manager lives under a directory owned by the account that installed it, together
+  with the libraries it loads, and running that as root would hand root to anything running as that
+  account.
+- Two macOS installers, built by `installer/build-macos.sh`: the application in a disk image, dragged
+  to Applications with no password, and the helper as a package, which asks for one. The disk image
+  opens the window a Mac installer is expected to open, with a background, fixed icon positions and
+  its own volume icon, and the package installs, registers and links `ovp` onto PATH and can be
+  removed again with one script that leaves nothing behind.
+- `scripts/dev.sh`, the macOS counterpart of `scripts/dev.ps1`: stop what is open, build, start what
+  was built. It also names where .NET is, which a build from the source tree needs and an installed
+  build does not.
+- `assets/artwork`, where everything visual now comes from, and `assets/make-artwork.swift`, which
+  draws all of it from geometry: the macOS icon, the Windows icon, the menu bar template and the disk
+  image background. The projects link those files rather than keeping copies.
+
+### Changed
+
+- The README is one page that says what this is and points at `docs/`, which holds one page per
+  subject: Windows, macOS, using it, the `ovp` command, and working on it. It had grown to everything
+  anyone might want to know about two operating systems in one scroll.
+- **macOS is built from the source and is not published as a download.** A build another Mac opens
+  without an argument has to be signed and notarised by Apple, which needs a paid Developer ID, and
+  making one needs a Mac to make it on. The documentation, the banner the application shows when the
+  helper is missing, the note the update check raises and what `ovp doctor` prints all say so, and
+  the link they offer is the page with the one command on it rather than a releases page with nothing
+  on it for the reader. A build made on the machine it then runs on carries no quarantine flag and
+  Gatekeeper says nothing at all, which is what makes this reasonable rather than a chore.
+- The macOS bundle is called `OpenVPN Pilot.app`. The Finder labels an application with its file name
+  and with nothing else: `CFBundleDisplayName`, a localized `InfoPlist.strings` and
+  `LSHasLocalizedDisplayName` were each tried and each ignored, so the disk image, Applications and
+  the Dock all showed the compact form while the window and every notification said the spaced one.
+  The compact form stays where a name has to be one word. Both names are looked for, by `ovp` and by
+  the helper package, so an installation made before this keeps working.
+- The application icon carries a tile of its own rather than leaving one to the system. macOS 26 puts
+  a grey container under an icon that has none, so the same application looked one way there and
+  another on Windows, and neither was chosen. Below 32 points the tile is dropped again, because a
+  tile with a mark inside it at that size leaves the mark ten points across.
+- The companion command asks for each capability through its interface and decides its platform once,
+  the way the application does. It reached for Windows types directly and could only ever run there.
+  Windows keeps the same implementations and the same behaviour; macOS adds zsh completion, which is
+  the default shell there, in zsh's own completion system rather than through bash's.
+- A language file can word a key for one platform, so wording that names a part of one system reads
+  correctly on both without a second catalogue.
+
+### Fixed
+
+- The language setting set to follow the system came up in English on a German machine, on Windows as
+  well as macOS, however the machine was set up. The repository built with `InvariantGlobalization`,
+  which leaves `CultureInfo.CurrentUICulture` as the invariant culture whose name is the empty
+  string: there was never a language to follow, and every date and number was formatted the invariant
+  way rather than the reader's. Both Windows 10 and macOS carry ICU, so nothing is bundled for this.
+  The helper keeps globalization switched off for itself, being a root daemon that formats nothing
+  for anyone.
+- Press and drag on a profile ended the application on macOS. The drag carried its identifiers in an
+  in process format, which Avalonia documents as never being serialized to a platform drag, and the
+  macOS backend builds the dragging session out of exactly what was serialized: nothing. AppKit
+  refuses a session with no items by raising, and an Objective-C exception raised under the run loop
+  is an abort. Windows keeps its data object inside the process and never noticed.
+- Only one copy of the application runs per user on Unix as well, rather than one per login session.
+- The solution builds with the .NET SDK 10.0.400, whose analysers refuse a log call that formats its
+  arguments before knowing whether the line will be written. The source generated log methods now
+  receive the values themselves and format them only when the line is written. The lines read as
+  before, except that an update check which found no release reports its latest version as `null`
+  rather than `-`.
+- Tearing a connection down no longer looks up a process identifier of zero or below. On Unix such
+  an identifier addresses a whole process group, or every process the user may signal, and the
+  lookup succeeds; a launcher that reported zero had the test suite end itself, its runner and the
+  shell that started them. A test fake that reported an arbitrary identifier, which on a system
+  that hands them out in sequence can belong to anything, reports zero as well.
+- The Windows taskbar and notification area showed the macOS icon: the two platforms share the mark
+  but the `.ico` was drawn with the same rounded-square tile the macOS grid needs, and Windows'
+  32 point and larger icons picked the tiled drawing up. The Windows icon is now the mark on its own
+  at every size.
+- A Windows notification carried a large image nobody asked for: Windows' own stock icon for the
+  severity, a blue circle, an orange triangle or a red circle, in place of the application's. Drawing
+  the application's own icon there instead turned out no better, since the tray's `hIcon` is far
+  smaller than the image wants and every pixel of stretching it up showed. Notifications now carry no
+  large image at all.
+- The small icon the notification centre shows beside the application's name kept showing one from
+  months earlier on a development machine, regardless of how often the registration that names an
+  icon for it was rewritten afterwards or how often the process restarted: Windows resolves it once
+  per application identity, caches it in `wpndatabase.db`, and never rereads it. Confirmed by clearing
+  that cache, which is a whole account's notification history and not something this application
+  reaches into; a fresh installation has no stale entry to begin with and is not expected to need it.
+
 ## [1.3.0] - 2026-09-01
 
 ### Added

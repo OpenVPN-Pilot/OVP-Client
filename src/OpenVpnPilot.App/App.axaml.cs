@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,10 +52,17 @@ public partial class App : Application
 
     private IHost? host;
     private WindowCoordinator? windows;
+    private ApplicationMenuController? applicationMenu;
 
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+
+        // The platform reads the application's menu once, right after this and before anything else
+        // of the application runs, and a menu set any later is never shown. It is set here empty and
+        // filled once the services that word it exist. Where no platform shows such a menu this is
+        // simply never read.
+        NativeMenu.SetMenu(this, []);
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -82,6 +90,11 @@ public partial class App : Application
 
         windows = new WindowCoordinator(host.Services, window, viewModel, desktop);
         windows.Attach();
+
+        // Before anything that takes time: a file opened from the Finder that started this process
+        // arrives as an activation right after launch, and one raised before a handler exists is lost.
+        AttachActivation(window);
+        AttachApplicationMenu(desktop);
 
         desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
@@ -133,10 +146,10 @@ public partial class App : Application
         services.GetRequiredService<LogSettingsApplier>().Attach();
         services.GetRequiredService<OpenVpnLogRelay>().Attach();
 
-        AppLog.Started(
-            services.GetRequiredService<ILogger<App>>(),
-            typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown",
-            Environment.OSVersion.VersionString);
+        ILogger<App> logger = services.GetRequiredService<ILogger<App>>();
+        Version? version = typeof(App).Assembly.GetName().Version;
+
+        AppLog.Started(logger, version, Environment.OSVersion.VersionString);
 
         services.GetRequiredService<SessionRecorder>().Attach();
         services.GetRequiredService<PingMonitor>().Start();
@@ -194,6 +207,64 @@ public partial class App : Application
     }
 
     /// <summary>
+    /// Handles what the platform asks of a running application other than through its windows.
+    /// </summary>
+    /// <remarks>
+    /// On macOS a file opened from the Finder never reaches the command line: the system starts the
+    /// application if it has to and then hands the file over as an event, to the copy that already
+    /// runs as well. The same goes for a click on the Dock icon while every window is hidden, which
+    /// is how a person asks for the window back. Windows passes files as arguments and raises
+    /// neither, so there this changes nothing.
+    /// </remarks>
+    private void AttachActivation(MainWindow window)
+    {
+        if (TryGetFeature(typeof(IActivatableLifetime)) is not IActivatableLifetime activatable)
+        {
+            return;
+        }
+
+        activatable.Activated += (_, activation) =>
+        {
+            switch (activation)
+            {
+                case FileActivatedEventArgs opened:
+                    List<string> paths = [.. opened.Files
+                        .Select(file => file.TryGetLocalPath())
+                        .OfType<string>()];
+
+                    if (paths.Count > 0)
+                    {
+                        Dispatcher.UIThread.Post(() => windows!.QueueImport(paths));
+                    }
+
+                    break;
+
+                case { Kind: ActivationKind.Reopen }:
+                    Dispatcher.UIThread.Post(() => WindowCoordinator.Reveal(window));
+                    break;
+
+                default:
+                    break;
+            }
+        };
+    }
+
+    /// <summary>
+    /// Fills the application menu, on a platform whose menu bar shows one.
+    /// </summary>
+    private void AttachApplicationMenu(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        if (host!.Services.GetService<IApplicationMenu>() is null)
+        {
+            return;
+        }
+
+        applicationMenu = ActivatorUtilities.CreateInstance<ApplicationMenuController>(host.Services);
+        applicationMenu.ActionRequested += (_, action) => windows!.HandleTrayAction(action, desktop);
+        applicationMenu.Attach(this);
+    }
+
+    /// <summary>
     /// Reads the profile list, then reports that commands naming a profile can be answered.
     /// </summary>
     /// <remarks>
@@ -228,12 +299,13 @@ public partial class App : Application
     private async Task RunStartupActionsAsync(MainWindowViewModel viewModel)
     {
         RemoteCommandHandler handler = host!.Services.GetRequiredService<RemoteCommandHandler>();
+        ILogger<App> logger = host.Services.GetRequiredService<ILogger<App>>();
 
         foreach (string command in Startup.ToCommands())
         {
             string reply = await handler.HandleAsync(command);
             viewModel.StatusMessage = reply;
-            AppLog.StartupActionRan(host.Services.GetRequiredService<ILogger<App>>(), command, reply);
+            AppLog.StartupActionRan(logger, command, reply);
         }
     }
 
@@ -249,20 +321,9 @@ public partial class App : Application
 
         if (abandoned > 0)
         {
-            AppLog.AbandonedSessionsClosed(services.GetRequiredService<ILogger<App>>(), abandoned);
+            ILogger<App> logger = services.GetRequiredService<ILogger<App>>();
+            AppLog.AbandonedSessionsClosed(logger, abandoned);
         }
-
-        WatchedFolderMonitor watched = services.GetRequiredService<WatchedFolderMonitor>();
-
-        watched.Imported += (_, imported) => Dispatcher.UIThread.Post(async () =>
-        {
-            MainWindowViewModel model = services.GetRequiredService<MainWindowViewModel>();
-            await model.LoadAsync();
-            model.StatusMessage = services.GetRequiredService<Core.Localization.ILocalizer>()
-                .Translate("watch.imported", imported.Count, imported.Path);
-        });
-
-        await watched.StartAsync();
 
         // A shortcut that opens a window is not something a headless copy should own, and the
         // copy that a person is using may be the one that wants them.
@@ -287,7 +348,8 @@ public partial class App : Application
 
         if (removed > 0)
         {
-            AppLog.StaleRuntimeFilesRemoved(host.Services.GetRequiredService<ILogger<App>>(), removed);
+            ILogger<App> logger = host.Services.GetRequiredService<ILogger<App>>();
+            AppLog.StaleRuntimeFilesRemoved(logger, removed);
         }
     }
 
@@ -331,12 +393,13 @@ public partial class App : Application
         RunStep(logger, "hotkeys", () => services.GetRequiredService<HotkeyCoordinator>().Dispose());
         RunStep(logger, "reconnects", () => services.GetRequiredService<ReconnectSupervisor>().Dispose());
         RunStep(logger, started, "ping", async () => await services.GetRequiredService<PingMonitor>().DisposeAsync());
-        RunStep(logger, started, "watched folders", async () => await services.GetRequiredService<WatchedFolderMonitor>().DisposeAsync());
         RunStep(logger, "tray icon", () => services.GetRequiredService<TrayIconController>().Dispose());
+        RunStep(logger, "application menu", () => applicationMenu?.Dispose());
         RunStep(logger, "log relay", () => services.GetRequiredService<OpenVpnLogRelay>().Dispose());
         RunStep(logger, "log settings", () => services.GetRequiredService<LogSettingsApplier>().Dispose());
 
-        AppLog.ShutdownCompleted(logger, (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        long elapsed = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        AppLog.ShutdownCompleted(logger, elapsed);
 
         // After the last line worth writing, and before the container that owns the file handle goes.
         RunStep(logger, started, "log", async () => await services.GetRequiredService<LogHub>().DisposeAsync());

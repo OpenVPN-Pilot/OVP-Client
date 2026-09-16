@@ -1,5 +1,3 @@
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -21,6 +19,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
     private readonly IOpenVpnLauncher launcher;
     private readonly IManagementChannelFactory channelFactory;
     private readonly ICredentialProvider credentialProvider;
+    private readonly IOpenVpnProcessTerminator terminator;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<ConnectionSupervisor> logger;
     private readonly SemaphoreSlim transition = new(1, 1);
@@ -66,7 +65,8 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
         IManagementChannelFactory channelFactory,
         ICredentialProvider credentialProvider,
         TimeProvider? timeProvider = null,
-        ILogger<ConnectionSupervisor>? logger = null)
+        ILogger<ConnectionSupervisor>? logger = null,
+        IOpenVpnProcessTerminator? terminator = null)
     {
         ArgumentNullException.ThrowIfNull(launcher);
         ArgumentNullException.ThrowIfNull(channelFactory);
@@ -77,6 +77,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
         this.credentialProvider = credentialProvider;
         this.timeProvider = timeProvider ?? TimeProvider.System;
         this.logger = logger ?? NullLogger<ConnectionSupervisor>.Instance;
+        this.terminator = terminator ?? new LocalProcessTerminator(this.logger);
     }
 
     /// <summary>
@@ -393,6 +394,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                         ConnectedSince = null,
                         Message = "The server pushed a compression setting this client cannot apply, "
                             + "so it refused every option the server sent.",
+                        Reason = new VpnStatusReason { Code = VpnStatusReasonCode.PushedCompressionRefused },
                         Failure = VpnFailureKind.Unsupported,
                     });
 
@@ -483,6 +485,11 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
             State = VpnConnectionState.Failed,
             ConnectedSince = null,
             Message = $"The tunnel did not come up within {limit.TotalSeconds:0} seconds.",
+            Reason = new VpnStatusReason
+            {
+                Code = VpnStatusReasonCode.ConnectTimedOut,
+                Arguments = [$"{limit.TotalSeconds:0}"],
+            },
             Failure = VpnFailureKind.ConnectionLost,
         });
 
@@ -544,6 +551,13 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                 Message = credentialRequest.IsRetry
                     ? $"The credentials for '{message.Realm}' were rejected by the server."
                     : $"No credentials were supplied for '{message.Realm}'.",
+                Reason = new VpnStatusReason
+                {
+                    Code = credentialRequest.IsRetry
+                        ? VpnStatusReasonCode.CredentialsRejected
+                        : VpnStatusReasonCode.CredentialsMissing,
+                    Arguments = [message.Realm],
+                },
                 Failure = VpnFailureKind.Authentication,
             });
 
@@ -705,52 +719,15 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
     }
 
     /// <summary>
-    /// Confirms the OpenVPN process actually ended, and ends it if it did not.
+    /// Confirms the OpenVPN process actually ended, and has it ended if it did not.
     /// </summary>
     /// <remarks>
     /// A signal is a request, not a guarantee. With auth-retry set to interact, a process whose
     /// credentials were refused keeps waiting for new ones instead of exiting, which would leave an
-    /// orphaned tunnel behind.
-    ///
-    /// This is a best effort backstop, not a guarantee of its own. The process was created by the
-    /// interactive service, so querying or terminating it can be refused with access denied. That is
-    /// reported and accepted rather than propagated: a tunnel that outlives a disconnect is a fault
-    /// worth logging, but it must never take the application down with it.
+    /// orphaned tunnel behind. Who may end it depends on the platform, which is why it is handed on.
     /// </remarks>
-    private async Task EnsureProcessExitedAsync(int processId)
-    {
-        try
-        {
-            using Process process = Process.GetProcessById(processId);
-
-            try
-            {
-                using CancellationTokenSource grace = new(ProcessExitGrace);
-                await process.WaitForExitAsync(grace.Token);
-                return;
-            }
-            catch (OperationCanceledException)
-            {
-                // The signal was ignored, so the process is ended below.
-            }
-
-            ConnectionSupervisorLog.ProcessDidNotExit(logger, processId);
-            process.Kill(entireProcessTree: false);
-        }
-        catch (ArgumentException)
-        {
-            // Already gone, which is the normal outcome.
-        }
-        catch (InvalidOperationException)
-        {
-            // It exited while being inspected.
-        }
-        catch (Win32Exception exception)
-        {
-            // The service created the process, so this client may not be allowed to query or end it.
-            ConnectionSupervisorLog.ProcessCheckDenied(logger, processId, exception);
-        }
-    }
+    private Task EnsureProcessExitedAsync(int processId) =>
+        terminator.EnsureExitedAsync(processId, ProcessExitGrace, CancellationToken.None);
 
     public async ValueTask DisposeAsync()
     {

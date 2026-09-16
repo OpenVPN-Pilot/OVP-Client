@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.Data.Import;
+using OpenVpnPilot.Data.Tagging;
 using OpenVpnPilot.OpenVpn.Configuration;
 
 namespace OpenVpnPilot.App.Services;
@@ -39,14 +40,10 @@ public interface IProfileImportService
     /// <summary>
     /// Stores the accepted candidates, optionally tagging them.
     /// </summary>
-    /// <param name="discoveredAt">
-    /// Set when a watched directory brought these in, so the library can mark them as new.
-    /// </param>
     /// <returns>How many profiles were created.</returns>
     public Task<int> CommitAsync(
         IReadOnlyList<ImportCandidate> candidates,
         IReadOnlyList<string> tagNames,
-        DateTimeOffset? discoveredAt = null,
         CancellationToken cancellationToken = default);
 }
 
@@ -169,7 +166,6 @@ public sealed class ProfileImportService : IProfileImportService
     public async Task<int> CommitAsync(
         IReadOnlyList<ImportCandidate> candidates,
         IReadOnlyList<string> tagNames,
-        DateTimeOffset? discoveredAt = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(candidates);
@@ -178,10 +174,7 @@ public sealed class ProfileImportService : IProfileImportService
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
         ProfileImporter importer = new(context, inliner, timeProvider);
 
-        IReadOnlyList<Profile> created = await importer.CommitAsync(
-            candidates,
-            discoveredAt,
-            cancellationToken);
+        IReadOnlyList<Profile> created = await importer.CommitAsync(candidates, cancellationToken);
 
         if (created.Count > 0 && tagNames.Count > 0)
         {
@@ -197,19 +190,14 @@ public sealed class ProfileImportService : IProfileImportService
         IReadOnlyList<string> tagNames,
         CancellationToken cancellationToken)
     {
+        TagCatalogue tags = await TagCatalogue.LoadAsync(context, cancellationToken);
+
         foreach (string name in tagNames
             .Select(tag => tag.Trim())
             .Where(tag => tag.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            Tag? tag = await context.Tags
-                .FirstOrDefaultAsync(candidate => candidate.Name == name, cancellationToken);
-
-            if (tag is null)
-            {
-                tag = new Tag { Name = name };
-                context.Tags.Add(tag);
-            }
+            Tag tag = tags.Resolve(name);
 
             foreach (Profile profile in created)
             {

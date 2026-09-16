@@ -2,8 +2,6 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:OpenVpnPilot.App.ViewModels"
         xmlns:loc="using:OpenVpnPilot.App.Localization"
-        xmlns:conv="using:OpenVpnPilot.App.Converters"
-        xmlns:services="using:OpenVpnPilot.App.Services"
         x:Class="OpenVpnPilot.App.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Width="760" Height="680"
@@ -60,6 +58,24 @@
                       IsChecked="{Binding StartMinimised}" />
             <CheckBox Content="{loc:Translate settings.closeToTray}"
                       IsChecked="{Binding CloseToTray}" />
+
+            <Border Classes="divider" />
+
+            <TextBlock Text="{loc:Translate settings.profileEditor}" Classes="section" />
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <TextBlock Text="{loc:Translate settings.profileEditorOpens}" Classes="muted"
+                         VerticalAlignment="Center" />
+              <ComboBox ItemsSource="{Binding EditorViews}" SelectedItem="{Binding SelectedEditorView}"
+                        MinWidth="240">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:EditorViewChoice">
+                    <TextBlock Text="{Binding Name}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+            </StackPanel>
+            <TextBlock Text="{loc:Translate settings.profileEditorHint}" Classes="muted"
+                       TextWrapping="Wrap" />
 
           </StackPanel>
         </ScrollViewer>
@@ -211,9 +227,8 @@
         header carries only what is used while tunnels are running.
       -->
       <TabItem Header="{loc:Translate settings.tabProfiles}">
-        <Grid RowDefinitions="Auto,Auto,*,Auto">
-
-          <StackPanel Grid.Row="0" Margin="16,14,16,4" Spacing="10">
+        <ScrollViewer>
+          <StackPanel Margin="16,14,16,16" Spacing="10">
             <TextBlock Text="{loc:Translate settings.transfer}" Classes="section" />
             <StackPanel Orientation="Horizontal" Spacing="8">
               <Button Content="{loc:Translate header.import}"
@@ -227,55 +242,8 @@
                        TextWrapping="Wrap" />
             <TextBlock Text="{loc:Translate settings.reloadProfilesHint}" Classes="muted"
                        TextWrapping="Wrap" />
-            <Border Classes="divider" />
-            <TextBlock Text="{loc:Translate settings.watchSection}" Classes="section" />
           </StackPanel>
-
-          <TextBlock Grid.Row="1" Margin="16,0,16,8" Classes="muted" TextWrapping="Wrap"
-                     Text="{loc:Translate watch.hint}" />
-
-          <Grid Grid.Row="2" Margin="16,0">
-            <ListBox Classes="records" ItemsSource="{Binding WatchedFolders}"
-                     SelectedItem="{Binding SelectedWatchedFolder}"
-                     IsVisible="{Binding HasWatchedFolders}">
-              <ListBox.ItemTemplate>
-                <DataTemplate x:DataType="services:WatchedFolderRecord">
-                  <StackPanel Spacing="2">
-                    <TextBlock Text="{Binding Path}" Classes="body"
-                               TextTrimming="CharacterEllipsis" />
-                    <TextBlock Classes="muted" FontSize="11"
-                               Text="{Binding LastScanAt, Converter={x:Static conv:AppConverters.LastScan}}" />
-                  </StackPanel>
-                </DataTemplate>
-              </ListBox.ItemTemplate>
-            </ListBox>
-
-            <TextBlock Text="{loc:Translate watch.empty}" Classes="muted"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                       IsVisible="{Binding !HasWatchedFolders}" />
-          </Grid>
-
-          <StackPanel Grid.Row="3" Margin="16,10,16,16" Spacing="10">
-            <StackPanel Orientation="Horizontal" Spacing="16">
-              <CheckBox Content="{loc:Translate watch.autoImport}" IsChecked="{Binding WatchAutoImports}" />
-              <CheckBox Content="{loc:Translate watch.recursive}" IsChecked="{Binding WatchRecursively}" />
-            </StackPanel>
-            <Grid ColumnDefinitions="260,120">
-              <TextBlock Grid.Column="0" Classes="muted" VerticalAlignment="Center"
-                         Text="{loc:Translate watch.interval}" />
-              <NumericUpDown Grid.Column="1" Minimum="0" Maximum="1440" Increment="5"
-                             FormatString="0" Value="{Binding WatchIntervalMinutes}" />
-            </Grid>
-            <TextBlock Text="{loc:Translate watch.intervalHint}" Classes="muted" TextWrapping="Wrap" />
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <Button Name="AddWatchButton" Content="{loc:Translate watch.add}" />
-              <Button Content="{loc:Translate common.remove}"
-                      Command="{Binding RemoveWatchedFolderCommand}" />
-              <Button Content="{loc:Translate watch.scanNow}"
-                      Command="{Binding ScanWatchedFoldersCommand}" />
-            </StackPanel>
-          </StackPanel>
-        </Grid>
+        </ScrollViewer>
       </TabItem>
 
       <!-- Advanced -->
@@ -306,6 +274,13 @@
                          Text="{loc:Translate settings.logRetention}" />
               <NumericUpDown Grid.Column="1" Minimum="0" Maximum="365" Increment="1"
                              FormatString="0" Value="{Binding LogRetentionDays}" />
+            </Grid>
+            <Grid ColumnDefinitions="220,140">
+              <TextBlock Grid.Column="0" Classes="muted" VerticalAlignment="Center"
+                         TextWrapping="Wrap"
+                         Text="{loc:Translate settings.logMaximum}" />
+              <NumericUpDown Grid.Column="1" Minimum="0" Maximum="100000" Increment="100"
+                             FormatString="0" Value="{Binding LogMaximumMegabytes}" />
             </Grid>
             <TextBlock Text="{loc:Translate settings.logRetentionHint}" Classes="muted"
                        TextWrapping="Wrap" />
@@ -363,9 +338,13 @@
         <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Classes="muted"
                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-          <Button Content="{loc:Translate common.cancel}" MinWidth="96"
+          <!--
+            Return saves and escape closes, from any field. A shortcut being recorded takes the key
+            before either button sees it, so return and escape can still be recorded or cancelled.
+          -->
+          <Button Content="{loc:Translate common.cancel}" MinWidth="96" IsCancel="True"
                   Command="{Binding CancelCommand}" />
-          <Button Content="{loc:Translate common.save}" Classes="primary" MinWidth="96"
+          <Button Content="{loc:Translate common.save}" Classes="primary" MinWidth="96" IsDefault="True"
                   Command="{Binding SaveCommand}" />
         </StackPanel>
       </Grid>

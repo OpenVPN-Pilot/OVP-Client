@@ -16,7 +16,26 @@ namespace OpenVpnPilot.Cli;
 /// </remarks>
 internal static class ApplicationLauncher
 {
-    private const string ExecutableName = "OpenVpnPilot.exe";
+    /// <summary>
+    /// What the application is called where it is installed, newest name first.
+    /// </summary>
+    /// <remarks>
+    /// On macOS it is a bundle, which is a directory, and it is started through the bundle rather
+    /// than by the executable inside it: that is what registers the application with the window
+    /// server, gives it its name and icon, and lets the Dock and the Finder see it as one thing.
+    ///
+    /// Two names there, because the bundle used to carry the compact one. The Finder labels an
+    /// application with its file name and with nothing else, so a bundle that is to read as
+    /// "OpenVPN Pilot" has to be called that; an installation made before that is still found.
+    /// </remarks>
+    private static IReadOnlyList<string> InstalledNames => OperatingSystem.IsMacOS()
+        ? ["OpenVPN Pilot.app", "OpenVpnPilot.app"]
+        : ["OpenVpnPilot.exe"];
+
+    /// <summary>
+    /// The executable itself, which is what a development tree has and what sits inside a bundle.
+    /// </summary>
+    private static string ExecutableName => OperatingSystem.IsWindows() ? "OpenVpnPilot.exe" : "OpenVpnPilot";
 
     /// <summary>
     /// How long the application is given to claim the instance and start listening.
@@ -26,18 +45,18 @@ internal static class ApplicationLauncher
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(200);
 
     /// <summary>
-    /// The application executable, or null when it cannot be found.
+    /// The application, or null when it cannot be found.
     /// </summary>
     /// <remarks>
     /// Beside this command first, which is where the installer puts both. The installation directory
     /// is checked as well, so a command installed as a .NET tool still finds an installed
     /// application, and finally the path, which is what a development tree relies on.
     /// </remarks>
-    public static string? Locate()
+    public static ApplicationTarget? Locate()
     {
-        foreach (string candidate in Candidates())
+        foreach (ApplicationTarget candidate in Candidates())
         {
-            if (File.Exists(candidate))
+            if (candidate.IsBundle ? Directory.Exists(candidate.Path) : File.Exists(candidate.Path))
             {
                 return candidate;
             }
@@ -46,28 +65,59 @@ internal static class ApplicationLauncher
         return null;
     }
 
-    private static IEnumerable<string> Candidates()
+    private static IEnumerable<ApplicationTarget> Candidates()
     {
-        yield return Path.Combine(AppContext.BaseDirectory, ExecutableName);
-
-        foreach (Environment.SpecialFolder folder in new[]
+        if (OperatingSystem.IsMacOS())
         {
-            Environment.SpecialFolder.ProgramFiles,
-            Environment.SpecialFolder.ProgramFilesX86,
-        })
-        {
-            string root = Environment.GetFolderPath(folder);
+            // Inside the bundle this command was installed into, when it was: ovp sits beside the
+            // application's own executable, and the bundle is two directories above them.
+            string beside = Path.Combine(AppContext.BaseDirectory, ExecutableName);
 
-            if (root.Length > 0)
+            if (AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar).EndsWith("Contents/MacOS", StringComparison.Ordinal))
             {
-                yield return Path.Combine(root, "OpenVpnPilot", ExecutableName);
+                yield return new ApplicationTarget(
+                    Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..")),
+                    IsBundle: true);
+            }
+
+            foreach (string name in InstalledNames)
+            {
+                yield return new ApplicationTarget($"/Applications/{name}", IsBundle: true);
+            }
+
+            foreach (string name in InstalledNames)
+            {
+                yield return new ApplicationTarget(
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Applications", name),
+                    IsBundle: true);
+            }
+
+            // A development tree, where the executable is built on its own without a bundle.
+            yield return new ApplicationTarget(beside, IsBundle: false);
+        }
+        else
+        {
+            yield return new ApplicationTarget(Path.Combine(AppContext.BaseDirectory, ExecutableName), IsBundle: false);
+
+            foreach (Environment.SpecialFolder folder in new[]
+            {
+                Environment.SpecialFolder.ProgramFiles,
+                Environment.SpecialFolder.ProgramFilesX86,
+            })
+            {
+                string root = Environment.GetFolderPath(folder);
+
+                if (root.Length > 0)
+                {
+                    yield return new ApplicationTarget(Path.Combine(root, "OpenVpnPilot", ExecutableName), IsBundle: false);
+                }
             }
         }
 
         foreach (string directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            yield return Path.Combine(directory, ExecutableName);
+            yield return new ApplicationTarget(Path.Combine(directory, ExecutableName), IsBundle: false);
         }
     }
 
@@ -83,43 +133,79 @@ internal static class ApplicationLauncher
             return true;
         }
 
-        string? executable = Locate();
+        ApplicationTarget? target = Locate();
 
-        if (executable is null)
+        if (target is null)
         {
             Console.Error.WriteLine(
-                $"{ExecutableName} could not be found beside this command, in Program Files or on PATH.");
+                $"{InstalledNames[0]} could not be found beside this command, where applications are "
+                + "installed, or on PATH.");
             Console.Error.WriteLine("Install OpenVpnPilot, or run the command from the directory it lives in.");
             return false;
         }
 
-        // Started through the shell, so the application gets its own handles rather than inheriting
-        // this command's. Inheriting them keeps the terminal's output pipe open for as long as the
-        // application lives, and whatever called ovp waits for a command that has already finished.
-        ProcessStartInfo start = new(executable)
-        {
-            UseShellExecute = true,
-            WorkingDirectory = Path.GetDirectoryName(executable) ?? AppContext.BaseDirectory,
-        };
-
-        if (headless)
-        {
-            start.ArgumentList.Add("--headless");
-        }
+        ProcessStartInfo start = Describe(target, headless);
 
         using Process? process = Process.Start(start);
 
         if (process is null)
         {
-            Console.Error.WriteLine($"{executable} could not be started.");
+            Console.Error.WriteLine($"{target.Path} could not be started.");
             return false;
         }
 
         Console.WriteLine(headless
-            ? $"Started {Path.GetFileName(executable)} with no window."
-            : $"Started {Path.GetFileName(executable)}.");
+            ? $"Started {Path.GetFileName(target.Path)} with no window."
+            : $"Started {Path.GetFileName(target.Path)}.");
 
-        return await WaitUntilListeningAsync(process, cancellationToken);
+        // A bundle is opened by another program, which has already ended. Its exit says nothing
+        // about the application, so there is nothing to watch and the wait only listens.
+        return await WaitUntilListeningAsync(target.IsBundle ? null : process, cancellationToken);
+    }
+
+    /// <summary>
+    /// How the application is started on this platform.
+    /// </summary>
+    private static ProcessStartInfo Describe(ApplicationTarget target, bool headless)
+    {
+        if (target.IsBundle)
+        {
+            // open registers the bundle with the window server and hands it the arguments after
+            // --args. Opened in the background when no window is wanted, so the terminal keeps focus.
+            ProcessStartInfo bundle = new("/usr/bin/open");
+
+            if (headless)
+            {
+                bundle.ArgumentList.Add("-g");
+            }
+
+            bundle.ArgumentList.Add("-a");
+            bundle.ArgumentList.Add(target.Path);
+
+            if (headless)
+            {
+                bundle.ArgumentList.Add("--args");
+                bundle.ArgumentList.Add("--headless");
+            }
+
+            return bundle;
+        }
+
+        // Started through the shell, so the application gets its own handles rather than inheriting
+        // this command's. Inheriting them keeps the terminal's output pipe open for as long as the
+        // application lives, and whatever called ovp waits for a command that has already finished.
+        ProcessStartInfo executable = new(target.Path)
+        {
+            UseShellExecute = true,
+            WorkingDirectory = Path.GetDirectoryName(target.Path) ?? AppContext.BaseDirectory,
+        };
+
+        if (headless)
+        {
+            executable.ArgumentList.Add("--headless");
+        }
+
+        return executable;
     }
 
     /// <summary>
@@ -130,13 +216,13 @@ internal static class ApplicationLauncher
     /// before a connection can be asked for by name. Sending a command any earlier would be answered
     /// with a profile that is not there yet.
     /// </remarks>
-    private static async Task<bool> WaitUntilListeningAsync(Process process, CancellationToken cancellationToken)
+    private static async Task<bool> WaitUntilListeningAsync(Process? process, CancellationToken cancellationToken)
     {
         DateTimeOffset deadline = DateTimeOffset.UtcNow + StartTimeout;
 
         while (DateTimeOffset.UtcNow < deadline)
         {
-            if (process.HasExited)
+            if (process is { HasExited: true })
             {
                 Console.Error.WriteLine(
                     $"The application exited during startup with code {process.ExitCode}. "
@@ -162,3 +248,8 @@ internal static class ApplicationLauncher
         return false;
     }
 }
+
+/// <summary>
+/// Where the application was found, and whether that is a bundle or an executable.
+/// </summary>
+internal sealed record ApplicationTarget(string Path, bool IsBundle);

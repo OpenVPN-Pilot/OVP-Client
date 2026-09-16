@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    What the application and the privileged helper say to each other. It is its own assembly because
+    the helper runs as root and is compiled ahead of time: it must not pull in the user interface, the
+    store or anything else the application needs, and both sides must agree on one definition.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenVpnPilot.Platform.MacOS.Tests" />
+  </ItemGroup>
+
+</Project>

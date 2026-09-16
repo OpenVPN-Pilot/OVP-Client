@@ -69,11 +69,5 @@ public enum SidebarFilterKind
     Active,
     Favourites,
     Recent,
-
-    /// <summary>
-    /// Profiles a watched directory brought in that the user has not looked at yet.
-    /// </summary>
-    New,
-
     Tag,
 }

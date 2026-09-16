@@ -2,9 +2,10 @@
 
 A desktop client for OpenVPN that is built for managing many profiles: search, folders, favourites,
 bulk import, global hotkeys, live telemetry and session history. The application drives the `openvpn`
-process through the interactive service and the management interface. It does not reimplement OpenVPN.
+process through a privileged component and the management interface. It does not reimplement OpenVPN.
 
-Target platform for the current version is Windows. macOS is prepared for but not implemented.
+The target platforms are Windows and macOS. On Windows the privileged component is OpenVPN's own
+interactive service; on macOS it is this project's helper, because macOS has no equivalent.
 
 ---
 
@@ -28,10 +29,13 @@ Target platform for the current version is Windows. macOS is prepared for but no
 
 ## Platform rules
 
-- The target platform is Windows, but `Core`, `OpenVpn`, `Data` and `App` stay platform neutral:
-  no P/Invoke, no `Microsoft.Win32`, no path or separator assumptions outside `Platform.Windows`.
-- Every platform dependent capability gets an interface in `Core`. Adding macOS later must mean adding
-  a project that implements those interfaces, never restructuring existing code.
+- `Core`, `OpenVpn`, `Data` and `App` stay platform neutral: no P/Invoke, no `Microsoft.Win32`, no
+  path or separator assumptions outside `Platform.Windows` and `Platform.MacOS`.
+- Every platform dependent capability gets an interface in `Core`. A platform is a project that
+  implements those interfaces, never a change to the shared code.
+- `Platform.MacOS.Helper` is the only part that runs as root, and `Platform.MacOS.Protocol` is the
+  only thing the two sides share. The helper depends on nothing else of this repository, so what runs
+  with privileges stays small enough to read in one sitting.
 
 ## Neutrality
 
@@ -54,8 +58,11 @@ This repository is public. Keep it free of context about who uses it or why it w
 
 ## Documentation
 
-- Exactly one good English README. No `docs/` directory full of markdown files.
-- Document behaviour in the README and in code, not in a growing pile of design notes.
+- A short README that says what this is and points at the rest, and one page per subject under
+  `docs/`: `windows.md`, `macos.md`, `usage.md`, `cli.md`, `development.md`. A subject gets a page
+  when it is a subject, not because there is more to say about one that already has one.
+- Document behaviour there and in code, not in a growing pile of design notes. `docs/` is not a
+  place for design documents, meeting notes or anything dated.
 
 ## Working agreement
 
@@ -273,6 +280,182 @@ the model.
 
 ---
 
+## Verified macOS integration facts
+
+Measured on macOS 26 on arm64 with .NET 10. These are test results, not assumptions. Do not
+re-derive them, and correct this section if a measurement ever contradicts it.
+
+### Why there is a helper, and why it is built this way
+
+macOS has nothing like OpenVPN's interactive service. Only root can open a tun device, install
+routes and change the name servers, so `openvpn` runs as root and something privileged has to start
+it. Two requirements decided the shape of that something: a person must be able to use this like any
+other application, and nothing may be left permanently changed when a tunnel ends badly.
+
+- **A launchd daemon with socket activation, installed once by a package.** The application talks to
+  it over a Unix socket in `/var/run`. launchd starts it on the first connection and it exits when it
+  has been idle, so nothing of it runs while the application is closed. The alternative of asking for
+  the password at every connection was rejected because that is not how a normal program behaves, and
+  a setuid binary was rejected because it would inherit the whole environment of whoever ran it.
+- **`SMAppService` cannot be used.** Measured: registering a daemon from inside the bundle is refused
+  without a Developer ID signature, and this is distributed without one. The package therefore
+  installs the job definition, and the helper package is the one part a person installs with a
+  password.
+- **The caller sends values, never options.** The protocol carries a configuration, a management port,
+  a password and pull filters; the helper builds the command line itself. Nothing a caller sends can
+  become an option, so no caller can turn a launch into `--up /tmp/mine`.
+- **The configuration is part of the attack surface and is rewritten, not forwarded.** It is parsed
+  with a port of OpenVPN's own `parse_line`, checked against a list of what may appear, and written
+  out again canonically. Anything that runs a program, reads a file the caller chose, or changes what
+  the root process is, is refused with the reason. `--script-security 1` is placed after `--config`,
+  so the configuration cannot raise it.
+- **`setenv` is refused except for `UV_*` and `FORWARD_COMPATIBLE`.** The name server script runs as
+  root, and `setenv` would put `PATH`, `BASH_ENV` or `dns_vars_file` into its environment.
+- **The configuration travels as content, not as a path.** The helper writes its own copy into a
+  root owned directory with mode 0700 and the file 0600, so between the check and the launch there is
+  nothing left for anyone to swap.
+- **A tunnel belongs to the session that started it.** When the connection ends, however it ends, its
+  tunnels are ended too: an application that is gone can no longer answer credential prompts or the
+  stop signal, and nobody else knows the management password.
+- **The name server state is written down before it is changed.** What a tunnel changed is restored
+  when it ends, and leftovers from a tunnel that was killed are restored when the helper starts,
+  which is checked against the boot time so a stale record cannot undo a newer setting. This is the
+  requirement that nothing stays broken, made explicit.
+- **Who may start what mirrors the Windows rule.** Members of the administrators group, or of a group
+  the package creates when the console user is not an administrator, may start their own
+  configuration; everyone else may start only what an administrator installed.
+
+### Variadic C functions cannot be reached through P/Invoke here
+
+Apple's arm64 ABI passes the variadic arguments of a C function on the stack, while a declaration
+with a fixed parameter list passes them in registers, so the callee reads something that was never
+written. Measured with `fcntl(fd, F_DUPFD_CLOEXEC, 10)`: the same call succeeds in C and returns the
+descriptor, and fails through `LibraryImport` with three `int` parameters. `fcntl(fd, F_GETFD)`, which
+needs no variadic argument, succeeds, and so does the non variadic `dup`.
+
+Nothing in this repository may declare a variadic libc function. `SpawnedProcess` therefore moves its
+descriptors with `dup`, taking the lowest free number until one is high enough.
+
+### What the child of a spawn inherits
+
+`POSIX_SPAWN_CLOEXEC_DEFAULT` does what it says, so close on exec on the parent's own descriptors is
+not needed. Measured by asking the child which descriptors it has, with a shell loop that opens
+nothing: a spawned process sees exactly standard input, standard output, standard error and the
+descriptor the management password arrives on, both for a single launch and for four at once.
+
+That is why the password can be handed over on an inherited pipe. On Unix, OpenVPN reads a password
+from standard input only when standard input is a terminal, so the pipe is named to it as
+`/dev/fd/3` instead. It never touches a disk.
+
+### A process can be gone while its last words are still in the pipe
+
+Reading what a process said as soon as it has exited reads nothing at all: the thread draining the
+pipe has not necessarily run yet. Measured through the helper's version probe, which reported OpenVPN
+as missing although it had printed its version and exited cleanly. `SpawnedProcess` therefore
+completes an `OutputDrained` task when the pipe ends, and anything that explains an exit by what was
+said waits for that rather than for the exit.
+
+### Serialisation compiled ahead of time does not run property initialisers
+
+The helper is compiled ahead of time and therefore serialises through generated code. Measured: a
+member a sender leaves out arrives as null or zero, whatever default the record declares, while the
+reflection based serialiser keeps the declared default. A `LaunchSpecification` with no `verbosity`
+arrives with zero and not with three, and one with no `pullFilters` arrives with null and not with an
+empty list.
+
+Nothing that comes off the socket may be assumed to be present, including the type of the message
+itself. This is not a detail of style: the first version of the helper dereferenced a list it had
+declared as empty, and the request died in an exception that ended the session without an answer.
+
+### Every request is answered
+
+A caller that hears nothing waits for a tunnel that was never started, and a service that stops
+talking cannot be diagnosed from outside. The session loop therefore answers a request whose handling
+threw, with a refusal that says the helper failed, and writes the exception to the helper's log.
+
+### The keychain asks again after every build, and once per item
+
+Credentials live in the login keychain, whose access control list hangs on the individual item and
+names the asking program by its code signature. This build is signed ad-hoc, so its hash changes
+every time it is built, and every build is therefore a program the keychain has never seen. Allowing
+one covers one item, so with an item per profile it was one dialog per profile per build.
+
+Measured with a probe that turns the dialog off, so a prompt shows up as a status instead of
+blocking: an item written by one build and read by the next answers -25293, errSecAuthFailed. Three
+ways out were tried and none of them works.
+
+| Attempt | Result |
+| --- | --- |
+| Ad-hoc, as built today | the next build is refused |
+| A stable self-signed certificate | the next build is refused |
+| An access control list naming every application | the next build is refused |
+| The data protection keychain | -34018 without an entitlement, and with one the process is killed at launch |
+
+The certificate is the interesting failure, because it half works. The access control list becomes
+`identifier "..." and certificate leaf = H"..."`, which matches every build signed with it. What does
+not move is the partition, which stays `cdhash:<the build that wrote the item>`: a partition reads
+`teamid:<id>` only for a certificate Apple issued, and a self-signed one has no team. The partition
+alone is enough to refuse.
+
+Nothing in this repository can therefore stop the dialog. What it can decide is how often it appears,
+which is why every sign in lives in one item rather than one per profile: once per build instead of
+once per profile per build. An Apple Developer ID would fix it properly and there is none.
+
+### A notification that is refused says so
+
+The notification centre answers `requestAuthorizationWithOptions:` with a granted flag and an
+`NSError`, and answers `addNotificationRequest:` with another. Discarding both is what made a silent
+application indistinguishable from a working one: nothing appeared, nothing was written, and there
+was nowhere to look. Both completion blocks are therefore real and write what they were told, once.
+
+Measured: `UNErrorDomain` code 1, `Notifications are not allowed for this application`, is the switch
+for this application standing off under System Settings, Notifications. The application is listed
+there once it has asked for permission once, and turning the switch on is the whole of the remedy.
+The refusal says nothing about the bundle, the signature or the identifier, and it is not a state of
+the Mac: reading it as one cost an afternoon.
+
+`~/Library/Preferences/com.apple.ncprefs.plist` is not where that switch is kept on macOS 26. It does
+not exist even once notifications are working, so its absence means nothing and it is not worth
+reading.
+
+### A Unix socket path is short
+
+`sockaddr_un` holds 104 characters on macOS. The per user temporary directory alone is longer than
+that with a name after it, so anything that binds a socket under a temporary directory has to keep
+the path short. The helper's own socket lives at `/var/run/org.openvpnpilot.helper.sock`.
+
+### How the disk image window is arranged
+
+What a disk image window looks like is not data anyone can write into the image. The Finder keeps it
+in a `.DS_Store` that only the Finder writes, so `installer/build-macos.sh` builds a writable image,
+mounts it, tells the Finder what the window should be, and only then compresses it. Measured on
+macOS 26, and each of these cost a build to find:
+
+- **An AppleEvent gets two minutes by default, and the Finder does not always answer inside it.**
+  What expires is one command, not the script, so the window ends up half arranged: sized, with no
+  background and the icons where they fell. Every command is therefore inside `with timeout of 600
+  seconds`, and every `delay` is outside the block that talks to the Finder, because `delay` inside
+  one is a command the Finder is asked to carry out and counts against the same timeout.
+- **The bounds the Finder is given include the title bar.** A window asked for 400 shows 372 of the
+  background and cuts the rest off the bottom, so the title bar is added to what is asked for.
+- **The Finder deletes `.VolumeIcon.icns` and clears the custom icon attribute when it opens the
+  volume**, every time. The volume icon is therefore set after the window has been arranged and
+  closed, not before, and the build checks that both the file and the attribute are still there
+  before it compresses. `hdiutil` also does something of its own with that file when it is in the
+  folder an image is created from, and it was not in the result, so it is copied onto the mounted
+  volume instead.
+- **The mount point is read back from `hdiutil attach -plist` rather than assumed.** A volume of the
+  same name already mounted pushes the new one aside to a name with a number after it, and the rest
+  of the build then arranges, decorates and checks the wrong disk without saying so.
+
+The artwork both halves of this need is drawn by `tools/artwork`, which is run by hand and whose
+output is committed. Everything visual comes out of `assets/artwork`, and nothing else in the
+repository holds a copy of it. It draws with Skia and is a .NET program rather than a Swift one, so
+that the Windows icon can be rebuilt from Windows; it writes the `icns` and the `ico` containers
+itself, because `iconutil` is macOS only and nothing draws an `ico` at all.
+
+---
+
 ## Windows notification identity
 
 A notification area balloon is not shown as a balloon on Windows 10 and later. The shell converts it
@@ -287,9 +470,34 @@ name and an icon. The installer stamps the same identity onto the start menu sho
 `System.AppUserModel.ID`. All three must say `OpenVpnPilot` and the identifier must not change once
 released, because notification settings the user makes are stored against it.
 
-The registration is confirmed present after a run. The label the notification centre shows has not
-been observed end to end, because raising a notification means completing a connection; verify it the
-next time one is made and correct this if it says otherwise.
+The registration is confirmed present after a run, and the label has now been observed end to end: the
+notification centre does show `DisplayName` above the message. The small icon beside it is a
+different matter.
+
+**That small icon is not read from `IconUri` on every run; Windows resolves it once per AUMID and
+keeps what it first resolved.** Measured on a machine that had run this application, under this
+identifier, since before the current artwork existed: the group header kept showing an icon from
+months earlier, regardless of how many times `IconUri` was rewritten afterwards or how many times the
+process restarted. A brand new identifier that had never appeared on the machine before, with the same
+registration code, came up showing the raw executable name and a generic placeholder instead of
+`DisplayName` and `IconUri` at all, on its first run and its second, which is what a shortcut only
+installed application supplies and a loose executable does not have.
+
+The cache is `%LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db`, and it is not
+process-local: stopping `WpnUserService_<hash>`, deleting `wpndatabase.db` together with its
+`-wal`/`-shm` files, and starting the service again is what made the stale icon disappear and the
+current one appear, confirmed end to end on this machine. It is a whole-account cache, not one this
+application can reach into or reset for the user, and every other application's notification history
+on the account is erased along with it, so this is a one-off unstick for a development machine, not
+something the product does or should do. A fresh installation on a machine that has never seen
+`OpenVpnPilot` before starts with no entry to be stale, and is not expected to show this.
+
+The large image a notification carries is a different mechanism, `dwInfoFlags` on the balloon itself,
+and behaves exactly as documented: `NIIF_INFO`/`WARNING`/`ERROR` draw one of Windows' own stock icons
+regardless of the tray's own; `NIIF_USER` draws the tray's `hIcon` instead, at whatever pixel size that
+icon carries, stretched to the size the toast wants and showing every pixel of the stretch. Neither
+reads well next to a brand mark this simple, so `WindowsTrayIcon.ShowAsync` sends `NIIF_NONE` and shows
+no large image at all.
 
 ---
 
@@ -308,6 +516,13 @@ to the running process. These are test results, not assumptions.
   `WindowCloseReason` is `OSShutdown` answers `WM_QUERYENDSESSION` with zero, and Windows reports
   the application as the reason the machine will not shut down. Only `WindowClosing` is a person
   expressing a preference; the other reasons must be allowed to proceed.
+- **A close another program sends is not a person closing the window.** Task Manager's End task and
+  `taskkill` without `/F` send `WM_CLOSE`, which Avalonia reports as `WindowClosing`, the same as the
+  close button. Hiding to the notification area in answer left the process running, and Task Manager
+  reported it as not responding. The close button, Alt+F4, the system menu and the taskbar arrive as
+  `WM_SYSCOMMAND` with `SC_CLOSE` first, so `WindowsCloseOrigin` watches for that through Avalonia's
+  window procedure hook and anything else ends the application. Measured with `taskkill`, against the
+  window shown and hidden, and with the close button.
 - **Shutting down from inside a `Closing` handler recurses.** The shutdown closes the same window,
   which enters the handler again, until the stack runs out. Post the request instead.
 - **An exception in these handlers is an exception inside `WndProc`.** Nothing catches it, the

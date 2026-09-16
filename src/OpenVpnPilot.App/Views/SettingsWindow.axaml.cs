@@ -24,7 +24,6 @@ public partial class SettingsWindow : Window
         // Tunnelling, so an armed row wins over whatever currently has the focus.
         AddHandler(KeyDownEvent, OnPreviewKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
-        this.FindControl<Button>("AddWatchButton")!.Click += async (_, _) => await AddWatchedFolderAsync();
         this.FindControl<Button>("DiagnosticsButton")!.Click += async (_, _) => await WriteDiagnosticsAsync();
     }
 
@@ -48,20 +47,6 @@ public partial class SettingsWindow : Window
         if (target?.TryGetLocalPath() is { } path)
         {
             await ViewModel.WriteDiagnosticsAsync(path);
-        }
-    }
-
-    /// <summary>
-    /// Picks a directory to watch. The picker belongs to the window, not to the view model.
-    /// </summary>
-    private async Task AddWatchedFolderAsync()
-    {
-        IReadOnlyList<IStorageFolder> folders = await StorageProvider.OpenFolderPickerAsync(
-            new FolderPickerOpenOptions { AllowMultiple = false });
-
-        if (folders.Count > 0 && folders[0].TryGetLocalPath() is { } path && ViewModel is not null)
-        {
-            await ViewModel.AddWatchedFolderAsync(path);
         }
     }
 

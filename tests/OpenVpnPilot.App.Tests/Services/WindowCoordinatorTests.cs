@@ -39,6 +39,42 @@ public sealed class WindowCoordinatorTests
             WindowCoordinator.DecideClose(WindowCloseReason.WindowClosing, closeToTray: true));
     }
 
+    /// <summary>
+    /// Task Manager and <c>taskkill</c> wait for the process to end. Hiding in answer made Task
+    /// Manager report the application as not responding.
+    /// </summary>
+    [Fact]
+    public void AnotherProgramAskingToClose_EndsTheApplicationWhateverTheSetting()
+    {
+        Assert.Equal(
+            WindowCoordinator.CloseIntent.Quit,
+            WindowCoordinator.DecideClose(WindowCloseReason.WindowClosing, closeToTray: true, askedFromWindow: false));
+    }
+
+    [Theory]
+    [InlineData(0xF060, true)]
+    [InlineData(0xF063, true)]
+    [InlineData(0xF020, false)]
+    public void TheCloseCommand_IsWhatMarksACloseFromTheWindow(int command, bool expected)
+    {
+        OpenVpnPilot.Platform.Windows.Shell.WindowsCloseOrigin origin = new();
+
+        origin.Observe(0x0112, command);
+
+        Assert.Equal(expected, origin.TakeAskedFromWindow());
+        Assert.False(origin.TakeAskedFromWindow(), "An answer is given once per close.");
+    }
+
+    [Fact]
+    public void ACloseMessageOnItsOwn_IsNotFromTheWindow()
+    {
+        OpenVpnPilot.Platform.Windows.Shell.WindowsCloseOrigin origin = new();
+
+        origin.Observe(0x0010, 0);
+
+        Assert.False(origin.TakeAskedFromWindow());
+    }
+
     [Fact]
     public void ClosingTheWindowEndsTheApplicationWhenItIsNot()
     {

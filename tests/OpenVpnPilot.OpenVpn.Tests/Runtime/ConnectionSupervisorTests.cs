@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Vpn;
 using OpenVpnPilot.OpenVpn.Runtime;
@@ -264,6 +265,63 @@ public sealed class ConnectionSupervisorTests
         Assert.Equal(VpnConnectionState.Disconnected, supervisor.Status.State);
     }
 
+    /// <summary>
+    /// Zero is not one process, so tearing down must neither look it up nor try to end it.
+    /// </summary>
+    /// <remarks>
+    /// On Unix zero addresses the caller's own process group. Terminating it ends the test host,
+    /// the runner and the shell that started them, without a word of output. On Windows the lookup
+    /// finds the idle process and is refused, which is reported as a process that could not be
+    /// ended. Neither is a thing this client may do, so neither report may appear.
+    /// </remarks>
+    [Fact]
+    public async Task DisconnectAsync_WhenTheLauncherNamedNoProcess_LeavesEveryProcessAlone()
+    {
+        Harness harness = new();
+        RecordingLogger<ConnectionSupervisor> logger = new();
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor(logger);
+        await harness.ConnectAsync(supervisor);
+
+        Task disconnect = supervisor.DisconnectAsync();
+
+        Assert.Equal("signal SIGTERM", await harness.Transport.ReceiveLineAsync());
+        harness.Transport.SendLine("SUCCESS: signal SIGTERM thrown");
+
+        await disconnect.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // 2003 reports a process being terminated, 2004 one that could not be inspected.
+        Assert.DoesNotContain(logger.EventIds, id => id is 2003 or 2004);
+    }
+
+    /// <summary>
+    /// Ending a process is the platform's business, so the supervisor hands it on.
+    /// </summary>
+    /// <remarks>
+    /// On macOS the process runs as root and the client may not signal it. A supervisor that ended
+    /// it itself would fail there and leave the tunnel running.
+    /// </remarks>
+    [Fact]
+    public async Task DisconnectAsync_HandsTheProcessToTheTerminator()
+    {
+        Harness harness = new();
+
+        // No process has this identifier on any system, and nothing here would end it anyway.
+        harness.Launcher.Result = OpenVpnLaunchResult.Started(int.MaxValue);
+        RecordingTerminator terminator = new();
+
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor(terminator: terminator);
+        await harness.ConnectAsync(supervisor);
+
+        Task disconnect = supervisor.DisconnectAsync();
+
+        Assert.Equal("signal SIGTERM", await harness.Transport.ReceiveLineAsync());
+        harness.Transport.SendLine("SUCCESS: signal SIGTERM thrown");
+
+        await disconnect.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal([int.MaxValue], terminator.ProcessIds);
+    }
+
     [Fact]
     public async Task DisconnectAsync_WithNothingRunning_DoesNothing()
     {
@@ -466,8 +524,10 @@ public sealed class ConnectionSupervisorTests
 
         public string? AuthenticatedWith { get; private set; }
 
-        public ConnectionSupervisor CreateSupervisor() =>
-            new(Launcher, new FakeChannelFactory(Transport), Credentials);
+        public ConnectionSupervisor CreateSupervisor(
+            ILogger<ConnectionSupervisor>? logger = null,
+            IOpenVpnProcessTerminator? terminator = null) =>
+            new(Launcher, new FakeChannelFactory(Transport), Credentials, logger: logger, terminator: terminator);
 
         /// <summary>
         /// Drives the password handshake and the session opening commands the supervisor issues.

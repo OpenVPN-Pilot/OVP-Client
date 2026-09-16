@@ -22,7 +22,7 @@ namespace OpenVpnPilot.App.Services;
 /// </remarks>
 public sealed partial class SingleInstanceGuard : IDisposable
 {
-    private readonly string mutexName;
+    private readonly string scope;
     private readonly string pipeName;
     private Mutex? mutex;
     private CancellationTokenSource? listener;
@@ -30,9 +30,7 @@ public sealed partial class SingleInstanceGuard : IDisposable
 
     public SingleInstanceGuard(string? identity = null)
     {
-        string scope = identity ?? Environment.UserName;
-
-        mutexName = $"Local\\OpenVpnPilot.Instance.{scope}";
+        scope = identity ?? Environment.UserName;
         pipeName = PilotCommandClient.PipeNameFor(scope);
     }
 
@@ -52,7 +50,7 @@ public sealed partial class SingleInstanceGuard : IDisposable
     /// <returns>True when this is the only copy, false when another one already runs.</returns>
     public bool TryClaim()
     {
-        mutex = new Mutex(initiallyOwned: true, mutexName, out bool created);
+        mutex = ApplicationInstance.CreateClaim(initiallyOwned: true, scope, out bool created);
 
         if (!created)
         {

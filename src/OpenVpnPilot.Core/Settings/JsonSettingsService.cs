@@ -16,16 +16,7 @@ namespace OpenVpnPilot.Core.Settings;
 /// </remarks>
 public sealed class JsonSettingsService : ISettingsService, IDisposable
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        ReadCommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.Never,
-        Converters = { new JsonStringEnumConverter() },
-    };
+    private static readonly JsonSerializerOptions SerializerOptions = PilotSettingsTransfer.SerializerOptions;
 
     private readonly string path;
     private readonly ILogger<JsonSettingsService> logger;

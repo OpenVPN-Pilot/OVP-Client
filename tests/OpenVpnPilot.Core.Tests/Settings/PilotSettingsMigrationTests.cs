@@ -46,6 +46,35 @@ public sealed class PilotSettingsMigrationTests
     }
 
     [Fact]
+    public void AFileNamingTheRepositoryTheProjectMovedFrom_FollowsTheMove()
+    {
+        PilotSettings stored = new()
+        {
+            SchemaVersion = 1,
+            Advanced = { UpdateRepository = AdvancedSettings.FormerUpdateRepository },
+        };
+
+        Assert.True(stored.Migrate());
+
+        Assert.Equal(new PilotSettings().Advanced.UpdateRepository, stored.Advanced.UpdateRepository);
+    }
+
+    [Fact]
+    public void AFileNamingSomebodyElsesRepository_KeepsIt()
+    {
+        // A fork follows its own releases, and the field is the only place that can be said.
+        PilotSettings stored = new()
+        {
+            SchemaVersion = 1,
+            Advanced = { UpdateRepository = "someone/their-fork" },
+        };
+
+        Assert.True(stored.Migrate());
+
+        Assert.Equal("someone/their-fork", stored.Advanced.UpdateRepository);
+    }
+
+    [Fact]
     public void MigratingTwice_ChangesNothingTheSecondTime()
     {
         PilotSettings stored = new() { SchemaVersion = 0 };

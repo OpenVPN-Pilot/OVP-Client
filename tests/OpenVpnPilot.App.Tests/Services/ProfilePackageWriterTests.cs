@@ -67,15 +67,18 @@ public sealed class ProfilePackageWriterTests : IAsyncLifetime
         beta = second.Id;
 
         secrets = new FakeSecretStore();
-        writer = new ProfilePackageWriter(factory, secrets, TimeProvider.System);
+        settings = new FakeSettingsService();
+        writer = new ProfilePackageWriter(factory, secrets, settings, TimeProvider.System);
     }
+
+    private FakeSettingsService settings = null!;
 
     [Fact]
     public async Task WriteAsync_WithoutBeingAsked_CarriesNoCredentials()
     {
         await secrets.WriteAsync(SecretReference.ForProfile(alpha, "Auth"), new StoredSecret("operator", "secret"));
 
-        PackageWriteResult result = await writer.WriteAsync(PackagePath, [alpha, beta], "a passphrase");
+        PackageWriteResult result = await writer.WriteAsync(PackagePath, new PackageExportRequest([alpha, beta]), "a passphrase");
 
         Assert.Equal(2, result.Profiles);
         Assert.Equal(0, result.Credentials);
@@ -89,9 +92,8 @@ public sealed class ProfilePackageWriterTests : IAsyncLifetime
 
         PackageWriteResult result = await writer.WriteAsync(
             PackagePath,
-            [alpha],
-            "a passphrase",
-            includeCredentials: true);
+            new PackageExportRequest([alpha]) { IncludeCredentials = true },
+            "a passphrase");
 
         Assert.Equal(1, result.Profiles);
         Assert.Equal(1, result.Credentials);
@@ -110,9 +112,8 @@ public sealed class ProfilePackageWriterTests : IAsyncLifetime
 
         PackageWriteResult result = await writer.WriteAsync(
             PackagePath,
-            [alpha],
-            "a passphrase",
-            includeCredentials: true);
+            new PackageExportRequest([alpha]) { IncludeCredentials = true },
+            "a passphrase");
 
         Assert.Equal(2, result.Credentials);
     }
@@ -122,13 +123,13 @@ public sealed class ProfilePackageWriterTests : IAsyncLifetime
     {
         await secrets.WriteAsync(SecretReference.ForProfile(alpha, "Auth"), new StoredSecret("operator", "secret"));
 
-        await writer.WriteAsync(PackagePath, [alpha], "a passphrase", includeCredentials: true);
+        await writer.WriteAsync(PackagePath, new PackageExportRequest([alpha]) { IncludeCredentials = true }, "a passphrase");
 
         // A different machine: its own store, and nothing in its keystore.
         (ProfilePackageWriter other, FakeSecretStore otherSecrets, IDbContextFactory<PilotDbContext> otherFactory) =
             await CreateEmptyMachineAsync();
 
-        PackageImportResult result = await other.ApplyAsync(PackagePath, "a passphrase");
+        PackageImportResult result = await ImportEverythingAsync(other);
 
         Assert.Equal(1, result.Added);
         Assert.Equal(1, result.Credentials);
@@ -153,16 +154,105 @@ public sealed class ProfilePackageWriterTests : IAsyncLifetime
     public async Task ApplyAsync_WhenNothingCanProtectASecret_StoresNone()
     {
         await secrets.WriteAsync(SecretReference.ForProfile(alpha, "Auth"), new StoredSecret("operator", "secret"));
-        await writer.WriteAsync(PackagePath, [alpha], "a passphrase", includeCredentials: true);
+        await writer.WriteAsync(PackagePath, new PackageExportRequest([alpha]) { IncludeCredentials = true }, "a passphrase");
 
         (ProfilePackageWriter other, FakeSecretStore otherSecrets, _) = await CreateEmptyMachineAsync();
         otherSecrets.IsAvailable = false;
 
-        PackageImportResult result = await other.ApplyAsync(PackagePath, "a passphrase");
+        PackageImportResult result = await ImportEverythingAsync(other);
 
         Assert.Equal(1, result.Added);
         Assert.Equal(0, result.Credentials);
         Assert.Empty(await otherSecrets.ListAsync());
+    }
+
+    /// <summary>
+    /// What is not ticked is not taken, and a sign in follows only the profile it belongs to.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_TakesOnlyWhatWasChosen()
+    {
+        await secrets.WriteAsync(SecretReference.ForProfile(alpha, "Auth"), new StoredSecret("operator", "secret"));
+        await secrets.WriteAsync(SecretReference.ForProfile(beta, "Auth"), new StoredSecret("other", "other-secret"));
+
+        await writer.WriteAsync(PackagePath, new PackageExportRequest([alpha, beta]) { IncludeCredentials = true }, "a passphrase");
+
+        (ProfilePackageWriter other, FakeSecretStore otherSecrets, IDbContextFactory<PilotDbContext> otherFactory) =
+            await CreateEmptyMachineAsync();
+
+        OpenedPackage opened = await other.OpenAsync(PackagePath, "a passphrase");
+
+        Assert.Equal(2, opened.Preview.Profiles.Count);
+        Assert.All(opened.Preview.Profiles, profile => Assert.False(profile.IsStored));
+
+        PackageImportResult result = await other.ApplyAsync(opened, new PackageImportChoice([beta]));
+
+        Assert.Equal(1, result.Added);
+        Assert.Equal(1, result.Credentials);
+
+        await using PilotDbContext context = await otherFactory.CreateDbContextAsync();
+        Assert.Equal(["example-site-beta"], await context.Profiles.Select(profile => profile.Name).ToListAsync());
+    }
+
+    [Fact]
+    public async Task OpenAsync_NamesTheProfilesTheStoreAlreadyHas()
+    {
+        await writer.WriteAsync(PackagePath, new PackageExportRequest([alpha, beta]), "a passphrase");
+
+        (ProfilePackageWriter other, _, _) = await CreateEmptyMachineAsync();
+        await ImportEverythingAsync(other);
+
+        OpenedPackage opened = await other.OpenAsync(PackagePath, "a passphrase");
+
+        Assert.All(opened.Preview.Profiles, profile => Assert.True(profile.IsStored));
+        Assert.Contains(opened.Preview.Profiles, profile => profile.StoredAs == "example-site-alpha");
+    }
+
+    /// <summary>
+    /// Settings travel without what only makes sense on the machine that wrote them.
+    /// </summary>
+    [Fact]
+    public async Task Settings_TravelWithoutWhatDescribesTheMachine()
+    {
+        settings.Current.General.Language = "de";
+        settings.Current.General.MainWindow.X = 1200;
+        settings.Current.Advanced.OpenVpnPath = "/written/openvpn";
+
+        PackageWriteResult written = await writer.WriteAsync(
+            PackagePath,
+            new PackageExportRequest([alpha]) { IncludeSettings = true, IncludeHotkeys = false },
+            "a passphrase");
+
+        Assert.True(written.Settings);
+
+        (ProfilePackageWriter other, _, _) = await CreateEmptyMachineAsync(out FakeSettingsService otherSettings);
+        otherSettings.Current.General.MainWindow.X = 40;
+        otherSettings.Current.Advanced.OpenVpnPath = "/receiving/openvpn";
+
+        OpenedPackage opened = await other.OpenAsync(PackagePath, "a passphrase");
+        Assert.True(opened.Preview.HasSettings);
+
+        PackageImportResult result = await other.ApplyAsync(opened, new PackageImportChoice([]) { IncludeSettings = true });
+
+        Assert.True(result.Settings);
+        Assert.Equal("de", otherSettings.Current.General.Language);
+        Assert.Equal(40, otherSettings.Current.General.MainWindow.X);
+        Assert.Equal("/receiving/openvpn", otherSettings.Current.Advanced.OpenVpnPath);
+    }
+
+    [Fact]
+    public async Task Settings_AreNotTouchedUnlessChosen()
+    {
+        settings.Current.General.Language = "de";
+        await writer.WriteAsync(PackagePath, new PackageExportRequest([alpha]) { IncludeSettings = true }, "a passphrase");
+
+        (ProfilePackageWriter other, _, _) = await CreateEmptyMachineAsync(out FakeSettingsService otherSettings);
+
+        OpenedPackage opened = await other.OpenAsync(PackagePath, "a passphrase");
+        PackageImportResult result = await other.ApplyAsync(opened, new PackageImportChoice([alpha]));
+
+        Assert.False(result.Settings);
+        Assert.Null(otherSettings.Current.General.Language);
     }
 
     [Fact]
@@ -177,8 +267,20 @@ public sealed class ProfilePackageWriterTests : IAsyncLifetime
         Assert.False(counts.ContainsKey(beta));
     }
 
+    private async Task<PackageImportResult> ImportEverythingAsync(ProfilePackageWriter target)
+    {
+        OpenedPackage opened = await target.OpenAsync(PackagePath, "a passphrase");
+
+        return await target.ApplyAsync(
+            opened,
+            new PackageImportChoice(opened.Preview.Profiles.Select(profile => profile.Profile.Id).ToList()));
+    }
+
+    private Task<(ProfilePackageWriter Writer, FakeSecretStore Secrets, IDbContextFactory<PilotDbContext> Factory)>
+        CreateEmptyMachineAsync() => CreateEmptyMachineAsync(out _);
+
     private async Task<(ProfilePackageWriter Writer, FakeSecretStore Secrets, IDbContextFactory<PilotDbContext> Factory)>
-        CreateEmptyMachineAsync()
+        CreateEmptyMachineAsync(FakeSettingsService machineSettings)
     {
         ServiceCollection collection = new();
 
@@ -193,7 +295,14 @@ public sealed class ProfilePackageWriterTests : IAsyncLifetime
         await context.Database.MigrateAsync();
 
         FakeSecretStore store = new();
-        return (new ProfilePackageWriter(target, store, TimeProvider.System), store, target);
+        return (new ProfilePackageWriter(target, store, machineSettings, TimeProvider.System), store, target);
+    }
+
+    private Task<(ProfilePackageWriter Writer, FakeSecretStore Secrets, IDbContextFactory<PilotDbContext> Factory)>
+        CreateEmptyMachineAsync(out FakeSettingsService machineSettings)
+    {
+        machineSettings = new FakeSettingsService();
+        return CreateEmptyMachineAsync(machineSettings);
     }
 
     public async Task DisposeAsync()

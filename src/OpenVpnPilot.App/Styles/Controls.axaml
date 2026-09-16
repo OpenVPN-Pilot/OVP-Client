@@ -80,6 +80,47 @@
     <Setter Property="Padding" Value="10,6" />
   </Style>
 
+  <!--
+    What cannot be undone looks different from everything else, before it is pressed and while the
+    pointer is over it. The outlined form asks; the filled form is the answer to the question that
+    asking raises. The pointer and disabled states are restated here because the theme repaints the
+    content on hover, which turned the red of the editor's delete button back into ordinary text.
+  -->
+  <Style Selector="Button.danger">
+    <Setter Property="Foreground" Value="{DynamicResource StateFailed}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource StateFailed}" />
+  </Style>
+
+  <Style Selector="Button.danger:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource StateFailedSoft}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource StateFailed}" />
+    <Setter Property="Foreground" Value="{DynamicResource StateFailed}" />
+  </Style>
+
+  <Style Selector="Button.destructive">
+    <Setter Property="Background" Value="{DynamicResource StateFailed}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="Button.destructive /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource StateFailed}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+  </Style>
+
+  <Style Selector="Button.destructive:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource StateFailed}" />
+    <Setter Property="Foreground" Value="#FFFFFF" />
+    <Setter Property="Opacity" Value="0.88" />
+  </Style>
+
+  <Style Selector="Button.danger:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource TextTertiary}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+  </Style>
+
   <!-- Search field and other inputs. -->
   <Style Selector="TextBox">
     <Setter Property="Background" Value="{DynamicResource SurfaceInput}" />
@@ -94,6 +135,21 @@
 
   <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
     <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+  </Style>
+
+  <!--
+    Configuration text: fixed width, because base64 and aligned options read as columns, and not
+    wrapped, because a wrapped certificate line looks like two lines and is not.
+  -->
+  <Style Selector="TextBox.code">
+    <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="AcceptsReturn" Value="True" />
+    <Setter Property="TextWrapping" Value="NoWrap" />
+    <Setter Property="Height" Value="150" />
+    <Setter Property="VerticalContentAlignment" Value="Top" />
+    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+    <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
   </Style>
 
   <!-- Sidebar entries behave as navigation rather than as a list. -->

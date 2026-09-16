@@ -120,6 +120,44 @@ public sealed class ProfilePackageTests : IDisposable
         Assert.Equal(imported, Assert.Single(second.Credentials).ProfileId);
     }
 
+    /// <summary>
+    /// Several profiles sharing a tag the store does not have yet is the ordinary shape of a package.
+    /// </summary>
+    /// <remarks>
+    /// Each profile looked its tags up in the database, where a tag added for the previous profile
+    /// was not yet saved, so the same tag was added once per profile. Saving then broke the unique
+    /// index on the name, and the exception ended the application in the middle of an import.
+    /// </remarks>
+    [Fact]
+    public async Task ProfilesSharingATagTheStoreLacks_ShareOneTag()
+    {
+        await using PilotDbContext source = CreateContext("source.db");
+        await Seed(source);
+
+        ProfilePackageContent content = await new ProfilePackageService(source).CreateAsync();
+
+        content = content with
+        {
+            Profiles = content.Profiles
+                .Select(profile => profile with { Tags = ["office", "Shared"] })
+                .ToList(),
+        };
+
+        await using PilotDbContext target = CreateContext("target.db");
+        target.Tags.Add(new Tag { Name = "shared" });
+        await target.SaveChangesAsync();
+
+        PackageApplyResult result = await new ProfilePackageService(target).ApplyAsync(content);
+
+        Assert.Equal(2, result.Added);
+
+        List<Tag> tags = await target.Tags.Include(tag => tag.Profiles).OrderBy(tag => tag.Name).ToListAsync();
+
+        // A tag differing only in case is the same tag, as it is everywhere else in the interface.
+        Assert.Equal(["office", "shared"], tags.Select(tag => tag.Name));
+        Assert.All(tags, tag => Assert.Equal(2, tag.Profiles.Count));
+    }
+
     [Fact]
     public async Task APackageWrittenWithoutCredentials_CarriesNone()
     {
@@ -256,6 +294,42 @@ public sealed class ProfilePackageTests : IDisposable
             () => ProfilePackageFile.WriteAsync(PackagePath, content, string.Empty));
 
         Assert.False(File.Exists(PackagePath));
+    }
+
+    /// <summary>
+    /// A layout this build does not know may mean something it would misread, so it is refused with
+    /// the version that wrote it rather than read in part.
+    /// </summary>
+    [Fact]
+    public void APackageFromANewerFormat_IsRefused()
+    {
+        ProfilePackageContent content = new() { FormatVersion = ProfilePackageContent.CurrentFormatVersion + 1, WrittenBy = "9.0.0" };
+
+        byte[] encoded = ProfilePackageFile.Encode(content, "passphrase");
+
+        PackageTooNewException refused = Assert.Throws<PackageTooNewException>(
+            () => ProfilePackageFile.Decode(encoded, "passphrase"));
+
+        Assert.Equal("9.0.0", refused.WrittenBy);
+    }
+
+    /// <summary>
+    /// A package from before the layout carried settings still opens.
+    /// </summary>
+    [Fact]
+    public void APackageOfFormatOne_ReadsWithNothingOfTheLaterParts()
+    {
+        ProfilePackageContent content = new()
+        {
+            FormatVersion = 1,
+            Profiles = [new PackagedProfile { Id = Guid.NewGuid(), Name = "site-alpha", Configuration = "client" }],
+        };
+
+        ProfilePackageContent read = ProfilePackageFile.Decode(ProfilePackageFile.Encode(content, "passphrase"), "passphrase");
+
+        Assert.Equal(1, read.FormatVersion);
+        Assert.Null(read.Settings);
+        Assert.Single(read.Profiles);
     }
 
     [Fact]

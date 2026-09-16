@@ -58,14 +58,23 @@ public static class ProfilePackageFile
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        byte[] encoded = Encode(content, passphrase);
+        await File.WriteAllBytesAsync(path, encoded, cancellationToken);
+    }
+
+    /// <summary>
+    /// The bytes of a package, encrypted with the given passphrase.
+    /// </summary>
+    /// <remarks>
+    /// Separate from writing, so a package can be produced and checked without a file.
+    /// </remarks>
+    public static byte[] Encode(ProfilePackageContent content, string passphrase)
+    {
         ArgumentNullException.ThrowIfNull(content);
         ArgumentException.ThrowIfNullOrEmpty(passphrase);
 
         byte[] payload = JsonSerializer.SerializeToUtf8Bytes(content, SerializerOptions);
-
-        await using FileStream stream = File.Create(path);
-        await stream.WriteAsync(Magic, cancellationToken);
-        stream.WriteByte(EncryptedPayload);
 
         byte[] salt = RandomNumberGenerator.GetBytes(SaltLength);
         byte[] nonce = RandomNumberGenerator.GetBytes(NonceLength);
@@ -85,10 +94,17 @@ public static class ProfilePackageFile
             CryptographicOperations.ZeroMemory(payload);
         }
 
-        await stream.WriteAsync(salt, cancellationToken);
-        await stream.WriteAsync(nonce, cancellationToken);
-        await stream.WriteAsync(tag, cancellationToken);
-        await stream.WriteAsync(cipher, cancellationToken);
+        byte[] encoded = new byte[Magic.Length + 1 + SaltLength + NonceLength + TagLength + cipher.Length];
+        Span<byte> span = encoded;
+
+        Magic.CopyTo(span);
+        span[Magic.Length] = EncryptedPayload;
+        salt.CopyTo(span[(Magic.Length + 1)..]);
+        nonce.CopyTo(span[(Magic.Length + 1 + SaltLength)..]);
+        tag.CopyTo(span[(Magic.Length + 1 + SaltLength + NonceLength)..]);
+        cipher.CopyTo(span[(Magic.Length + 1 + SaltLength + NonceLength + TagLength)..]);
+
+        return encoded;
     }
 
     /// <summary>
@@ -108,6 +124,22 @@ public static class ProfilePackageFile
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         byte[] raw = await File.ReadAllBytesAsync(path, cancellationToken);
+        return Decode(raw, passphrase);
+    }
+
+    /// <summary>
+    /// Reads a package from its bytes.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The bytes are not a package, a passphrase is needed and was not supplied, or a newer version
+    /// wrote it.
+    /// </exception>
+    /// <exception cref="CryptographicException">
+    /// The passphrase is wrong, or the bytes were altered after they were written.
+    /// </exception>
+    public static ProfilePackageContent Decode(byte[] raw, string? passphrase)
+    {
+        ArgumentNullException.ThrowIfNull(raw);
 
         if (raw.Length < Magic.Length + 1 || !raw.AsSpan(0, Magic.Length).SequenceEqual(Magic))
         {
@@ -127,8 +159,21 @@ public static class ProfilePackageFile
 
         try
         {
-            return JsonSerializer.Deserialize<ProfilePackageContent>(payload, SerializerOptions)
+            ProfilePackageContent content = JsonSerializer.Deserialize<ProfilePackageContent>(payload, SerializerOptions)
                 ?? throw new InvalidOperationException("The package is empty.");
+
+            // A newer layout may mean something this build would misread, and taking half of a
+            // package quietly is worse than saying which version is needed to open it.
+            if (content.FormatVersion > ProfilePackageContent.CurrentFormatVersion)
+            {
+                throw new PackageTooNewException(content.FormatVersion, content.WrittenBy);
+            }
+
+            return content;
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidOperationException("The package could be opened but its contents could not be read.", exception);
         }
         finally
         {
@@ -192,4 +237,36 @@ public static class ProfilePackageFile
             Iterations,
             HashAlgorithmName.SHA256,
             KeyLength);
+}
+
+/// <summary>
+/// A package written in a layout newer than this build understands.
+/// </summary>
+public sealed class PackageTooNewException : InvalidOperationException
+{
+    public PackageTooNewException()
+        : base("This package was written by a newer version and cannot be read.")
+    {
+    }
+
+    public PackageTooNewException(string message)
+        : base(message)
+    {
+    }
+
+    public PackageTooNewException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+
+    public PackageTooNewException(int formatVersion, string writtenBy)
+        : base($"This package uses format {formatVersion}, written by version {writtenBy}, and this version reads up to {ProfilePackageContent.CurrentFormatVersion}.")
+    {
+        FormatVersion = formatVersion;
+        WrittenBy = writtenBy;
+    }
+
+    public int FormatVersion { get; }
+
+    public string WrittenBy { get; } = string.Empty;
 }

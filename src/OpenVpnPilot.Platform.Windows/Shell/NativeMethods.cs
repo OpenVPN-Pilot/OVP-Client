@@ -35,9 +35,14 @@ internal static partial class NativeMethods
     public const uint NifTip = 0x00000004;
     public const uint NifInfo = 0x00000010;
 
-    public const uint NiifInfo = 0x00000001;
-    public const uint NiifWarning = 0x00000002;
-    public const uint NiifError = 0x00000003;
+    /// <summary>
+    /// No icon at all beside the message. Both alternatives read worse: the severity flags
+    /// (<c>NIIF_INFO</c>/<c>WARNING</c>/<c>ERROR</c>) draw one of Windows' own stock icons, a blue
+    /// circle, an orange triangle or a red circle, in place of the application's own; and
+    /// <c>NIIF_USER</c>, which draws <c>hIcon</c> instead, stretches whatever small icon the tray
+    /// carries into a much larger image and shows every one of its pixels doing it.
+    /// </summary>
+    public const uint NiifNone = 0x00000000;
 
     public const uint NotifyIconVersion4 = 4;
 

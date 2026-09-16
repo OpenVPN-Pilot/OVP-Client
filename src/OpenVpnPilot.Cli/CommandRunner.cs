@@ -1,7 +1,5 @@
 using System.Runtime.Versioning;
 using OpenVpnPilot.Core.Abstractions;
-using OpenVpnPilot.Platform.Windows.Diagnostics;
-using OpenVpnPilot.Platform.Windows.InteractiveService;
 
 namespace OpenVpnPilot.Cli;
 
@@ -34,11 +32,9 @@ internal static class CommandRunner
             return 0;
         }
 
-        if (!OperatingSystem.IsWindows())
+        if (!PlatformServices.IsSupported)
         {
-            Console.Error.WriteLine(
-                "This build supports Windows only. Support for another system means adding an "
-                + "implementation of the platform interfaces, not changing the rest of the application.");
+            Console.Error.WriteLine(PlatformServices.UnsupportedMessage);
             return 1;
         }
 
@@ -86,7 +82,6 @@ internal static class CommandRunner
         _ => command,
     };
 
-    [SupportedOSPlatform("windows")]
     private static async Task<int> RunDoctorAsync()
     {
         OpenVpnEnvironmentReport report = await EnvironmentReadiness.ProbeAsync();
@@ -134,7 +129,7 @@ internal static class CommandRunner
         Console.WriteLine("  unpack <file>              Read a package back into the store.");
         Console.WriteLine("  favourite, fav <name>      Set or clear a favourite and its slot.");
         Console.WriteLine("  remove, rm <name>          Delete a profile from the store.");
-        Console.WriteLine("  completion <shell>         Print a shell completion script.");
+        Console.WriteLine("  completion <shell>         Print a completion script: powershell, bash or zsh.");
         Console.WriteLine();
         Console.WriteLine("Global options:");
         Console.WriteLine("  -h, --help [command]       Show this text, or the help for one command.");
@@ -148,14 +143,18 @@ internal static class CommandRunner
         Console.WriteLine("this command is all anything else has to call.");
         Console.WriteLine();
         Console.WriteLine("Examples:");
-        Console.WriteLine(@"  ovp add C:\profiles --commit");
+        Console.WriteLine(OperatingSystem.IsWindows()
+            ? @"  ovp add C:\profiles --commit"
+            : "  ovp add ~/profiles --commit");
         Console.WriteLine("  ovp con site-alpha");
         Console.WriteLine("  ovp con site-alpha --headless    start with no window, then connect");
         Console.WriteLine("  ovp dis --all");
         Console.WriteLine("  ovp stop");
         Console.WriteLine();
         Console.WriteLine("Completion for the current shell:");
-        Console.WriteLine("  ovp completion powershell --install");
+        Console.WriteLine(OperatingSystem.IsWindows()
+            ? "  ovp completion powershell --install"
+            : "  ovp completion zsh --install");
         return 0;
     }
 
@@ -167,10 +166,22 @@ internal static class CommandRunner
                 Console.WriteLine("ovp doctor");
                 Console.WriteLine("Alias: dr");
                 Console.WriteLine();
-                Console.WriteLine("Reports each requirement separately: the OpenVPN installation, the");
-                Console.WriteLine("executable and its version, the interactive service, its control pipe,");
-                Console.WriteLine("and whether this account may launch configurations from outside the");
-                Console.WriteLine("OpenVPN configuration directory.");
+
+                if (OperatingSystem.IsMacOS())
+                {
+                    Console.WriteLine("Reports each requirement separately: the privileged helper and whether it");
+                    Console.WriteLine("answers, the OpenVPN it carries and its version, and whether this account");
+                    Console.WriteLine("may start configurations of its own rather than only the ones an");
+                    Console.WriteLine("administrator installed.");
+                }
+                else
+                {
+                    Console.WriteLine("Reports each requirement separately: the OpenVPN installation, the");
+                    Console.WriteLine("executable and its version, the interactive service, its control pipe,");
+                    Console.WriteLine("and whether this account may launch configurations from outside the");
+                    Console.WriteLine("OpenVPN configuration directory.");
+                }
+
                 Console.WriteLine();
                 Console.WriteLine("Exit codes: 0 ready, 2 something blocks connecting.");
                 return 0;
@@ -339,7 +350,7 @@ internal static class CommandRunner
                 return 0;
 
             case "completion":
-                Console.WriteLine("ovp completion <powershell|bash>");
+                Console.WriteLine("ovp completion <powershell|bash|zsh> [--install]");
                 Console.WriteLine();
                 Console.WriteLine("Prints a completion script that offers the commands and the stored profile");
                 Console.WriteLine("names. Add it to the shell profile to make it permanent.");
