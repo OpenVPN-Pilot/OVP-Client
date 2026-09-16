@@ -8,6 +8,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged. A release tag is `v<version>`, for example `v1.2.0`.
 
+## [1.8.0] - 2026-09-16
+
+### Changed
+
+- **The project moved to another repository.** The check for a newer release follows it: a settings
+  file naming the repository this was published from before is pointed at the new one, once, and a
+  field naming anything else is left alone, because that is a fork somebody typed and it follows its
+  own releases.
+- The port in the profile editor has room for the number in it. Five digits were clipped by the box
+  the buttons of a spinner share, and the field that gave the width up is the address, which is
+  longer than its box whatever the box is.
+
+### Added
+
+- The mark as plain images, `logo-128` to `logo-1024` in `assets/artwork`, drawn by the same command
+  as the icons. An icon container is what a system asks for and an image is what a page asks for,
+  and until now the second had to be exported by hand.
+
 ## [1.7.0] - 2026-09-16
 
 ### Removed
