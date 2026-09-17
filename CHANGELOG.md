@@ -20,6 +20,12 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   puts it there. What the Dock remembers about an application whose window has been open is the
   Dock's own, under System Settings, Desktop & Dock.
 
+### Changed
+
+- The profile editor setting reads as a choice rather than as a sentence broken in two. **View when
+  opened** is followed by **Form** and **Plain configuration**, where **Opens with** was followed by
+  **The form** and **The plain configuration**.
+
 ## [1.8.0] - 2026-09-16
 
 ### Changed
