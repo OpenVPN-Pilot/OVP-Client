@@ -17,7 +17,7 @@ installation directory and the data directory are `OpenVpnPilot`, and the compan
 `ovp`. On macOS the bundle is `OpenVPN Pilot.app`, because the Finder labels an application with its
 file name and with nothing else.
 
-> **Status: version 1.8.0.** The integration layer and the interface are proven end to end against
+> **Status: version 1.9.0.** The integration layer and the interface are proven end to end against
 > OpenVPN Community 2.7.6 and against the ten server lab in this repository. Windows is released as
 > an unsigned installer. **macOS is built from the source and is not released as a download**, which
 > is one command and is explained in [docs/macos.md](docs/macos.md). See [Roadmap](#roadmap).

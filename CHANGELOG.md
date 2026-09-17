@@ -8,22 +8,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged. A release tag is `v<version>`, for example `v1.2.0`.
 
-## [Unreleased]
+## [1.9.0] - 2026-09-17
+
+### Added
+
+- **Show in the Dock while a window is open**, in the general settings and in the menu bar entry's
+  own menu, for macOS. It is on, which is the application as it was; off leaves it in the menu bar
+  and nowhere else. The choice exists because being in the Dock costs something that cannot be taken
+  back: macOS enters an application that has been in the Dock in its list of recent applications, and
+  that entry outlives the window, the quitting and the process.
 
 ### Fixed
 
-- **The application no longer leaves itself in the Dock on macOS.** It took its Dock icon away with
-  its window and always did, but macOS enters an application that is in the Dock in its list of
-  recent applications, and that entry outlives the window, the quitting and the process; nothing the
-  application can do removes it. It now stays out of the Dock altogether, window open or not, and
-  lives in the menu bar as it says it does.
+- **The application no longer puts itself in the Dock by launching, on macOS.** It was a regular
+  application from the moment it started, so a copy started hidden or at login was entered in the
+  Dock's list of recent applications although it never showed a window, and the tile that left behind
+  outlived the process. It now starts as an accessory application, and a window is the only thing
+  that puts it in the Dock.
+- The line under the selected tab in the settings was drawn through the letters that reach below the
+  baseline. It has room under the text now.
 
 ### Changed
 
-- **About OpenVPN Pilot** moved to the menu bar entry's menu. It was in the menu named after the
-  application, and an application that is not in the Dock has no such menu; the shortcuts it also
-  carried are unaffected, because macOS answers a menu's key equivalents whether the menu is shown
-  or not.
+- **About OpenVPN Pilot** is in the menu bar entry's menu as well as in the menu named after the
+  application, because there is no such menu while the application is kept out of the Dock. The
+  shortcuts are unaffected either way: macOS answers a menu's key equivalents whether the menu is
+  shown or not.
 - The profile editor setting reads as a choice rather than as a sentence broken in two. **View when
   opened** is followed by **Form** and **Plain configuration**, where **Opens with** was followed by
   **The form** and **The plain configuration**.
