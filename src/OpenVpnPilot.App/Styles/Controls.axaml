@@ -239,6 +239,15 @@
     <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
   </Style>
 
+  <!--
+    Room under the header for the line that marks the selected tab. The line shares the padded area
+    with the text and sits at the bottom of it, so without this it is drawn through the letters that
+    reach below the baseline; the padding does not help, because it moves the two together.
+  -->
+  <Style Selector="TabItem /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Margin" Value="0,0,0,8" />
+  </Style>
+
   <Style Selector="TabItem:selected">
     <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
   </Style>
