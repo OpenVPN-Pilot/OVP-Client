@@ -8,6 +8,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged. A release tag is `v<version>`, for example `v1.2.0`.
 
+## [Unreleased]
+
+### Fixed
+
+- **The application no longer leaves itself in the Dock on macOS.** It takes its Dock icon away with
+  its window, and always did, but it launched as a regular application, and macOS enters one in the
+  Dock's list of recent applications the moment it launches, whether or not a window is ever shown.
+  The tile that left behind outlived the process. It now starts as an accessory application, so
+  starting it hidden or at login does not reach the Dock at all, and a window is the only thing that
+  puts it there. What the Dock remembers about an application whose window has been open is the
+  Dock's own, under System Settings, Desktop & Dock.
+
 ## [1.8.0] - 2026-09-16
 
 ### Changed

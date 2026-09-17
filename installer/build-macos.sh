@@ -452,6 +452,21 @@ write_information_plist() {
     <string>${MINIMUM_MACOS}</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
+    <!--
+        Launched as an accessory application, so the Dock is only ever touched by a window. The
+        application takes itself out of the Dock while it has none, which works: with the Dock's
+        recent applications turned off, a copy started hidden shows no tile at all. What it cannot
+        undo is the entry macOS writes into that list of recent applications, and a regular
+        application is entered there the moment it launches, window or not. Measured on macOS 26: a
+        copy started with the window hidden left a tile in the Dock that outlived the process,
+        which is what an application meant to live in the menu bar must not do. An accessory one
+        that never shows a window is not entered at all.
+
+        The window is what promotes it back to regular, in MacDockPresence, and that is also what
+        gives it its menu bar.
+    -->
+    <key>LSUIElement</key>
+    <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>

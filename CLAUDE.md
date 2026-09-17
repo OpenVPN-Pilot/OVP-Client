@@ -418,6 +418,29 @@ the Mac: reading it as one cost an afternoon.
 not exist even once notifications are working, so its absence means nothing and it is not worth
 reading.
 
+### What puts the application in the Dock, and what cannot be taken back
+
+The activation policy is the whole of the Dock icon and the menu bar: a regular application has both,
+an accessory one has neither and can still show windows and a status item. `MacDockPresence` switches
+between them, and that switch works in both directions. Measured on macOS 26 with the Dock's recent
+applications turned off: a copy running as an accessory application, window hidden, has no tile at
+all, and a tile a window created disappears when the policy goes back to accessory.
+
+What does not come back is the entry macOS writes into the Dock's list of recent applications, and a
+regular application is entered there the moment it launches, window or not. Measured: started with
+`--headless`, so that no window was ever shown, the application was in that list and a tile stayed in
+the Dock after the process had gone. An accessory application that never shows a window is not
+entered at all.
+
+Two things therefore have to agree, and either alone is not enough. The bundle declares `LSUIElement`,
+so the process starts as an accessory application, and the application builder passes
+`MacOSPlatformOptions { ShowInDock = false }`, because Avalonia asks for a regular application while
+it starts and that moment is enough to be entered. `DockPresenceTests` holds the two together.
+
+Once a window has been shown the entry is made, and that is as it should be: an application with a
+window in the Dock is an application the Dock may remember. Turning it off is the Dock's own switch,
+under System Settings, Desktop & Dock.
+
 ### A Unix socket path is short
 
 `sockaddr_un` holds 104 characters on macOS. The per user temporary directory alone is longer than

@@ -141,10 +141,16 @@ every application you will ever download.
 
 ## The menu bar and the Dock
 
-The application lives in the menu bar. With its window closed it leaves the Dock as well, the way it
-leaves the taskbar on Windows, and the tunnels keep running; the menu bar entry is the way back to
-the window, and showing the window puts the Dock icon back. Closing the window quits instead when the
-general settings say so.
+The application lives in the menu bar. It starts as an accessory application, which macOS gives
+neither a Dock icon nor a menu bar of its own, and a window is what puts it in the Dock; with the
+window closed it leaves the Dock again, the way it leaves the taskbar on Windows, and the tunnels
+keep running. The menu bar entry is the way back to the window, and showing the window puts the Dock
+icon back. Closing the window quits instead when the general settings say so.
+
+Started hidden, at login or with `--headless`, it therefore never reaches the Dock at all. Once a
+window has been open, macOS lists the application among the recent ones in the Dock and leaves a tile
+there after it has quit. That list belongs to the Dock and not to this application: **System
+Settings**, **Desktop & Dock**, **Show Suggested and Recent Apps in Dock** is the switch for it.
 
 The menu named after the application carries **About OpenVPN Pilot**, which is macOS's own panel
 with the version and copyright from the bundle, and **Settings** under command and comma, followed by
