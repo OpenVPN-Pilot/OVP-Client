@@ -7,6 +7,7 @@
   "strings": {
     "app": {
       "name": "OpenVPN Pilot",
+      "menuAbout": "About OpenVPN Pilot",
       "menuSettings": "Settings…"
     },
     "common": {
@@ -145,7 +146,8 @@
       "tooltipActive": "OpenVPN Pilot - {0} connection(s) active",
       "quickSwitcher": "Quick switcher",
       "settings": "Settings",
-      "about": "About OpenVPN Pilot"
+      "about": "About OpenVPN Pilot",
+      "showInDock": "Show in the Dock"
     },
     "switcher": {
       "placeholder": "Type to search profiles",
@@ -207,6 +209,8 @@
       "startWithSystem@macos": "Open at login",
       "startMinimised": "Start with the window hidden",
       "closeToTray": "Closing the window keeps the tunnels running",
+      "showInDock": "Show in the Dock while a window is open",
+      "showInDockHint": "Off keeps the application in the menu bar and nowhere else. It is also the only way to stay out of the Dock's list of recent applications, which keeps an entry after the window is closed and after the application has quit. The menu bar named after the application goes with the Dock icon; the entry about it is in the menu bar entry either way.",
       "profileEditor": "Profile editor",
       "profileEditorOpens": "View when opened",
       "profileEditorForm": "Form",

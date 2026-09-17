@@ -7,6 +7,7 @@
   "strings": {
     "app": {
       "name": "OpenVPN Pilot",
+      "menuAbout": "Über OpenVPN Pilot",
       "menuSettings": "Einstellungen …"
     },
     "common": {
@@ -145,7 +146,8 @@
       "tooltipActive": "OpenVPN Pilot - {0} Verbindung(en) aktiv",
       "quickSwitcher": "Schnellauswahl",
       "settings": "Einstellungen",
-      "about": "Über OpenVPN Pilot"
+      "about": "Über OpenVPN Pilot",
+      "showInDock": "Im Dock anzeigen"
     },
     "switcher": {
       "placeholder": "Tippen, um Profile zu suchen",
@@ -207,6 +209,8 @@
       "startWithSystem@macos": "Beim Anmelden öffnen",
       "startMinimised": "Mit ausgeblendetem Fenster starten",
       "closeToTray": "Beim Schließen des Fensters bleiben die Tunnel bestehen",
+      "showInDock": "Im Dock anzeigen, solange ein Fenster offen ist",
+      "showInDockHint": "Aus bleibt die Anwendung in der Menüleiste und sonst nirgends. Das ist zugleich der einzige Weg, aus der Dock-Liste der zuletzt benutzten Programme herauszubleiben, die einen Eintrag behält, nachdem das Fenster geschlossen und die Anwendung beendet ist. Die Menüleiste mit dem Programmnamen geht mit dem Dock-Symbol; der Eintrag über die Anwendung steht so oder so im Menü des Menüleisten-Symbols.",
       "profileEditor": "Profileditor",
       "profileEditorOpens": "Ansicht beim Öffnen",
       "profileEditorForm": "Formular",

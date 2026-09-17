@@ -58,6 +58,11 @@
                       IsChecked="{Binding StartMinimised}" />
             <CheckBox Content="{loc:Translate settings.closeToTray}"
                       IsChecked="{Binding CloseToTray}" />
+            <CheckBox Content="{loc:Translate settings.showInDock}"
+                      IsChecked="{Binding ShowInDock}"
+                      IsVisible="{Binding DockAvailable}" />
+            <TextBlock Text="{loc:Translate settings.showInDockHint}" Classes="muted"
+                       TextWrapping="Wrap" IsVisible="{Binding DockAvailable}" />
 
             <Border Classes="divider" />
 

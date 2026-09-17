@@ -119,6 +119,19 @@ public sealed class GeneralSettings
     public bool CloseToTray { get; set; } = true;
 
     /// <summary>
+    /// Listed in the Dock while a window of its own is open, on a platform that keeps such a list
+    /// apart from its windows.
+    /// </summary>
+    /// <remarks>
+    /// On for the application that behaves like any other, off for the one that is only ever in the
+    /// menu bar. It is a choice rather than a decision made here because it cannot be had both ways:
+    /// macOS enters an application that has been in the Dock in its list of recent applications, and
+    /// that entry outlives the window, the quitting and the process. Ignored where the list of
+    /// running applications follows the windows, which is Windows.
+    /// </remarks>
+    public bool ShowInDock { get; set; } = true;
+
+    /// <summary>
     /// Which display the quick menus open on. Null uses the one the pointer is on.
     /// </summary>
     /// <remarks>

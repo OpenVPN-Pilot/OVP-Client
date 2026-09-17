@@ -1,6 +1,7 @@
 using Avalonia.Threading;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
+using OpenVpnPilot.Core.Settings;
 using OpenVpnPilot.OpenVpn.Runtime;
 
 namespace OpenVpnPilot.App.Services;
@@ -23,11 +24,22 @@ public sealed class TrayIconController : IDisposable
     public const string SettingsAction = "settings";
     public const string DisconnectAllAction = "disconnect-all";
     public const string AboutAction = "about";
+    public const string ShowInDockAction = "show-in-dock";
     public const string QuitAction = "quit";
 
     private readonly ISystemTrayIcon tray;
     private readonly ConnectionManager connections;
     private readonly ILocalizer localizer;
+    private readonly ISettingsService settings;
+
+    /// <summary>
+    /// The platform's list of running applications, on a platform that keeps one apart from windows.
+    /// </summary>
+    /// <remarks>
+    /// Offered here as well as in the settings because it is a decision about where the application
+    /// is, and the menu bar entry is where somebody who has just noticed the Dock icon is looking.
+    /// </remarks>
+    private readonly IDockPresence? dock;
 
     /// <summary>
     /// The platform's own panel about the application, where there is one.
@@ -45,16 +57,21 @@ public sealed class TrayIconController : IDisposable
         ISystemTrayIcon tray,
         ConnectionManager connections,
         ILocalizer localizer,
-        IApplicationMenu? applicationMenu = null)
+        ISettingsService settings,
+        IApplicationMenu? applicationMenu = null,
+        IDockPresence? dock = null)
     {
         ArgumentNullException.ThrowIfNull(tray);
         ArgumentNullException.ThrowIfNull(connections);
         ArgumentNullException.ThrowIfNull(localizer);
+        ArgumentNullException.ThrowIfNull(settings);
 
         this.tray = tray;
         this.connections = connections;
         this.localizer = localizer;
+        this.settings = settings;
         this.applicationMenu = applicationMenu;
+        this.dock = dock;
     }
 
     /// <summary>
@@ -86,7 +103,11 @@ public sealed class TrayIconController : IDisposable
 
         connections.StateChanged += OnStateChanged;
         localizer.LanguageChanged += OnLanguageChanged;
+        settings.Changed += OnSettingsChanged;
     }
+
+    private void OnSettingsChanged(object? sender, PilotSettings changed) =>
+        Dispatcher.UIThread.Post(RebuildMenu);
 
     private void OnActivated(object? sender, EventArgs e) =>
         Dispatcher.UIThread.Post(() => ShowWindowRequested?.Invoke(this, EventArgs.Empty));
@@ -128,8 +149,17 @@ public sealed class TrayIconController : IDisposable
             TrayMenuEntry.Separator,
             new TrayMenuEntry(DisconnectAllAction, localizer["tray.disconnectAll"], anyActive),
             TrayMenuEntry.Separator,
-            new TrayMenuEntry(SettingsAction, localizer["tray.settings"]),
         ];
+
+        if (dock is not null)
+        {
+            entries.Add(new TrayMenuEntry(
+                ShowInDockAction,
+                localizer["tray.showInDock"],
+                IsChecked: settings.Current.General.ShowInDock));
+        }
+
+        entries.Add(new TrayMenuEntry(SettingsAction, localizer["tray.settings"]));
 
         if (applicationMenu is not null)
         {
@@ -149,6 +179,7 @@ public sealed class TrayIconController : IDisposable
         }
 
         disposed = true;
+        settings.Changed -= OnSettingsChanged;
 
         tray.Activated -= OnActivated;
         tray.MenuItemInvoked -= OnMenuItemInvoked;

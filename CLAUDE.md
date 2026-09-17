@@ -434,17 +434,19 @@ window was ever shown, a regular application was entered; an accessory applicati
 regular for a window was entered; an accessory application that never becomes regular was not entered
 at all.
 
-The application therefore never becomes regular. The bundle declares `LSUIElement` and the
-application builder passes `MacOSPlatformOptions { ShowInDock = false }`, and either alone is not
+Being in the Dock is therefore a setting, `General.ShowInDock`, on to begin with and offered in the
+settings screen and in the menu bar entry. It decides whether a window promotes the application to
+regular; launching never does, whatever it says. That takes two things and either alone is not
 enough, because the bundle decides what the process starts as and Avalonia sets the policy again
-while it starts. `DockPresenceTests` holds the two together.
+while it starts: the bundle declares `LSUIElement`, and the application builder passes
+`MacOSPlatformOptions { ShowInDock = false }`. `DockPresenceTests` holds the two together.
 
-What that costs, and what it does not:
+What the setting costs when it is off, and what it does not:
 
 - **There is no menu bar of its own**, so the panel about the application is offered by the menu bar
-  entry instead. A menu's key equivalents are answered whether or not the menu is shown, measured:
-  command and comma opens the settings from `ApplicationMenuController`'s entry, command and Q quits
-  from the platform's own, and command A, C and V edit a text field.
+  entry as well as by that menu. A menu's key equivalents are answered whether or not the menu is
+  shown, measured: command and comma opens the settings from `ApplicationMenuController`'s entry,
+  command and Q quits from the platform's own, and command A, C and V edit a text field.
 - **A window does not bring the application forward.** Showing and activating a window is enough on
   Windows; on macOS which application is in front is a decision of its own, and one that is not in
   the Dock is never made the front one by the system. `IApplicationActivation` is that step, and

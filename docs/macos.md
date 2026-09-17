@@ -141,21 +141,27 @@ every application you will ever download.
 
 ## The menu bar and the Dock
 
-The application lives in the menu bar and nowhere else. It is an accessory application, which macOS
-gives neither a Dock icon nor a menu bar of its own, and it stays one whether its window is open or
-closed. Closing the window keeps the tunnels running, the menu bar entry is the way back to it, and
-closing quits instead when the general settings say so.
+The application lives in the menu bar. It is in the Dock while a window of its own is open and leaves
+it again when the window closes, the way it leaves the taskbar on Windows, and the tunnels keep
+running; the menu bar entry is the way back to the window. Closing the window quits instead when the
+general settings say so.
 
-Staying out of the Dock is a decision and it has a price. An application that is in the Dock while
-its window is open is also entered in the Dock's list of recent applications, and that entry outlives
-the window, the quitting and the process: the list belongs to the Dock, and nothing the application
-does takes it out again. Not being there at all is the only way to leave the Dock alone.
+**Show in the Dock while a window is open**, under the general settings and as an entry in the menu
+bar entry's own menu, turns the Dock presence off for somebody who wants the application in the menu bar and nowhere else. It is on to
+begin with, and it is offered because being in the Dock costs something that cannot be taken back:
+macOS enters an application that has been in the Dock in its list of recent applications, and that
+entry outlives the window, the quitting and the process. The list belongs to the Dock, and nothing
+the application does removes an entry from it. Never being there is the only way to stay out of it.
 
-What goes with the Dock icon is the menu bar named after the application. **About OpenVPN Pilot**,
-macOS's own panel with the version and copyright from the bundle, is therefore in the menu bar
-entry's menu, beside the settings and quitting. The shortcuts are unaffected, because macOS answers a
-menu's key equivalents whether or not the menu is shown: command and comma opens the settings,
-command and Q quits, and editing a text field works as it does everywhere.
+The menu bar named after the application goes with the Dock icon: with the setting off there is no
+such menu. **About OpenVPN Pilot**, macOS's own panel with the version and copyright from the bundle,
+is therefore in the menu bar entry's menu as well as in that one. The shortcuts are unaffected either
+way, because macOS answers a menu's key equivalents whether or not the menu is shown: command and
+comma opens the settings, command and Q quits, and editing a text field works as it does everywhere.
+
+Whichever the setting says, launching alone never reaches the Dock: the application starts as an
+accessory one, and a window is what puts it there. A copy started hidden, at login or with
+`--headless`, leaves the Dock untouched.
 
 ## Notifications
 

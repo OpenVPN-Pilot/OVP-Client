@@ -34,6 +34,11 @@ public sealed class WindowCoordinator
     private readonly IWindowCloseOrigin? closeOrigin;
 
     /// <summary>
+    /// The platform's list of running applications, on a platform that keeps one apart from windows.
+    /// </summary>
+    private readonly IDockPresence? dock;
+
+    /// <summary>
     /// What brings the application to the front, on a platform where a window does not.
     /// </summary>
     private readonly IApplicationActivation? activation;
@@ -62,6 +67,7 @@ public sealed class WindowCoordinator
         // the container that answers this is one of the things being disposed.
         settings = services.GetRequiredService<ISettingsService>();
         closeOrigin = services.GetService<IWindowCloseOrigin>();
+        dock = services.GetService<IDockPresence>();
         activation = services.GetService<IApplicationActivation>();
         applicationMenu = services.GetService<IApplicationMenu>();
 
@@ -126,6 +132,51 @@ public sealed class WindowCoordinator
                     break;
             }
         };
+
+        mainWindow.PropertyChanged += (_, args) =>
+        {
+            if (args.Property == Visual.IsVisibleProperty)
+            {
+                UpdateDockPresence();
+            }
+        };
+
+        // The setting that decides it is one a person can change while this runs, from here or from
+        // the menu bar entry, and the Dock is expected to answer at once rather than on the next start.
+        settings.Changed += (_, _) => UpdateDockPresence();
+
+        // Once at the start as well, for a copy that starts with its window hidden and so never
+        // reports the window changing.
+        UpdateDockPresence();
+    }
+
+    /// <summary>
+    /// Lists the application among the running ones while a window of its own is open, where the
+    /// settings ask for it.
+    /// </summary>
+    /// <remarks>
+    /// The palettes do not count. They are there for a moment, over whatever else is in front, and an
+    /// icon that appears and vanishes with each of them would be noise.
+    ///
+    /// Posted rather than applied at once. The first call comes before the platform has finished
+    /// launching the application, and launching sets the same thing again from its own options,
+    /// which would undo a decision made earlier than that.
+    /// </remarks>
+    private void UpdateDockPresence()
+    {
+        if (dock is null)
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            bool anyWindow = mainWindow.IsVisible
+                || open.Any(entry => entry.Key is not (AppScreen.QuickSwitcher or AppScreen.QuickDisconnect)
+                    && entry.Value.IsVisible);
+
+            dock.SetListed(settings.Current.General.ShowInDock && anyWindow);
+        });
     }
 
     /// <summary>
@@ -240,6 +291,14 @@ public sealed class WindowCoordinator
                 applicationMenu?.ShowAbout();
                 break;
 
+            case TrayIconController.ShowInDockAction:
+                // Not waited for: the settings service raises its change event as part of saving,
+                // and the Dock, the menu entry and the settings screen all follow from that. A menu
+                // entry that blocked on a file write would be a menu entry that hangs.
+                _ = settings.UpdateAsync(current =>
+                    current.General.ShowInDock = !current.General.ShowInDock);
+                break;
+
             case TrayIconController.QuitAction:
                 lifetime.Shutdown();
                 break;
@@ -325,7 +384,11 @@ public sealed class WindowCoordinator
         }
 
         open[screen] = window;
-        window.Closed += (_, _) => open.Remove(screen);
+        window.Closed += (_, _) =>
+        {
+            open.Remove(screen);
+            UpdateDockPresence();
+        };
 
         if (screen is AppScreen.QuickSwitcher or AppScreen.QuickDisconnect || !mainWindow.IsVisible)
         {
@@ -335,6 +398,8 @@ public sealed class WindowCoordinator
         {
             window.Show(mainWindow);
         }
+
+        UpdateDockPresence();
     }
 
     private Window? Create(AppScreen screen) => screen switch

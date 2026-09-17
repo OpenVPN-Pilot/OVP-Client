@@ -31,6 +31,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private readonly DiagnosticsBundle diagnostics;
     private readonly UpdateCoordinator updates;
 
+    /// <summary>
+    /// The platform's list of running applications, on a platform that keeps one apart from windows.
+    /// Null where there is nothing to decide.
+    /// </summary>
+    private readonly IDockPresence? dock;
+
     private PilotSettings draft;
 
     public SettingsViewModel(
@@ -43,7 +49,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         IAutoStartManager autoStart,
         ISessionStore sessions,
         DiagnosticsBundle diagnostics,
-        UpdateCoordinator updates)
+        UpdateCoordinator updates,
+        IDockPresence? dock = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(localizer);
@@ -66,6 +73,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         this.sessions = sessions;
         this.diagnostics = diagnostics;
         this.updates = updates;
+        this.dock = dock;
 
         draft = settings.Current.Clone();
 
@@ -139,6 +147,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     [ObservableProperty]
     public partial bool CloseToTray { get; set; }
+
+    [ObservableProperty]
+    public partial bool ShowInDock { get; set; }
 
     [ObservableProperty]
     public partial bool ProtectRoutes { get; set; }
@@ -238,6 +249,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public bool AutoStartAvailable => autoStart.IsSupported;
 
+    /// <summary>
+    /// False where the list of running applications follows the windows, which leaves nothing to
+    /// choose.
+    /// </summary>
+    public bool DockAvailable => dock is not null;
+
     public bool HotkeysAvailable => hotkeys.IsAvailable;
 
     public IReadOnlyList<string> LogLevels { get; } =
@@ -293,6 +310,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         StartMinimised = draft.General.StartMinimised;
         StartWithSystem = draft.General.StartWithSystem;
         CloseToTray = draft.General.CloseToTray;
+        ShowInDock = draft.General.ShowInDock;
 
         SelectedEditorView = EditorViews.FirstOrDefault(view => view.View == draft.General.ProfileEditor)
             ?? EditorViews[0];
@@ -330,6 +348,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         draft.General.StartMinimised = StartMinimised;
         draft.General.StartWithSystem = StartWithSystem;
         draft.General.CloseToTray = CloseToTray;
+        draft.General.ShowInDock = ShowInDock;
         draft.General.ProfileEditor = SelectedEditorView?.View ?? ProfileEditorView.Form;
 
         draft.Appearance.Theme = SelectedTheme?.Preference ?? ThemePreference.System;

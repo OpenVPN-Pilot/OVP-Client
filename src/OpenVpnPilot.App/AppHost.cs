@@ -203,6 +203,7 @@ internal static class AppHost
         services.AddSingleton<IAutoStartManager, LaunchAgentAutoStartManager>();
         services.AddSingleton<IGlobalHotkeyService, MacGlobalHotkeyService>();
         services.AddSingleton<ISystemTrayIcon, MacStatusItem>();
+        services.AddSingleton<IDockPresence, MacDockPresence>();
         services.AddSingleton<IApplicationActivation, MacApplicationActivation>();
 
         // Without this the application menu was never filled and kept the framework's entry about
