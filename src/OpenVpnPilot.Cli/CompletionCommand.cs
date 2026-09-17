@@ -54,9 +54,23 @@ internal static class CompletionCommand
 
     private static int Print(string script)
     {
-        Console.WriteLine(script);
+        Console.Out.Write(ForShell(script));
+        Console.Out.Write('\n');
         return 0;
     }
+
+    /// <summary>
+    /// The script with the line endings the shell that reads it can read.
+    /// </summary>
+    /// <remarks>
+    /// The scripts below are literals in a source file, and a source file carries whatever line
+    /// endings it was checked out with. A carriage return is not whitespace to a Unix shell: zsh
+    /// reads the one after <c>case "${words[2]}" in</c> as part of the word and refuses the whole
+    /// script with a parse error, on every new shell, which is a completion that silently never
+    /// works. Measured against a working tree checked out with carriage returns.
+    /// </remarks>
+    private static string ForShell(string script) =>
+        script.Replace("\r\n", "\n", StringComparison.Ordinal);
 
     /// <summary>
     /// Writes the script beside the application data and points the shell profiles at it.
@@ -68,7 +82,7 @@ internal static class CompletionCommand
         string sourceLineFormat)
     {
         string scriptPath = Path.Combine(StoreFactory.Paths.DataDirectory, fileName);
-        File.WriteAllText(scriptPath, script + Environment.NewLine);
+        File.WriteAllText(scriptPath, ForShell(script) + "\n");
 
         Console.WriteLine($"Wrote the completion script to {scriptPath}.");
 

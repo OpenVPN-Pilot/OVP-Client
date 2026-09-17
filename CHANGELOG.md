@@ -8,6 +8,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged. A release tag is `v<version>`, for example `v1.2.0`.
 
+## [Unreleased]
+
+### Fixed
+
+- **The completion script the command writes is readable by the shell it is for.** It carried
+  carriage returns, because the script is a literal in a source file and a source file carries
+  whatever it was checked out with. A carriage return is not whitespace to a Unix shell: zsh read
+  the one after `case "${words[2]}" in` as part of the word and refused the whole script, on every
+  new shell, so completion silently never worked. Reinstall it with `ovp completion zsh --install`.
+
 ## [1.9.0] - 2026-09-17
 
 ### Added
