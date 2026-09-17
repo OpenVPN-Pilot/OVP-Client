@@ -3,15 +3,15 @@ using System.Text.RegularExpressions;
 namespace OpenVpnPilot.Platform.MacOS.Tests.Client;
 
 /// <summary>
-/// Holds the two places that decide what the application starts as to the same answer.
+/// Holds the two places that keep this application out of the Dock to the same answer.
 /// </summary>
 /// <remarks>
-/// A window is what puts this application in the Dock, and launching must not. That takes both the
-/// bundle declaring an accessory application and the application builder leaving Avalonia's own Dock
-/// presence off, because the bundle decides what the process starts as and Avalonia sets the policy
-/// again while it starts. Either one alone leaves the application regular for a moment, and a moment
-/// is enough: measured on macOS 26, a copy started with its window hidden was entered in the Dock's
-/// list of recent applications and left a tile there that outlived the process.
+/// This application lives in the menu bar and never joins the Dock, because macOS enters an
+/// application that is in the Dock in its list of recent applications and that entry outlives the
+/// window, the quitting and the process. It takes both the bundle declaring an accessory application
+/// and the application builder leaving Avalonia's own Dock presence off: the bundle decides what the
+/// process starts as, and Avalonia sets the policy again while it starts. Either one alone leaves the
+/// application regular for a moment, and a moment is enough to be entered.
 ///
 /// Both are read as text, because neither the shell script nor the application's entry point is
 /// something these tests compile against. Nothing else notices when one of them goes: the

@@ -108,7 +108,7 @@ public partial class App : Application
         if (InstanceGuard is not null)
         {
             InstanceGuard.ActivationRequested += (_, _) =>
-                Dispatcher.UIThread.Post(() => WindowCoordinator.Reveal(window));
+                Dispatcher.UIThread.Post(() => windows!.Reveal(window));
 
             // The companion command drives the tunnels this copy owns rather than starting its own.
             RemoteCommandHandler remote = host.Services.GetRequiredService<RemoteCommandHandler>();
@@ -162,7 +162,7 @@ public partial class App : Application
             services.GetRequiredService<NotificationService>().ProfileActivated += (_, profileId) =>
                 Dispatcher.UIThread.Post(() =>
                 {
-                    WindowCoordinator.Reveal(window);
+                    windows!.Reveal(window);
                     viewModel.SelectProfile(profileId);
                 });
         }
@@ -177,7 +177,7 @@ public partial class App : Application
         {
             TrayIconController tray = services.GetRequiredService<TrayIconController>();
             tray.Attach();
-            tray.ShowWindowRequested += (_, _) => WindowCoordinator.Reveal(window);
+            tray.ShowWindowRequested += (_, _) => windows!.Reveal(window);
             tray.MenuActionRequested += (_, action) => windows!.HandleTrayAction(action, desktop);
         }
 
@@ -240,7 +240,7 @@ public partial class App : Application
                     break;
 
                 case { Kind: ActivationKind.Reopen }:
-                    Dispatcher.UIThread.Post(() => WindowCoordinator.Reveal(window));
+                    Dispatcher.UIThread.Post(() => windows!.Reveal(window));
                     break;
 
                 default:

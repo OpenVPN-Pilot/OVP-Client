@@ -29,14 +29,19 @@ public sealed class WindowCoordinator
     private readonly Dictionary<AppScreen, Window> open = [];
 
     /// <summary>
-    /// The platform's list of running applications, on a platform that keeps one apart from windows.
-    /// </summary>
-    private readonly IDockPresence? dock;
-
-    /// <summary>
     /// Who asked the main window to close, on a platform where another program can.
     /// </summary>
     private readonly IWindowCloseOrigin? closeOrigin;
+
+    /// <summary>
+    /// What brings the application to the front, on a platform where a window does not.
+    /// </summary>
+    private readonly IApplicationActivation? activation;
+
+    /// <summary>
+    /// The platform's own panel about the application, where there is one.
+    /// </summary>
+    private readonly IApplicationMenu? applicationMenu;
     private readonly List<string> pendingImports = [];
     private bool importQueued;
 
@@ -56,8 +61,9 @@ public sealed class WindowCoordinator
         // Read once, because the window is also closed while the application is tearing down and
         // the container that answers this is one of the things being disposed.
         settings = services.GetRequiredService<ISettingsService>();
-        dock = services.GetService<IDockPresence>();
         closeOrigin = services.GetService<IWindowCloseOrigin>();
+        activation = services.GetService<IApplicationActivation>();
+        applicationMenu = services.GetService<IApplicationMenu>();
 
         this.mainWindow = mainWindow;
         this.viewModel = viewModel;
@@ -120,46 +126,6 @@ public sealed class WindowCoordinator
                     break;
             }
         };
-
-        mainWindow.PropertyChanged += (_, args) =>
-        {
-            if (args.Property == Visual.IsVisibleProperty)
-            {
-                UpdateDockPresence();
-            }
-        };
-
-        // Once at the start as well, for a copy that starts with its window hidden and so never
-        // reports the window changing.
-        UpdateDockPresence();
-    }
-
-    /// <summary>
-    /// Lists the application among the running ones while a window of its own is open.
-    /// </summary>
-    /// <remarks>
-    /// The palettes do not count. They are there for a moment, over whatever else is in front, and an
-    /// icon that appears and vanishes with each of them would be noise.
-    ///
-    /// Posted rather than applied at once. The first call comes before the platform has finished
-    /// launching the application, and launching sets the same thing again from its own options,
-    /// which would undo a decision made earlier than that.
-    /// </remarks>
-    private void UpdateDockPresence()
-    {
-        if (dock is null)
-        {
-            return;
-        }
-
-        Dispatcher.UIThread.Post(() =>
-        {
-            bool anyWindow = mainWindow.IsVisible
-                || open.Any(entry => entry.Key is not (AppScreen.QuickSwitcher or AppScreen.QuickDisconnect)
-                    && entry.Value.IsVisible);
-
-            dock.SetListed(anyWindow);
-        });
     }
 
     /// <summary>
@@ -229,12 +195,21 @@ public sealed class WindowCoordinator
     /// <summary>
     /// Brings a window forward from wherever it was, including from the tray.
     /// </summary>
-    public static void Reveal(Window window)
+    /// <remarks>
+    /// Activating the window is not enough everywhere. An application that lives in the menu bar and
+    /// is not in the Dock is not made the front application by showing a window of its own, so on
+    /// macOS the window appeared behind whatever was in front and did not take the keyboard. The
+    /// application is brought forward first, and the window then activates within it.
+    /// </remarks>
+    public void Reveal(Window window)
     {
         ArgumentNullException.ThrowIfNull(window);
 
         window.Show();
         window.WindowState = WindowState.Normal;
+
+        activation?.BringToFront();
+
         window.Activate();
     }
 
@@ -259,6 +234,10 @@ public sealed class WindowCoordinator
 
             case TrayIconController.DisconnectAllAction:
                 viewModel.DisconnectAllCommand.Execute(null);
+                break;
+
+            case TrayIconController.AboutAction:
+                applicationMenu?.ShowAbout();
                 break;
 
             case TrayIconController.QuitAction:
@@ -346,11 +325,7 @@ public sealed class WindowCoordinator
         }
 
         open[screen] = window;
-        window.Closed += (_, _) =>
-        {
-            open.Remove(screen);
-            UpdateDockPresence();
-        };
+        window.Closed += (_, _) => open.Remove(screen);
 
         if (screen is AppScreen.QuickSwitcher or AppScreen.QuickDisconnect || !mainWindow.IsVisible)
         {
@@ -360,8 +335,6 @@ public sealed class WindowCoordinator
         {
             window.Show(mainWindow);
         }
-
-        UpdateDockPresence();
     }
 
     private Window? Create(AppScreen screen) => screen switch

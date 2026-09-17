@@ -7,7 +7,6 @@
   "strings": {
     "app": {
       "name": "OpenVPN Pilot",
-      "menuAbout": "About OpenVPN Pilot",
       "menuSettings": "Settings…"
     },
     "common": {
@@ -145,7 +144,8 @@
       "tooltipIdle": "OpenVPN Pilot",
       "tooltipActive": "OpenVPN Pilot - {0} connection(s) active",
       "quickSwitcher": "Quick switcher",
-      "settings": "Settings"
+      "settings": "Settings",
+      "about": "About OpenVPN Pilot"
     },
     "switcher": {
       "placeholder": "Type to search profiles",

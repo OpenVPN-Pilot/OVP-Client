@@ -418,28 +418,39 @@ the Mac: reading it as one cost an afternoon.
 not exist even once notifications are working, so its absence means nothing and it is not worth
 reading.
 
-### What puts the application in the Dock, and what cannot be taken back
+### The Dock keeps what it has been shown, so it is never shown anything
 
 The activation policy is the whole of the Dock icon and the menu bar: a regular application has both,
-an accessory one has neither and can still show windows and a status item. `MacDockPresence` switches
-between them, and that switch works in both directions. Measured on macOS 26 with the Dock's recent
-applications turned off: a copy running as an accessory application, window hidden, has no tile at
-all, and a tile a window created disappears when the policy goes back to accessory.
+an accessory one has neither and can still show windows, a status item and the keyboard. Switching
+between them at runtime works in both directions, measured on macOS 26 with the Dock's recent
+applications turned off: a tile a window created disappears again when the policy goes back to
+accessory.
 
-What does not come back is the entry macOS writes into the Dock's list of recent applications, and a
-regular application is entered there the moment it launches, window or not. Measured: started with
-`--headless`, so that no window was ever shown, the application was in that list and a tile stayed in
-the Dock after the process had gone. An accessory application that never shows a window is not
-entered at all.
+That is not enough, because a tile is not the only thing a Dock entry can be. macOS enters a regular
+application in the Dock's list of recent applications, and that entry outlives the window, the
+quitting and the process. Nothing the application does removes it, and it is what a person sees as an
+icon that has wedged itself into the Dock. Measured three ways: started with `--headless`, so that no
+window was ever shown, a regular application was entered; an accessory application promoted to
+regular for a window was entered; an accessory application that never becomes regular was not entered
+at all.
 
-Two things therefore have to agree, and either alone is not enough. The bundle declares `LSUIElement`,
-so the process starts as an accessory application, and the application builder passes
-`MacOSPlatformOptions { ShowInDock = false }`, because Avalonia asks for a regular application while
-it starts and that moment is enough to be entered. `DockPresenceTests` holds the two together.
+The application therefore never becomes regular. The bundle declares `LSUIElement` and the
+application builder passes `MacOSPlatformOptions { ShowInDock = false }`, and either alone is not
+enough, because the bundle decides what the process starts as and Avalonia sets the policy again
+while it starts. `DockPresenceTests` holds the two together.
 
-Once a window has been shown the entry is made, and that is as it should be: an application with a
-window in the Dock is an application the Dock may remember. Turning it off is the Dock's own switch,
-under System Settings, Desktop & Dock.
+What that costs, and what it does not:
+
+- **There is no menu bar of its own**, so the panel about the application is offered by the menu bar
+  entry instead. A menu's key equivalents are answered whether or not the menu is shown, measured:
+  command and comma opens the settings from `ApplicationMenuController`'s entry, command and Q quits
+  from the platform's own, and command A, C and V edit a text field.
+- **A window does not bring the application forward.** Showing and activating a window is enough on
+  Windows; on macOS which application is in front is a decision of its own, and one that is not in
+  the Dock is never made the front one by the system. `IApplicationActivation` is that step, and
+  without it a window opened from the menu bar appeared behind what was in front and took no
+  keystrokes. `activateIgnoringOtherApps:` does the job for an accessory application on macOS 26,
+  measured against a probe that compared it with `activate` and `activate(from:)`.
 
 ### A Unix socket path is short
 

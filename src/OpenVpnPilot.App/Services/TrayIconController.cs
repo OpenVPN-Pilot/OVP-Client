@@ -22,17 +22,30 @@ public sealed class TrayIconController : IDisposable
     public const string QuickSwitcherAction = "switcher";
     public const string SettingsAction = "settings";
     public const string DisconnectAllAction = "disconnect-all";
+    public const string AboutAction = "about";
     public const string QuitAction = "quit";
 
     private readonly ISystemTrayIcon tray;
     private readonly ConnectionManager connections;
     private readonly ILocalizer localizer;
+
+    /// <summary>
+    /// The platform's own panel about the application, where there is one.
+    /// </summary>
+    /// <remarks>
+    /// On macOS this entry is the only way to that panel. The application menu that would otherwise
+    /// carry it is never shown, because an application that stays out of the Dock has no menu bar of
+    /// its own. A platform without such a panel does not offer the entry.
+    /// </remarks>
+    private readonly IApplicationMenu? applicationMenu;
+
     private bool disposed;
 
     public TrayIconController(
         ISystemTrayIcon tray,
         ConnectionManager connections,
-        ILocalizer localizer)
+        ILocalizer localizer,
+        IApplicationMenu? applicationMenu = null)
     {
         ArgumentNullException.ThrowIfNull(tray);
         ArgumentNullException.ThrowIfNull(connections);
@@ -41,6 +54,7 @@ public sealed class TrayIconController : IDisposable
         this.tray = tray;
         this.connections = connections;
         this.localizer = localizer;
+        this.applicationMenu = applicationMenu;
     }
 
     /// <summary>
@@ -107,7 +121,7 @@ public sealed class TrayIconController : IDisposable
     {
         bool anyActive = connections.ActiveCount > 0;
 
-        tray.SetMenu(
+        List<TrayMenuEntry> entries =
         [
             new TrayMenuEntry(ShowWindowAction, localizer["tray.show"]),
             new TrayMenuEntry(QuickSwitcherAction, localizer["tray.quickSwitcher"]),
@@ -115,8 +129,16 @@ public sealed class TrayIconController : IDisposable
             new TrayMenuEntry(DisconnectAllAction, localizer["tray.disconnectAll"], anyActive),
             TrayMenuEntry.Separator,
             new TrayMenuEntry(SettingsAction, localizer["tray.settings"]),
-            new TrayMenuEntry(QuitAction, localizer["tray.quit"]),
-        ]);
+        ];
+
+        if (applicationMenu is not null)
+        {
+            entries.Add(new TrayMenuEntry(AboutAction, localizer["tray.about"]));
+        }
+
+        entries.Add(new TrayMenuEntry(QuitAction, localizer["tray.quit"]));
+
+        tray.SetMenu(entries);
     }
 
     public void Dispose()

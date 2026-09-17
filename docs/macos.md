@@ -141,20 +141,21 @@ every application you will ever download.
 
 ## The menu bar and the Dock
 
-The application lives in the menu bar. It starts as an accessory application, which macOS gives
-neither a Dock icon nor a menu bar of its own, and a window is what puts it in the Dock; with the
-window closed it leaves the Dock again, the way it leaves the taskbar on Windows, and the tunnels
-keep running. The menu bar entry is the way back to the window, and showing the window puts the Dock
-icon back. Closing the window quits instead when the general settings say so.
+The application lives in the menu bar and nowhere else. It is an accessory application, which macOS
+gives neither a Dock icon nor a menu bar of its own, and it stays one whether its window is open or
+closed. Closing the window keeps the tunnels running, the menu bar entry is the way back to it, and
+closing quits instead when the general settings say so.
 
-Started hidden, at login or with `--headless`, it therefore never reaches the Dock at all. Once a
-window has been open, macOS lists the application among the recent ones in the Dock and leaves a tile
-there after it has quit. That list belongs to the Dock and not to this application: **System
-Settings**, **Desktop & Dock**, **Show Suggested and Recent Apps in Dock** is the switch for it.
+Staying out of the Dock is a decision and it has a price. An application that is in the Dock while
+its window is open is also entered in the Dock's list of recent applications, and that entry outlives
+the window, the quitting and the process: the list belongs to the Dock, and nothing the application
+does takes it out again. Not being there at all is the only way to leave the Dock alone.
 
-The menu named after the application carries **About OpenVPN Pilot**, which is macOS's own panel
-with the version and copyright from the bundle, and **Settings** under command and comma, followed by
-the entries every Mac application has for hiding it and quitting.
+What goes with the Dock icon is the menu bar named after the application. **About OpenVPN Pilot**,
+macOS's own panel with the version and copyright from the bundle, is therefore in the menu bar
+entry's menu, beside the settings and quitting. The shortcuts are unaffected, because macOS answers a
+menu's key equivalents whether or not the menu is shown: command and comma opens the settings,
+command and Q quits, and editing a text field works as it does everywhere.
 
 ## Notifications
 

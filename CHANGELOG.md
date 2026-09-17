@@ -12,16 +12,18 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
 
 ### Fixed
 
-- **The application no longer leaves itself in the Dock on macOS.** It takes its Dock icon away with
-  its window, and always did, but it launched as a regular application, and macOS enters one in the
-  Dock's list of recent applications the moment it launches, whether or not a window is ever shown.
-  The tile that left behind outlived the process. It now starts as an accessory application, so
-  starting it hidden or at login does not reach the Dock at all, and a window is the only thing that
-  puts it there. What the Dock remembers about an application whose window has been open is the
-  Dock's own, under System Settings, Desktop & Dock.
+- **The application no longer leaves itself in the Dock on macOS.** It took its Dock icon away with
+  its window and always did, but macOS enters an application that is in the Dock in its list of
+  recent applications, and that entry outlives the window, the quitting and the process; nothing the
+  application can do removes it. It now stays out of the Dock altogether, window open or not, and
+  lives in the menu bar as it says it does.
 
 ### Changed
 
+- **About OpenVPN Pilot** moved to the menu bar entry's menu. It was in the menu named after the
+  application, and an application that is not in the Dock has no such menu; the shortcuts it also
+  carried are unaffected, because macOS answers a menu's key equivalents whether the menu is shown
+  or not.
 - The profile editor setting reads as a choice rather than as a sentence broken in two. **View when
   opened** is followed by **Form** and **Plain configuration**, where **Opens with** was followed by
   **The form** and **The plain configuration**.

@@ -163,11 +163,11 @@ internal sealed class Program
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
 
-            // Started out of the Dock on macOS, and put there by a window rather than by launching.
-            // Avalonia asks for a regular application while it starts, which is what IDockPresence
-            // then undoes, and the moment in between is enough: measured on macOS 26, a copy started
-            // with its window hidden was entered in the Dock's list of recent applications and left a
-            // tile behind that outlived the process. Ignored on every other platform.
+            // Never in the Dock on macOS: this application lives in the menu bar, and a window of
+            // its own does not change that. Avalonia would otherwise ask for a regular application
+            // while it starts, and a moment of that is enough to be entered in the Dock's list of
+            // recent applications, which leaves a tile there that outlives the process. Ignored on
+            // every other platform.
             .With(new MacOSPlatformOptions { ShowInDock = false })
 #if DEBUG
             .WithDeveloperTools()

@@ -453,17 +453,15 @@ write_information_plist() {
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <!--
-        Launched as an accessory application, so the Dock is only ever touched by a window. The
-        application takes itself out of the Dock while it has none, which works: with the Dock's
-        recent applications turned off, a copy started hidden shows no tile at all. What it cannot
-        undo is the entry macOS writes into that list of recent applications, and a regular
-        application is entered there the moment it launches, window or not. Measured on macOS 26: a
-        copy started with the window hidden left a tile in the Dock that outlived the process,
-        which is what an application meant to live in the menu bar must not do. An accessory one
-        that never shows a window is not entered at all.
+        An accessory application: one that lives in the menu bar, with no Dock icon and no menu bar
+        of its own, and it stays one whether a window is open or not. A regular application is
+        entered in the Dock's list of recent applications, and that entry outlives the window, the
+        quitting and the process; nothing the application does removes it again. Measured on
+        macOS 26, including a copy started with the window hidden, which never showed one and was
+        entered all the same.
 
-        The window is what promotes it back to regular, in MacDockPresence, and that is also what
-        gives it its menu bar.
+        This is half of it. Avalonia asks for a regular application while it starts, so the
+        application builder passes MacOSPlatformOptions with ShowInDock off as well.
     -->
     <key>LSUIElement</key>
     <true/>
