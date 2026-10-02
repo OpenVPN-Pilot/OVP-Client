@@ -17,11 +17,13 @@ public interface IChangeRecorder
     /// <summary>
     /// Adds a marker to the caller's unit of work, which the caller then saves.
     /// </summary>
+    /// <param name="configurationChanged">For a profile update: the configuration was edited.</param>
     public Task StageAsync(
         PilotDbContext context,
         PendingChangeKind kind,
         Guid? entityId = null,
         string? realm = null,
+        bool configurationChanged = false,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -61,9 +63,10 @@ public sealed class ChangeRecorder : IChangeRecorder
         PendingChangeKind kind,
         Guid? entityId = null,
         string? realm = null,
+        bool configurationChanged = false,
         CancellationToken cancellationToken = default) =>
         mode.IsServerMode
-            ? outbox.StageAsync(context, kind, entityId, realm, cancellationToken)
+            ? outbox.StageAsync(context, kind, entityId, realm, configurationChanged, cancellationToken)
             : Task.CompletedTask;
 
     public Task RecordAsync(

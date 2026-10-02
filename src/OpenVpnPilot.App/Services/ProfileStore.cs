@@ -396,12 +396,15 @@ public sealed class ProfileStore : IProfileStore
             return new ConfigurationUpdate(false, null);
         }
 
+        // The text, not the hash: a pulled profile carries the hash the server computed its own way.
+        bool edited = !string.Equals(profile.Configuration, configuration, StringComparison.Ordinal);
+
         // Read the way an import reads it, so an edited profile looks in the list exactly as the
         // same file imported fresh would.
         ProfileConfigurationFacts.Apply(profile, configuration);
         profile.UpdatedAt = timeProvider.GetUtcNow();
 
-        await StageUpdateAsync(context, profileId, cancellationToken);
+        await StageUpdateAsync(context, profileId, cancellationToken, configurationChanged: edited);
         await context.SaveChangesAsync(cancellationToken);
 
         return new ConfigurationUpdate(true, null);
@@ -510,8 +513,17 @@ public sealed class ProfileStore : IProfileStore
             .ExecuteDeleteAsync(cancellationToken);
     }
 
-    private Task StageUpdateAsync(PilotDbContext context, Guid profileId, CancellationToken cancellationToken) =>
-        changeRecorder.StageAsync(context, PendingChangeKind.ProfileUpdate, profileId, cancellationToken: cancellationToken);
+    private Task StageUpdateAsync(
+        PilotDbContext context,
+        Guid profileId,
+        CancellationToken cancellationToken,
+        bool configurationChanged = false) =>
+        changeRecorder.StageAsync(
+            context,
+            PendingChangeKind.ProfileUpdate,
+            profileId,
+            configurationChanged: configurationChanged,
+            cancellationToken: cancellationToken);
 
     private sealed record TagLink(Guid ProfileId, string Name);
 }

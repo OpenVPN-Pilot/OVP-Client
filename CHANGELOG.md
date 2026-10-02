@@ -35,9 +35,10 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   and settings. It runs at start, every two minutes, two seconds after a local change, when the
   network comes back and on request, and while the server cannot be reached it works from the copy
   and tries again after 5, 15, 30 and then every 60 seconds. Changes are sent as they are: a profile
-  someone else changed meanwhile is overwritten. A change the server refuses for good is dropped and
-  counted; one it cannot take now waits. Connection history, the last connection and the number of
-  connections never leave the machine.
+  someone else changed meanwhile is overwritten, except for its configuration, which is sent only
+  when it was edited here, so a rename does not undo an edit made on the server. A change the
+  server refuses for good is dropped and counted; one it cannot take now waits. Connection history,
+  the last connection and the number of connections never leave the machine.
 - **Signing in to a server**, in whichever way the server asks: a user name alone, a user name and
   a password for the user file and the directory, or the Microsoft sign in in the system browser
   for Entra ID. A wrong password, an account outside the allowed group, an unreachable directory,

@@ -27,6 +27,15 @@ public sealed class PendingChange
     /// </summary>
     public string? Realm { get; set; }
 
+    /// <summary>
+    /// True when a profile update includes an edit of the configuration made here.
+    /// </summary>
+    /// <remarks>
+    /// The update sends the configuration only then. Whether the server's copy differs says nothing
+    /// about who changed it, and an administrator's edit there must not be reset by a rename here.
+    /// </remarks>
+    public bool ConfigurationChanged { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     /// <summary>

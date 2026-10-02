@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using OpenVpnPilot.App.Services;
 using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Server.Contracts;
@@ -229,15 +230,37 @@ public sealed class SyncEnginePushTests : IAsyncLifetime
         await AddServerProfileAsync(ServerProfile, "example-site", Configuration);
         const string Edited = Configuration + "verb 4\n";
 
-        await harness.ChangeAsync(async context =>
-            ProfileConfigurationFacts.Apply(await context.Profiles.SingleAsync(profile => profile.Id == ServerProfile), Edited));
-        await harness.Outbox.RecordAsync(PendingChangeKind.ProfileUpdate, ServerProfile);
+        await Store().UpdateConfigurationAsync(ServerProfile, Edited);
+        await Store().RenameProfileAsync(ServerProfile, "example-site-renamed");
 
         await harness.Engine.SynchronizeAsync(CancellationToken.None);
 
         SentRequest put = Assert.Single(harness.Sent(HttpMethod.Put, $"/api/v1/profiles/{ServerProfile:D}"));
         Assert.Equal(Edited, put.Json.GetProperty("configuration").GetString());
         Assert.Equal(Edited, harness.Server.Configurations[ServerProfile]);
+        Assert.Equal(0, harness.Count(HttpMethod.Get, $"/api/v1/profiles/{ServerProfile:D}"));
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_OnlyTheNameChangedHereAndTheServerChangedTheConfiguration_KeepsTheServers()
+    {
+        UseDeltas();
+        await AddServerProfileAsync(ServerProfile, "example-site", Configuration);
+        const string AdministratorsEdit = Configuration + "verb 5\n";
+        harness.Server.Configurations[ServerProfile] = AdministratorsEdit;
+
+        await Store().RenameProfileAsync(ServerProfile, "example-site-renamed");
+
+        await harness.Engine.SynchronizeAsync(CancellationToken.None);
+
+        SentRequest put = Assert.Single(harness.Sent(HttpMethod.Put, $"/api/v1/profiles/{ServerProfile:D}"));
+        Assert.Equal("*", put.Header("If-Match"));
+        Assert.Equal(JsonValueKind.Null, put.Json.GetProperty("configuration").ValueKind);
+        Assert.Equal("example-site-renamed", put.Json.GetProperty("name").GetString());
+        Assert.Equal(AdministratorsEdit, harness.Server.Configurations[ServerProfile]);
+
+        // The server's answer carries its hash, and the copy takes the configuration it names.
+        Assert.Equal(AdministratorsEdit, (await harness.ProfileAsync(ServerProfile))!.Configuration);
     }
 
     [Theory]
@@ -494,6 +517,12 @@ public sealed class SyncEnginePushTests : IAsyncLifetime
     /// </summary>
     private void UseDeltas() =>
         harness.Server.Changes = since => SyncServer.Feed(false, 1, profiles: harness.Server.Held());
+
+    /// <summary>
+    /// The store the editor writes through, recording into the harness's outbox.
+    /// </summary>
+    private ProfileStore Store() =>
+        new(harness.Database.Factory, TimeProvider.System, new ChangeRecorder(harness.Outbox, new FixedStorageMode(true)));
 
     private async Task AddServerProfileAsync(Guid id, string name, string configuration)
     {

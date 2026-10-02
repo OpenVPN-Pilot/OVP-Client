@@ -368,12 +368,18 @@ public sealed class ServerProfileMaintenance : IServerProfileMaintenance
 
         foreach (PendingChange marker in markers.Where(change => change.EntityId == temporaryId))
         {
-            bool covered = marker.Kind == PendingChangeKind.ProfileCreate || markers.Any(other =>
+            PendingChange? same = markers.FirstOrDefault(other =>
                 other.EntityId == serverId
                 && other.Kind == marker.Kind
                 && string.Equals(other.Realm, marker.Realm, StringComparison.Ordinal));
 
-            if (covered)
+            if (same is not null)
+            {
+                // An edit of the configuration is still one when it is folded into another marker.
+                same.ConfigurationChanged |= marker.ConfigurationChanged;
+            }
+
+            if (marker.Kind == PendingChangeKind.ProfileCreate || same is not null)
             {
                 context.PendingChanges.Remove(marker);
             }

@@ -34,6 +34,33 @@ public sealed class OutboxTests : IAsyncLifetime
         Assert.Equal(profileId, marker.EntityId);
     }
 
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task StageAsync_ConfigurationEditedBeforeOrAfterARename_StaysOneUpdateThatSendsIt(bool first, bool second)
+    {
+        Guid profileId = Guid.NewGuid();
+
+        foreach (bool configurationChanged in new[] { first, second })
+        {
+            await using PilotDbContext context = await database.Factory.CreateDbContextAsync();
+            await outbox.StageAsync(context, PendingChangeKind.ProfileUpdate, profileId, configurationChanged: configurationChanged);
+            await context.SaveChangesAsync();
+        }
+
+        PendingChange marker = Assert.Single(await database.MarkersAsync());
+        Assert.True(marker.ConfigurationChanged);
+    }
+
+    [Fact]
+    public async Task StageAsync_ConfigurationFlagOnAnotherKind_IsRefused()
+    {
+        await using PilotDbContext context = await database.Factory.CreateDbContextAsync();
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            outbox.StageAsync(context, PendingChangeKind.ProfileCreate, Guid.NewGuid(), configurationChanged: true));
+    }
+
     [Fact]
     public async Task RecordAsync_UpdatesOfTwoProfiles_KeepsBoth()
     {

@@ -33,12 +33,17 @@ public interface IOutbox
     /// The caller's own save writes the marker together with the change it describes, so neither
     /// can exist without the other.
     /// </remarks>
+    /// <param name="configurationChanged">
+    /// For a profile update only: the change includes an edit of the configuration, which the update
+    /// then sends. It stays set on the marker whatever collapses into it later.
+    /// </param>
     /// <returns>True when the pending markers changed, false when the marker collapsed into them.</returns>
     public Task<bool> StageAsync(
         PilotDbContext context,
         PendingChangeKind kind,
         Guid? entityId = null,
         string? realm = null,
+        bool configurationChanged = false,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -125,13 +130,19 @@ public sealed class Outbox : IOutbox
         PendingChangeKind kind,
         Guid? entityId = null,
         string? realm = null,
+        bool configurationChanged = false,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
         Validate(kind, entityId, realm);
 
+        if (configurationChanged && kind != PendingChangeKind.ProfileUpdate)
+        {
+            throw new ArgumentException("Only a profile update says whether the configuration changed.", nameof(configurationChanged));
+        }
+
         List<PendingChange> pending = await LoadRelatedAsync(context, kind, entityId, cancellationToken);
-        bool changed = Collapse(context, pending, kind, entityId, realm);
+        bool changed = Collapse(context, pending, kind, entityId, realm, configurationChanged);
 
         if (changed)
         {
@@ -149,7 +160,7 @@ public sealed class Outbox : IOutbox
     {
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
-        if (await StageAsync(context, kind, entityId, realm, cancellationToken))
+        if (await StageAsync(context, kind, entityId, realm, cancellationToken: cancellationToken))
         {
             await context.SaveChangesAsync(cancellationToken);
         }
@@ -290,7 +301,8 @@ public sealed class Outbox : IOutbox
         List<PendingChange> pending,
         PendingChangeKind kind,
         Guid? entityId,
-        string? realm)
+        string? realm,
+        bool configurationChanged)
     {
         bool Has(PendingChangeKind wanted) => pending.Any(change => change.Kind == wanted);
 
@@ -306,10 +318,22 @@ public sealed class Outbox : IOutbox
 
             case PendingChangeKind.ProfileUpdate:
                 // A pending create already sends the latest state, and a deleted profile has none.
-                if (Has(PendingChangeKind.ProfileCreate) || Has(PendingChangeKind.ProfileUpdate)
-                    || Has(PendingChangeKind.ProfileDelete))
+                if (Has(PendingChangeKind.ProfileCreate) || Has(PendingChangeKind.ProfileDelete))
                 {
                     return false;
+                }
+
+                if (pending.FirstOrDefault(change => change.Kind == PendingChangeKind.ProfileUpdate) is { } update)
+                {
+                    // An edit of the configuration is never forgotten by a later rename.
+                    if (!configurationChanged || update.ConfigurationChanged)
+                    {
+                        return false;
+                    }
+
+                    update.ConfigurationChanged = true;
+                    OutboxLog.Recorded(logger, kind, entityId, realm);
+                    return true;
                 }
 
                 break;
@@ -374,6 +398,7 @@ public sealed class Outbox : IOutbox
             Kind = kind,
             EntityId = entityId,
             Realm = realm,
+            ConfigurationChanged = configurationChanged,
             CreatedAt = timeProvider.GetUtcNow(),
         });
 

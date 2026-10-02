@@ -185,8 +185,8 @@ internal sealed partial class OutboxPusher
     }
 
     /// <summary>
-    /// Sends a changed profile as it is now. The configuration goes only when it differs from the
-    /// server's, which a fresh read of the server's hash decides.
+    /// Sends a changed profile as it is now. The configuration goes only when it was edited here,
+    /// which the marker says; that the server's differs may just as well be somebody else's edit.
     /// </summary>
     private async Task<SyncStep> UpdateAsync(PendingChange marker, SyncCycle cycle, CancellationToken cancellationToken)
     {
@@ -197,14 +197,12 @@ internal sealed partial class OutboxPusher
             return await DropUnsendableAsync(marker, cancellationToken);
         }
 
-        ServerResult<ProfileResponse> current = await api.GetProfileAsync(profileId, cancellationToken);
-
-        if (!current.IsSuccess)
+        // Read after the snapshot, not with the marker: an edit saved in between then either is in
+        // the snapshot already or makes the profile differ from it, which sends the marker again.
+        if (await ReadConfigurationChangedAsync(marker.Id, cancellationToken) is not { } configurationChanged)
         {
-            return await FailedAsync(marker, current, cycle, cancellationToken);
+            return await DropUnsendableAsync(marker, cancellationToken);
         }
-
-        bool configurationChanged = !string.Equals(current.Value.ContentHash, snapshot.ContentHash, StringComparison.Ordinal);
 
         ServerResult<ProfileResponse> result = await api.UpdateProfileAsync(
             profileId,
@@ -258,7 +256,12 @@ internal sealed partial class OutboxPusher
         {
             // Coordinator's rule for an edit made while the upload was under way: it is not lost,
             // it is sent again as an update of the profile under its new id.
-            await outbox.StageAsync(context, PendingChangeKind.ProfileUpdate, profileId, cancellationToken: cancellationToken);
+            await outbox.StageAsync(
+                context,
+                PendingChangeKind.ProfileUpdate,
+                profileId,
+                configurationChanged: !string.Equals(profile.Configuration, sent.Configuration, StringComparison.Ordinal),
+                cancellationToken: cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
             cycle.FollowUp = true;
             SyncEngineLog.EditDuringUpload(logger, profileId);
@@ -287,6 +290,18 @@ internal sealed partial class OutboxPusher
             .FirstOrDefaultAsync(candidate => candidate.Id == profileId, cancellationToken);
 
         return profile is null ? null : ProfileSnapshot.Of(profile);
+    }
+
+    /// <returns>Null when the marker is gone, superseded by a deletion meanwhile.</returns>
+    private async Task<bool?> ReadConfigurationChangedAsync(long markerId, CancellationToken cancellationToken)
+    {
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        return await context.PendingChanges
+            .AsNoTracking()
+            .Where(change => change.Id == markerId)
+            .Select(change => (bool?)change.ConfigurationChanged)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     private static IEnumerable<List<Upload>> Chunk(List<Upload> uploads)
