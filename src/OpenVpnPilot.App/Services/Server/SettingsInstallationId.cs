@@ -20,18 +20,16 @@ public sealed class SettingsInstallationId : IInstallationIdProvider
         this.settings = settings;
     }
 
-    /// <exception cref="InvalidOperationException">
-    /// The settings carry no identity, which happens only while a file that exists could not be read.
-    /// Inventing one would introduce this installation to the server as a stranger, so nothing is sent.
-    /// </exception>
+    /// <summary>
+    /// False when the settings carry no identity, which happens only while a file that exists could
+    /// not be read.
+    /// </summary>
+    public bool IsAvailable => settings.Current.Installation.Id is { } id && id != Guid.Empty;
+
+    /// <exception cref="InvalidOperationException">There is none; ask <see cref="IsAvailable"/> first.</exception>
     public Guid InstallationId =>
         settings.Current.Installation.Id is { } id && id != Guid.Empty
             ? id
             : throw new InvalidOperationException(
                 "The settings carry no installation identity, so no server can be asked anything that needs one.");
-
-    /// <summary>
-    /// True when a call that needs the identity can be made.
-    /// </summary>
-    public bool IsAvailable => settings.Current.Installation.Id is { } id && id != Guid.Empty;
 }

@@ -306,6 +306,7 @@ public sealed partial class FirstSyncViewModel : ViewModelBase, IDisposable
         SyncState.ClientOutdated => localizer["signIn.clientOutdated"],
         SyncState.ClockWrong => localizer.Translate("signIn.clockSkew", snapshot.Detail ?? string.Empty),
         SyncState.CertificateUntrusted => localizer["signIn.certificateUntrusted"],
+        SyncState.SettingsUnreadable => localizer["signIn.identityUnavailable"],
         _ => localizer["firstRun.syncFailed"],
     };
 

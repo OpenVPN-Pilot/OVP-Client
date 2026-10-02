@@ -168,6 +168,7 @@ internal static class SyncFailures
         ServerOutcome.NotSignedIn => SyncState.SignInRequired,
         ServerOutcome.Wiped => SyncState.Idle,
         ServerOutcome.InvalidResponse => SyncState.Degraded,
+        ServerOutcome.IdentityUnavailable => SyncState.SettingsUnreadable,
         _ => result switch
         {
             { Code: ServerErrorCodes.ClientOutdated } or { Status: 426 } => SyncState.ClientOutdated,

@@ -79,6 +79,12 @@ public enum SyncState
 
     /// <summary>The server's certificate is not trusted by this machine.</summary>
     CertificateUntrusted,
+
+    /// <summary>
+    /// The settings could not be read at start, so there is no installation identity to send and
+    /// nothing is asked of the server until the application starts again.
+    /// </summary>
+    SettingsUnreadable,
 }
 
 /// <summary>

@@ -22,8 +22,25 @@ public interface IClientVersionProvider
 /// </remarks>
 public interface IInstallationIdProvider
 {
+    /// <summary>
+    /// False while there is no identity to send, which is asked before <see cref="InstallationId"/>.
+    /// </summary>
+    /// <remarks>
+    /// Inventing one would introduce this installation to the server as a stranger, so a call that
+    /// needs it is not made at all and answers <see cref="ServerOutcome.IdentityUnavailable"/>.
+    /// </remarks>
+    public bool IsAvailable { get; }
+
+    /// <exception cref="InvalidOperationException">There is none, see <see cref="IsAvailable"/>.</exception>
     public Guid InstallationId { get; }
 }
+
+/// <summary>
+/// Raised by <see cref="PilotHeadersHandler"/> for a call that needs the installation identity while
+/// there is none, and turned into <see cref="ServerOutcome.IdentityUnavailable"/> by the transport.
+/// </summary>
+internal sealed class InstallationIdentityUnavailableException()
+    : InvalidOperationException("There is no installation identity, so no call that needs one is made.");
 
 /// <summary>
 /// Reads the version from an assembly, to three parts.

@@ -50,6 +50,11 @@ public sealed class PilotHeadersHandler : DelegatingHandler
 
         if (request.RequestUri is { } uri && !IsAnonymous(baseAddress, uri))
         {
+            if (!installation.IsAvailable)
+            {
+                throw new InstallationIdentityUnavailableException();
+            }
+
             Set(request, PilotHeaders.ClientVersion, version.Version.ToString(3));
             Set(request, PilotHeaders.ApiVersion, PilotHeaders.CurrentApiVersion);
             Set(request, PilotHeaders.ClientId, installation.InstallationId.ToString("D"));

@@ -135,7 +135,8 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   setting the moment the lock was gone. Opening the file is now tried again for half a second; if it
   stays out of reach the defaults apply for that run only, nothing is written to the file until the
   next start, and no identity is created. A file that does not parse and cannot be moved aside is
-  left in place for the same reason.
+  left in place for the same reason. Working with a server, such a run asks the server nothing that
+  needs the identity, and the status bar and a banner say that the settings could not be read.
 
 ## [1.9.0] - 2026-09-17
 

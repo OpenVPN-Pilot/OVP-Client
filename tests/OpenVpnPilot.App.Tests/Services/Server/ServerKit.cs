@@ -136,7 +136,9 @@ internal sealed class TestConnection : IDisposable
 
     private sealed class FixedInstallation(Guid id) : IInstallationIdProvider
     {
-        public Guid InstallationId { get; } = id;
+        public bool IsAvailable => InstallationId != Guid.Empty;
+
+    public Guid InstallationId { get; } = id;
     }
 }
 

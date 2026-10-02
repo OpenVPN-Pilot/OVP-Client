@@ -252,6 +252,8 @@ internal sealed class FixedVersion(Version version) : IClientVersionProvider
 
 internal sealed class FixedInstallation(Guid id) : IInstallationIdProvider
 {
+    public bool IsAvailable => InstallationId != Guid.Empty;
+
     public Guid InstallationId { get; } = id;
 }
 

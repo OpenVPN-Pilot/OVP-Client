@@ -31,6 +31,7 @@ public static class ServerMessages
             ServerOutcome.Wiped => localizer["signIn.accountRevoked"],
             ServerOutcome.InvalidResponse => localizer["signIn.notPilotServer"],
             ServerOutcome.NotSignedIn => localizer["signIn.notSignedIn"],
+            ServerOutcome.IdentityUnavailable => localizer["signIn.identityUnavailable"],
             _ => Problem(localizer, result),
         };
     }

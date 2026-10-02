@@ -45,6 +45,12 @@ public enum ServerOutcome
     /// or an address that points at something else.
     /// </summary>
     InvalidResponse,
+
+    /// <summary>
+    /// This installation has no identity to send, because its settings could not be read, so nothing
+    /// was sent. Starting the application again reads them again.
+    /// </summary>
+    IdentityUnavailable,
 }
 
 /// <summary>

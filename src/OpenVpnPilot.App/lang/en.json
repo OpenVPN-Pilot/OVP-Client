@@ -586,6 +586,7 @@
       "clientOutdated": "update required",
       "clockWrong": "clock wrong",
       "certificateUntrusted": "certificate not trusted",
+      "settingsUnreadable": "settings unreadable, restart needed",
       "neverSynced": "not synced yet",
       "syncedJustNow": "synced just now",
       "syncedMinutes": "synced {0} min ago",
@@ -615,6 +616,8 @@
       "clockText": "The server refuses this computer's clock. Set the correct date and time. {0}",
       "certificateTitle": "Certificate not trusted",
       "certificateText": "This computer does not trust the certificate of {0}. That is a matter for the server's administrator: the server needs a certificate this computer trusts, or its authority has to be installed here. It cannot be skipped.",
+      "settingsTitle": "Settings could not be read",
+      "settingsText": "The settings file could not be read when the application started, so this computer cannot identify itself to the server. Nothing is synchronised until the application is started again.",
       "signIn": "Sign in",
       "getUpdate": "Get the update",
       "storageSettings": "Storage settings"
@@ -656,6 +659,7 @@
       "offline": "The server could not be reached. Check the address and the network connection.",
       "notPilotServer": "Something answers at this address, but it is not an OpenVPN Pilot Server.",
       "notSignedIn": "There is no sign in to continue with. Sign in again.",
+      "identityUnavailable": "The settings could not be read when the application started, so this computer cannot identify itself to the server. Start the application again.",
       "failedCode": "The server refused the sign in ({0}).",
       "failedStatus": "The server refused the sign in (status {0}).",
       "reference": "Request id: {0}"

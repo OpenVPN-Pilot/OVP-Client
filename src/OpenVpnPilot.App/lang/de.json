@@ -586,6 +586,7 @@
       "clientOutdated": "Update erforderlich",
       "clockWrong": "Uhr falsch",
       "certificateUntrusted": "Zertifikat nicht vertrauenswürdig",
+      "settingsUnreadable": "Einstellungen nicht lesbar, Neustart nötig",
       "neverSynced": "noch nicht synchronisiert",
       "syncedJustNow": "gerade synchronisiert",
       "syncedMinutes": "vor {0} Min. synchronisiert",
@@ -615,6 +616,8 @@
       "clockText": "Der Server lehnt die Uhrzeit dieses Computers ab. Stellen Sie Datum und Uhrzeit richtig ein. {0}",
       "certificateTitle": "Zertifikat nicht vertrauenswürdig",
       "certificateText": "Dieser Computer vertraut dem Zertifikat von {0} nicht. Das ist Sache des Serveradministrators: Der Server braucht ein Zertifikat, dem dieser Computer vertraut, oder seine Zertifizierungsstelle muss hier installiert werden. Es lässt sich nicht übergehen.",
+      "settingsTitle": "Einstellungen nicht lesbar",
+      "settingsText": "Die Einstellungsdatei konnte beim Start nicht gelesen werden, deshalb kann sich dieser Computer beim Server nicht ausweisen. Bis zum nächsten Start der Anwendung wird nichts synchronisiert.",
       "signIn": "Anmelden",
       "getUpdate": "Update holen",
       "storageSettings": "Speicherort-Einstellungen"
@@ -656,6 +659,7 @@
       "offline": "Der Server war nicht erreichbar. Prüfen Sie die Adresse und die Netzwerkverbindung.",
       "notPilotServer": "Unter dieser Adresse antwortet etwas, aber es ist kein OpenVPN Pilot Server.",
       "notSignedIn": "Es gibt keine Anmeldung, mit der es weitergehen kann. Melden Sie sich erneut an.",
+      "identityUnavailable": "Die Einstellungen konnten beim Start nicht gelesen werden, deshalb kann sich dieser Computer beim Server nicht ausweisen. Starten Sie die Anwendung neu.",
       "failedCode": "Der Server hat die Anmeldung abgelehnt ({0}).",
       "failedStatus": "Der Server hat die Anmeldung abgelehnt (Status {0}).",
       "reference": "Anfrage-ID: {0}"

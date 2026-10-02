@@ -199,6 +199,7 @@ public sealed partial class ServerStatusViewModel : ViewModelBase, IDisposable
             SyncState.ClientOutdated => (localizer["banner.clientOutdatedTitle"], localizer.Translate("banner.clientOutdatedText", snapshot.Host)),
             SyncState.ClockWrong => (localizer["banner.clockTitle"], localizer.Translate("banner.clockText", snapshot.Sync.Detail ?? string.Empty)),
             SyncState.CertificateUntrusted => (localizer["banner.certificateTitle"], localizer.Translate("banner.certificateText", snapshot.Host)),
+            SyncState.SettingsUnreadable => (localizer["banner.settingsTitle"], localizer["banner.settingsText"]),
             _ => null,
         };
 

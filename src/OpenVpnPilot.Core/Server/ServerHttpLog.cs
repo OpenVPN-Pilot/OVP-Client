@@ -101,4 +101,10 @@ internal static partial class ServerHttpLog
         Level = LogLevel.Debug,
         Message = "{Method} {Path} was not sent, because the server has told this client to wipe.")]
     public static partial void SuppressedAfterWipe(ILogger logger, string method, string path);
+
+    [LoggerMessage(
+        EventId = 3608,
+        Level = LogLevel.Warning,
+        Message = "{Method} {Path} was not sent, because the settings carry no installation identity.")]
+    public static partial void IdentityUnavailable(ILogger logger, string method, string path);
 }

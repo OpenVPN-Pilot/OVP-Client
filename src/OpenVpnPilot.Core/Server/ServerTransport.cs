@@ -165,6 +165,14 @@ internal sealed class ServerTransport
 
             return ServerResult.Failed<T>(ServerOutcome.Offline, requestId: requestId, detail: "No answer in time.");
         }
+        catch (InstallationIdentityUnavailableException)
+        {
+            ServerHttpLog.IdentityUnavailable(logger, method, path);
+
+            return ServerResult.Failed<T>(
+                ServerOutcome.IdentityUnavailable,
+                detail: "The settings carry no installation identity.");
+        }
         catch (HttpRequestException exception) when (IsTlsFailure(exception))
         {
             string? requestId = ServerHeaderValues.Of(message, PilotHeaders.RequestId);
