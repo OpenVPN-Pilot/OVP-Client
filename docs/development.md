@@ -48,7 +48,8 @@ dotnet build
 dotnet test
 ```
 
-The tests need no network, no OpenVPN and no server: the server client and the synchronisation run
+The tests need no network, no OpenVPN and no server (the ones that do are skipped without one, see
+[Against a real server](#against-a-real-server)): the server client and the synchronisation run
 against a scripted HTTP handler, databases are real SQLite files in a temporary folder, and
 `CompositionTests` builds the application's whole container in both storage modes, with every
 registration validated and created, so a service that cannot be composed fails a test rather than
@@ -200,6 +201,48 @@ docker compose -f lab/docker-compose.yml down -v
 ```
 
 That stops it and removes the certificate authority with it.
+
+## Against a real server
+
+`tests/OpenVpnPilot.Server.IntegrationTests` runs the client's own synchronisation against an
+OpenVPN Pilot Server: signing in as an administrator and as a user, uploading profiles created
+offline in one batch, a complete and then a partial synchronisation seen from a second machine,
+editing and marking favourites while the server is stopped and sending both once it is back, two
+machines sharing the same sign in, an account disabled by an administrator reaching its client as
+the wipe directive, and a cursor the server no longer knows. Without a server every one of them is
+reported as skipped, so `dotnet test` stays the same everywhere.
+
+The server is a checkout of its own repository, at `v1.0.0` or later, beside this one as
+`../OVP-Server`. `tests/OpenVpnPilot.Server.IntegrationTests/Stack` runs it apart from any other
+copy on the machine, with a project name, port, database, image tag, certificate and users of its
+own; the server checkout's `.env`, certificates and user file are never read. First, once:
+
+```bash
+dotnet run tests/OpenVpnPilot.Server.IntegrationTests/Stack/prepare.cs
+```
+
+That writes a certificate for `localhost` and an `.env` with a database password and keys generated
+on the spot, all of which git ignores. Then, from that folder:
+
+```bash
+docker compose up -d --build --wait
+```
+
+And the tests, with the address, the certificate the server presents, and the two containers:
+
+```bash
+OVP_TEST_SERVER_URL=https://localhost:18443/ \
+OVP_TEST_SERVER_CERT=tests/OpenVpnPilot.Server.IntegrationTests/Stack/certs/server.crt \
+OVP_TEST_API_CONTAINER=ovp-client-tests-api-1 \
+OVP_TEST_DATABASE_CONTAINER=ovp-client-tests-postgres-1 \
+dotnet test tests/OpenVpnPilot.Server.IntegrationTests
+```
+
+The certificate is the only one the tests accept, through a check that lives in the test project and
+nowhere else; the application itself has no way to trust a certificate the system does not. Without
+the container names the test that stops the server and the one that ages the cursor are skipped. The
+tests remove what they create and enable again the account they disable, so they can run any number
+of times against the same stack. `docker compose down -v` in that folder removes it.
 
 ## Contributing
 

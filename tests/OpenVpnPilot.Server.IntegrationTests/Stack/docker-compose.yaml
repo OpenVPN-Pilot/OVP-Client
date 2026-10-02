@@ -1,0 +1,47 @@
+# The server the integration tests run against, kept apart from any other stack on this machine: a
+# project name, port, database volume, image tag, certificate and user file of its own. Nothing here
+# reads or writes the server checkout's own .env, certs or config. How to run it is in
+# docs/development.md.
+
+name: ovp-client-tests
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ovp
+      POSTGRES_USER: ovp
+      POSTGRES_PASSWORD: ${OVP_DB_PASSWORD:?Run prepare.cs first, it writes .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ovp -d ovp"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ${OVP_SERVER_CHECKOUT:-../../../../OVP-Server}
+      dockerfile: docker/Dockerfile
+    image: openvpnpilot-server:client-tests
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      OVP_DB_HOST: postgres
+    healthcheck:
+      test: ["CMD", "dotnet", "OpenVpnPilot.Server.dll", "healthcheck"]
+      interval: 10s
+      timeout: 8s
+      start_period: 40s
+      retries: 3
+    ports:
+      - "${OVP_TEST_PORT:-18443}:8443"
+    volumes:
+      - ./certs:/app/certs:ro
+      - ./config:/app/config:ro
+
+volumes:
+  pgdata:
