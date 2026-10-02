@@ -370,6 +370,11 @@ internal sealed partial class OutboxPusher
         {
             if (SyncFailures.IsAdministratorKind(marker.Kind))
             {
+                if (marker.Kind == PendingChangeKind.ProfileCreate)
+                {
+                    cycle.Uploads[marker.EntityId!.Value] = new ProfileUploadOutcome(ProfileUploadKind.Rejected, Code: result.Code);
+                }
+
                 await outbox.DropAsync(marker.Id, cancellationToken);
                 dropped++;
             }

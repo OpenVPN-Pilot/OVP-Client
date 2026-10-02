@@ -101,6 +101,14 @@ internal sealed partial class OutboxPusher
             return SyncStep.Continue;
         }
 
+        if (SyncFailures.Classify(result) == FailureKind.Permanent)
+        {
+            cycle.Uploads[upload.Marker.EntityId!.Value] = new ProfileUploadOutcome(
+                ProfileUploadKind.Rejected,
+                Code: result.Code,
+                Detail: result.Problem?.Detail);
+        }
+
         return await FailedAsync(upload.Marker, result, cycle, cancellationToken);
     }
 
@@ -130,6 +138,7 @@ internal sealed partial class OutboxPusher
                     break;
 
                 default:
+                    cycle.Uploads[upload.Marker.EntityId!.Value] = new ProfileUploadOutcome(ProfileUploadKind.Rejected, Code: item.Code, Detail: item.Detail);
                     await outbox.DropAsync(upload.Marker.Id, cancellationToken);
                     cycle.Dropped++;
                     cycle.Note(result);
@@ -150,6 +159,7 @@ internal sealed partial class OutboxPusher
         ProfileRekeyOutcome outcome = await maintenance.RekeyAsync(temporaryId, created.Id, cancellationToken);
         cycle.Pushed++;
         cycle.Changes |= LibraryChanges.Profiles;
+        cycle.Uploads[temporaryId] = new ProfileUploadOutcome(ProfileUploadKind.Created, created.Id);
 
         if (outcome == ProfileRekeyOutcome.NotFound)
         {
@@ -170,6 +180,7 @@ internal sealed partial class OutboxPusher
         // The marker stays until the pull of this cycle has shown which profile it is, so a cycle
         // that cannot get that far simply asks again next time.
         cycle.Duplicates.Add(upload.Marker.EntityId!.Value);
+        cycle.Uploads[upload.Marker.EntityId!.Value] = new ProfileUploadOutcome(ProfileUploadKind.Duplicate);
         SyncEngineLog.UploadDuplicate(logger, upload.Marker.EntityId!.Value, requestId);
     }
 

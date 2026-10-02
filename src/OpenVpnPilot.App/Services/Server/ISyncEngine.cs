@@ -118,4 +118,31 @@ public sealed record SyncStatus(
 /// <param name="Pushed">Changes the server accepted.</param>
 /// <param name="Dropped">Changes the server refused for good.</param>
 /// <param name="Changed">True when the pull changed anything in the local copy.</param>
-public sealed record SyncCycleResult(bool Completed, SyncState State, int Pushed, int Dropped, bool Changed);
+public sealed record SyncCycleResult(bool Completed, SyncState State, int Pushed, int Dropped, bool Changed)
+{
+    /// <summary>
+    /// What became of each profile created here that the cycle uploaded, by the id it had before.
+    /// A profile the cycle did not get to is not in it.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, ProfileUploadOutcome> Uploads { get; init; } = new Dictionary<Guid, ProfileUploadOutcome>();
+}
+
+/// <summary>
+/// What the server made of one uploaded profile.
+/// </summary>
+public enum ProfileUploadKind
+{
+    /// <summary>The server created it; the profile now has the server's id.</summary>
+    Created,
+
+    /// <summary>The server already had the same configuration; the profile became the server's.</summary>
+    Duplicate,
+
+    /// <summary>The server refused it; the code and the detail say why.</summary>
+    Rejected,
+}
+
+/// <param name="ServerId">The server's id, when it was created.</param>
+/// <param name="Code">The problem code, when it was refused.</param>
+/// <param name="Detail">The server's own words about a refusal, for the person who imported it.</param>
+public sealed record ProfileUploadOutcome(ProfileUploadKind Kind, Guid? ServerId = null, string? Code = null, string? Detail = null);

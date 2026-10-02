@@ -185,7 +185,10 @@ public sealed partial class SyncEngine : ISyncEngine, IDisposable
             SyncEngineLog.CycleFailed(logger, Server, exception);
             notifier.Notify(cycle.Changes);
             await FinishAsync(cycle, SyncState.ChangesWaiting, pushed, completed: false, CancellationToken.None);
-            return new SyncCycleResult(false, SyncState.ChangesWaiting, cycle.Pushed, cycle.Dropped, cycle.Changes != LibraryChanges.None);
+            return new SyncCycleResult(false, SyncState.ChangesWaiting, cycle.Pushed, cycle.Dropped, cycle.Changes != LibraryChanges.None)
+            {
+                Uploads = cycle.Uploads,
+            };
         }
 
         notifier.Notify(cycle.Changes);
@@ -202,7 +205,10 @@ public sealed partial class SyncEngine : ISyncEngine, IDisposable
             RequestSync();
         }
 
-        return new SyncCycleResult(completed, state, cycle.Pushed, cycle.Dropped, cycle.Changes != LibraryChanges.None);
+        return new SyncCycleResult(completed, state, cycle.Pushed, cycle.Dropped, cycle.Changes != LibraryChanges.None)
+        {
+            Uploads = cycle.Uploads,
+        };
     }
 
     /// <summary>

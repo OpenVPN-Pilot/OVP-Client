@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.Data.Import;
 using OpenVpnPilot.Data.Packaging;
@@ -40,6 +41,11 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
     private ImportSelection? selection;
     private IReadOnlyList<ImportCandidate> candidates = [];
     private bool disposed;
+
+    /// <summary>
+    /// Set once profiles were stored and the wizard stayed open to show the server's answers.
+    /// </summary>
+    private bool committed;
 
     public ImportViewModel(
         IProfileImportService importer,
@@ -486,14 +492,19 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
             IReadOnlyList<string> tags = TagsInput
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-            int created = await importer.CommitAsync(candidates, tags);
-
-            StatusMessage = localizer.Translate("import.stored", created);
+            ImportCommitResult result = await importer.CommitAsync(candidates, tags);
 
             selection?.Dispose();
             selection = null;
 
-            Closed?.Invoke(this, true);
+            if (!result.WentToServer)
+            {
+                StatusMessage = localizer.Translate("import.stored", result.Created);
+                Closed?.Invoke(this, true);
+                return;
+            }
+
+            ShowUploads(result);
         }
         catch (DbUpdateException exception)
         {
@@ -505,6 +516,39 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
         {
             IsBusy = false;
         }
+    }
+
+    /// <summary>
+    /// Puts what the server made of each profile into the review list, which stays open so it can
+    /// be read; closing it then reloads the list.
+    /// </summary>
+    private void ShowUploads(ImportCommitResult result)
+    {
+        List<ImportRowViewModel> rows = [.. Rows.Select(row =>
+            result.Uploads.TryGetValue(row.SourcePath, out ImportUploadOutcome? upload) && row.IsImportable
+                ? new ImportRowViewModel(row.Candidate, localizer, upload)
+                : row)];
+
+        Rows.Clear();
+
+        foreach (ImportRowViewModel row in rows)
+        {
+            Rows.Add(row);
+        }
+
+        int Count(ProfileUploadKind kind) => result.Uploads.Values.Count(outcome => outcome.Upload?.Kind == kind);
+
+        StatusMessage = localizer.Translate(
+            "shared.import.summary",
+            Count(ProfileUploadKind.Created),
+            Count(ProfileUploadKind.Duplicate),
+            Count(ProfileUploadKind.Rejected),
+            result.Uploads.Values.Count(outcome => outcome.IsWaiting));
+
+        // Nothing is left to commit; what is listed has been stored or answered.
+        candidates = [];
+        ImportableCount = 0;
+        committed = true;
     }
 
     /// <summary>
@@ -576,7 +620,9 @@ public sealed partial class ImportViewModel : ViewModelBase, IDisposable
         selection?.Dispose();
         selection = null;
         ClosePackage();
-        Closed?.Invoke(this, false);
+
+        // After an upload whose answers were shown, closing is how the list learns about them.
+        Closed?.Invoke(this, committed);
     }
 
     public void Dispose()
@@ -652,15 +698,20 @@ public sealed class ImportRowViewModel
 {
     private readonly ImportCandidate candidate;
     private readonly ILocalizer localizer;
+    private readonly ImportUploadOutcome? upload;
 
-    public ImportRowViewModel(ImportCandidate candidate, ILocalizer localizer)
+    /// <param name="upload">What the server made of it, once a server's copy has stored it.</param>
+    public ImportRowViewModel(ImportCandidate candidate, ILocalizer localizer, ImportUploadOutcome? upload = null)
     {
         ArgumentNullException.ThrowIfNull(candidate);
         ArgumentNullException.ThrowIfNull(localizer);
 
         this.candidate = candidate;
         this.localizer = localizer;
+        this.upload = upload;
     }
+
+    public ImportCandidate Candidate => candidate;
 
     public string Name => candidate.SuggestedName;
 
@@ -670,7 +721,14 @@ public sealed class ImportRowViewModel
         ? $"{candidate.RemoteHost}:{candidate.RemotePort}/{candidate.Protocol}"
         : string.Empty;
 
-    public string OutcomeDisplay => localizer["import.outcome." + candidate.Outcome];
+    public string OutcomeDisplay => upload switch
+    {
+        null => localizer["import.outcome." + candidate.Outcome],
+        { Upload: null } => localizer["shared.import.waiting"],
+        { Upload.Kind: ProfileUploadKind.Created } => localizer["shared.import.created"],
+        { Upload.Kind: ProfileUploadKind.Duplicate } => localizer["shared.import.duplicate"],
+        _ => localizer["shared.import.rejected"],
+    };
 
     public bool IsImportable => candidate.Outcome == ImportOutcome.Importable;
 
@@ -687,6 +745,12 @@ public sealed class ImportRowViewModel
     private string? BuildDetail()
     {
         List<string> parts = [];
+
+        if (upload?.Upload is { Kind: ProfileUploadKind.Rejected } refused)
+        {
+            // The server's own words, which are what the administrator can act on, and its code.
+            parts.AddRange(new[] { refused.Detail, refused.Code }.OfType<string>().Where(part => part.Length > 0));
+        }
 
         if (candidate.Detail is { Length: > 0 })
         {

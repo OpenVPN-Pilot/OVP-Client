@@ -71,6 +71,11 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   to change, and is offered neither importing, deleting nor tagging. An administrator edits as on
   this computer, and can replace the sign in the server shares for a profile from the editor while
   the server can be reached. Deleting a server's profile removes its stored sign ins too.
+- **Importing into a server's copy uploads at once**, in batches of up to 500, and the review list
+  then says for every profile whether the server created it, already had it or refused it, with the
+  server's reason. A profile the server refused is not kept. While the server cannot be reached the
+  imported profiles are kept here and sent when it can. Applying a package works the same way, and
+  the sign ins it carries are offered to the server's vault.
 - **A sign in that was typed and worked is shared with the server**, so nobody else has to type it:
   once the tunnel is up, it is offered to the server's vault, which keeps the first one it is given;
   when somebody was quicker, theirs is taken here instead. Nothing is shared for a sign in read from
