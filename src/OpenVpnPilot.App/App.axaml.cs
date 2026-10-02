@@ -125,6 +125,11 @@ public partial class App : Application
             InstanceGuard.CommandHandler = remote.HandleAsync;
         }
 
+        // Switching between the local library and a server ends this copy once the next one has been
+        // started. The tunnels are already down, because switching is refused while one is up.
+        host.Services.GetRequiredService<IStorageModeSwitcher>().ShutdownRequested += (_, _) =>
+            Dispatcher.UIThread.Post(() => desktop.Shutdown());
+
         // Closing the application must not leave tunnels running unattended, and Exit is the only
         // event that reports every way out. Measured against Avalonia 12.1: ending the Windows
         // session raises ShutdownRequested and then closes the windows, while the application

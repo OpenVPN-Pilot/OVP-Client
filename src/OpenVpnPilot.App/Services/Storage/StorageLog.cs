@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using OpenVpnPilot.Core.Server;
+using OpenVpnPilot.Core.Storage;
 
 namespace OpenVpnPilot.App.Services.Storage;
 
@@ -30,4 +31,28 @@ internal static partial class StorageLog
         Level = LogLevel.Warning,
         Message = "The settings ask for a server whose address is not usable ({Problem}), so this run works on the local library.")]
     public static partial void ServerAddressUnusable(ILogger logger, ServerAddressProblem problem);
+
+    [LoggerMessage(
+        EventId = 3903,
+        Level = LogLevel.Information,
+        Message = "Switching to {Mode} was refused, because {Count} tunnel(s) are up.")]
+    public static partial void SwitchRefusedTunnelsUp(ILogger logger, StorageMode mode, int count);
+
+    [LoggerMessage(
+        EventId = 3904,
+        Level = LogLevel.Warning,
+        Message = "Switching to {Mode} was abandoned, because the settings file did not take the change.")]
+    public static partial void SwitchNotSaved(ILogger logger, StorageMode mode);
+
+    [LoggerMessage(
+        EventId = 3905,
+        Level = LogLevel.Warning,
+        Message = "Switching to {Mode} was abandoned, because the application could not start again. The previous mode was put back.")]
+    public static partial void SwitchRestartFailed(ILogger logger, StorageMode mode);
+
+    [LoggerMessage(
+        EventId = 3906,
+        Level = LogLevel.Information,
+        Message = "Switching from {From} to {To} {ServerAddress}. The application restarts.")]
+    public static partial void Switching(ILogger logger, StorageMode from, StorageMode to, string? serverAddress);
 }

@@ -26,6 +26,10 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   `import --commit`, `unpack --commit`, `favourite` or `remove`, is refused with it while the
   application works with a server. A change written there would never reach the server and would be
   overwritten by the next synchronisation. Everything that reads works in both modes.
+- **`--after-restart <pid>`**, which the application passes to itself when it restarts: the new copy
+  waits up to thirty seconds for that process to end before it takes the single instance claim.
+  Switching between this computer's profiles and a server is such a restart. It is refused while a
+  tunnel is up, and it deletes nothing: going back finds the other side exactly as it was left.
 
 ## [1.9.0] - 2026-09-17
 

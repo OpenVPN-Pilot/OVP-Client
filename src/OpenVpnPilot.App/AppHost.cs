@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenVpnPilot.App.Localization;
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.App.Services.Storage;
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
@@ -108,6 +109,8 @@ internal static class AppHost
         builder.Services.AddSingleton<IManagementChannelFactory, TcpManagementChannelFactory>();
         builder.Services.AddSingleton<IPortAllocator, LoopbackPortAllocator>();
         builder.Services.AddSingleton<ConnectionManager>();
+        builder.Services.AddSingleton<IActiveTunnels, ConnectionManagerTunnels>();
+        builder.Services.AddSingleton<IStorageModeSwitcher, StorageModeSwitcher>();
 
         // The name cache sits between the view model and the credential prompt. Pointing the
         // prompt straight at the view model would close a dependency cycle through the connection
@@ -177,6 +180,7 @@ internal static class AppHost
         services.AddSingleton<IAutoStartManager, RegistryAutoStartManager>();
         services.AddSingleton<IGlobalHotkeyService, WindowsGlobalHotkeyService>();
         services.AddSingleton<IWindowCloseOrigin, WindowsCloseOrigin>();
+        services.AddSingleton<IApplicationRestart, WindowsApplicationRestart>();
 
         // The icon and the notifications are one entry in the notification area, so they are one
         // object registered under both interfaces rather than two that would each add an icon.
@@ -210,6 +214,7 @@ internal static class AppHost
         services.AddSingleton<ISystemTrayIcon, MacStatusItem>();
         services.AddSingleton<IDockPresence, MacDockPresence>();
         services.AddSingleton<IApplicationActivation, MacApplicationActivation>();
+        services.AddSingleton<IApplicationRestart, MacApplicationRestart>();
 
         // Without this the application menu was never filled and kept the framework's entry about
         // itself, although everything that fills it existed.
