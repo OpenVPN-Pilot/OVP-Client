@@ -44,6 +44,7 @@ public sealed partial class LogViewModel : ViewModelBase, IDisposable
             new LogSourceChoice(null, localizer["log.sourceAll"]),
             new LogSourceChoice(LogSource.Pilot, localizer["log.sourcePilot"]),
             new LogSourceChoice(LogSource.OpenVpn, localizer["log.sourceOpenVpn"]),
+            new LogSourceChoice(LogSource.Server, localizer["log.sourceServer"]),
         ];
 
         Levels =
@@ -111,6 +112,16 @@ public sealed partial class LogViewModel : ViewModelBase, IDisposable
         hub.Appended += OnAppended;
     }
 
+    /// <summary>
+    /// Shows only the lines of one source, or every line for null.
+    /// </summary>
+    /// <remarks>
+    /// What "Show server log" opens the window with. It is the same choice a person makes in the
+    /// filter, so they can widen it again from there.
+    /// </remarks>
+    public void ShowSource(LogSource? source) =>
+        SelectedSource = Sources.First(choice => choice.Source == source);
+
     private void OnAppended(object? sender, LogEntry entry) => Dispatcher.UIThread.Post(() =>
     {
         if (!Matches(entry))
@@ -164,7 +175,7 @@ public sealed partial class LogViewModel : ViewModelBase, IDisposable
 
     private bool Matches(LogEntry entry)
     {
-        if (SelectedSource?.Source is { } source && entry.Source != source)
+        if (SelectedSource?.Source is { } source && !LogSourceChoice.Includes(source, entry.Source))
         {
             return false;
         }
@@ -242,7 +253,12 @@ public sealed class LogRowViewModel
     public string TimeDisplay =>
         Entry.Timestamp.LocalDateTime.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
 
-    public string SourceDisplay => Entry.Source == LogSource.OpenVpn ? "openvpn" : "pilot";
+    public string SourceDisplay => Entry.Source switch
+    {
+        LogSource.OpenVpn => "openvpn",
+        LogSource.Server => "server",
+        _ => "pilot",
+    };
 
     public string ScopeDisplay => Entry.Scope;
 
@@ -252,9 +268,20 @@ public sealed class LogRowViewModel
 }
 
 /// <summary>
-/// One entry in the source filter. A null source means both.
+/// One entry in the source filter. A null source means every line.
 /// </summary>
-public sealed record LogSourceChoice(LogSource? Source, string Name);
+public sealed record LogSourceChoice(LogSource? Source, string Name)
+{
+    /// <summary>
+    /// Whether a line from <paramref name="line"/> is shown when <paramref name="chosen"/> is.
+    /// </summary>
+    /// <remarks>
+    /// The server's lines are written by the application too, so choosing the application shows
+    /// them as well; choosing the server shows only them.
+    /// </remarks>
+    public static bool Includes(LogSource chosen, LogSource line) =>
+        chosen == line || (chosen == LogSource.Pilot && line == LogSource.Server);
+}
 
 /// <summary>
 /// One entry in the level filter, naming the lowest level still shown.
