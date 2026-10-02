@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
@@ -43,14 +44,23 @@ public sealed record HotkeyBindingRecord(string ActionId, string Gesture, bool I
 /// <summary>
 /// Entity Framework backed implementation.
 /// </summary>
+/// <remarks>
+/// A binding the person changes is reported to the change recorder inside the same save. Writing the
+/// defaults is not: on a machine that joins a server they would otherwise be pushed over the
+/// shortcuts the person already keeps there, before those had even been read.
+/// </remarks>
 public sealed class HotkeyStore : IHotkeyStore
 {
     private readonly IDbContextFactory<PilotDbContext> contextFactory;
+    private readonly IChangeRecorder changeRecorder;
 
-    public HotkeyStore(IDbContextFactory<PilotDbContext> contextFactory)
+    public HotkeyStore(IDbContextFactory<PilotDbContext> contextFactory, IChangeRecorder changeRecorder)
     {
         ArgumentNullException.ThrowIfNull(contextFactory);
+        ArgumentNullException.ThrowIfNull(changeRecorder);
+
         this.contextFactory = contextFactory;
+        this.changeRecorder = changeRecorder;
     }
 
     public async Task<IReadOnlyList<HotkeyBindingRecord>> GetBindingsAsync(
@@ -82,6 +92,7 @@ public sealed class HotkeyStore : IHotkeyStore
             if (existing is not null)
             {
                 context.HotkeyBindings.Remove(existing);
+                await StageAsync(context, cancellationToken);
                 await context.SaveChangesAsync(cancellationToken);
             }
 
@@ -92,12 +103,17 @@ public sealed class HotkeyStore : IHotkeyStore
         {
             context.HotkeyBindings.Add(new HotkeyBinding { ActionId = actionId, Gesture = gesture });
         }
+        else if (string.Equals(existing.Gesture, gesture, StringComparison.Ordinal) && existing.IsEnabled)
+        {
+            return;
+        }
         else
         {
             existing.Gesture = gesture;
             existing.IsEnabled = true;
         }
 
+        await StageAsync(context, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -127,4 +143,7 @@ public sealed class HotkeyStore : IHotkeyStore
             await context.SaveChangesAsync(cancellationToken);
         }
     }
+
+    private Task StageAsync(PilotDbContext context, CancellationToken cancellationToken) =>
+        changeRecorder.StageAsync(context, PendingChangeKind.Hotkeys, cancellationToken: cancellationToken);
 }

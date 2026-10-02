@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
@@ -104,19 +105,29 @@ public sealed record ConfigurationUpdate(bool Saved, string? DuplicateOf);
 /// When a profile was last changed moves only when something about the profile itself changes, and
 /// only when it actually changes. Saving the editor without touching a field, or marking a
 /// favourite, is not a change to the profile.
+///
+/// Every change the server shares is reported to the change recorder inside the same save, so a
+/// change and the note that it still has to be sent are written together or not at all. Recording
+/// a connection is not reported: usage stays on this machine.
 /// </remarks>
 public sealed class ProfileStore : IProfileStore
 {
     private readonly IDbContextFactory<PilotDbContext> contextFactory;
     private readonly TimeProvider timeProvider;
+    private readonly IChangeRecorder changeRecorder;
 
-    public ProfileStore(IDbContextFactory<PilotDbContext> contextFactory, TimeProvider timeProvider)
+    public ProfileStore(
+        IDbContextFactory<PilotDbContext> contextFactory,
+        TimeProvider timeProvider,
+        IChangeRecorder changeRecorder)
     {
         ArgumentNullException.ThrowIfNull(contextFactory);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(changeRecorder);
 
         this.contextFactory = contextFactory;
         this.timeProvider = timeProvider;
+        this.changeRecorder = changeRecorder;
     }
 
     public async Task<IReadOnlyList<Profile>> GetProfilesAsync(CancellationToken cancellationToken = default)
@@ -220,12 +231,19 @@ public sealed class ProfileStore : IProfileStore
             return;
         }
 
+        bool changed = profile.IsFavourite != isFavourite || (!isFavourite && profile.FavouriteSlot is not null);
+
         profile.IsFavourite = isFavourite;
 
         // A slot only makes sense while the profile is a favourite.
         if (!isFavourite)
         {
             profile.FavouriteSlot = null;
+        }
+
+        if (changed)
+        {
+            await changeRecorder.StageAsync(context, PendingChangeKind.Favourites, cancellationToken: cancellationToken);
         }
 
         await context.SaveChangesAsync(cancellationToken);
@@ -252,6 +270,8 @@ public sealed class ProfileStore : IProfileStore
             return;
         }
 
+        bool changed = profile.FavouriteSlot != slot || (slot is not null && !profile.IsFavourite);
+
         if (slot is { } number)
         {
             // The slot is unique, so whoever held it gives it up in the same transaction.
@@ -267,6 +287,11 @@ public sealed class ProfileStore : IProfileStore
         }
 
         profile.FavouriteSlot = slot;
+
+        if (changed)
+        {
+            await changeRecorder.StageAsync(context, PendingChangeKind.Favourites, cancellationToken: cancellationToken);
+        }
 
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -311,6 +336,7 @@ public sealed class ProfileStore : IProfileStore
 
         profile.Name = name.Trim();
         profile.UpdatedAt = timeProvider.GetUtcNow();
+        await StageUpdateAsync(context, profileId, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -331,6 +357,7 @@ public sealed class ProfileStore : IProfileStore
 
         profile.Notes = normalised;
         profile.UpdatedAt = timeProvider.GetUtcNow();
+        await StageUpdateAsync(context, profileId, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -367,6 +394,7 @@ public sealed class ProfileStore : IProfileStore
         ProfileConfigurationFacts.Apply(profile, configuration);
         profile.UpdatedAt = timeProvider.GetUtcNow();
 
+        await StageUpdateAsync(context, profileId, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
 
         return new ConfigurationUpdate(true, null);
@@ -387,6 +415,7 @@ public sealed class ProfileStore : IProfileStore
 
         profile.ProtectRoutes = protectRoutes;
         profile.UpdatedAt = timeProvider.GetUtcNow();
+        await StageUpdateAsync(context, profileId, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -422,6 +451,7 @@ public sealed class ProfileStore : IProfileStore
         if (profile is not null)
         {
             profile.UpdatedAt = timeProvider.GetUtcNow();
+            await StageUpdateAsync(context, profileId, cancellationToken);
         }
 
         context.ProfileTags.RemoveRange(existing);
@@ -451,14 +481,25 @@ public sealed class ProfileStore : IProfileStore
     {
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
-        await context.Profiles
-            .Where(profile => profile.Id == profileId)
-            .ExecuteDeleteAsync(cancellationToken);
+        Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
+
+        if (profile is not null)
+        {
+            // Removed through the change tracker rather than in one statement, so the marker for the
+            // server is written by the same save. Sessions and tag links go with it through the
+            // cascade the schema declares.
+            context.Profiles.Remove(profile);
+            await changeRecorder.StageAsync(context, PendingChangeKind.ProfileDelete, profileId, cancellationToken: cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
+        }
 
         await context.Tags
             .Where(tag => !tag.Profiles.Any())
             .ExecuteDeleteAsync(cancellationToken);
     }
+
+    private Task StageUpdateAsync(PilotDbContext context, Guid profileId, CancellationToken cancellationToken) =>
+        changeRecorder.StageAsync(context, PendingChangeKind.ProfileUpdate, profileId, cancellationToken: cancellationToken);
 
     private sealed record TagLink(Guid ProfileId, string Name);
 }

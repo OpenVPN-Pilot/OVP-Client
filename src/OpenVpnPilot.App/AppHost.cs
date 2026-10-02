@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenVpnPilot.App.Localization;
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
@@ -70,6 +71,12 @@ internal static class AppHost
 
         builder.Services.AddDbContextFactory<PilotDbContext>(options =>
             options.UseSqlite($"Data Source={paths.DatabasePath}"));
+
+        // Until the mode is resolved from the settings before composing, every run is a local one,
+        // and the recorder writes nothing.
+        builder.Services.AddSingleton<IStorageModeContext, LocalStorageOnly>();
+        builder.Services.AddSingleton<IOutbox, Outbox>();
+        builder.Services.AddSingleton<IChangeRecorder, ChangeRecorder>();
 
         builder.Services.AddSingleton<IProfileStore, ProfileStore>();
         builder.Services.AddSingleton<ISessionStore, SessionStore>();
@@ -253,4 +260,12 @@ internal static class AppHost
         "Fatal" => LogEventLevel.Fatal,
         _ => LogEventLevel.Information,
     };
+
+    /// <summary>
+    /// The storage mode of a build that cannot run against a server yet.
+    /// </summary>
+    private sealed class LocalStorageOnly : IStorageModeContext
+    {
+        public bool IsServerMode => false;
+    }
 }
