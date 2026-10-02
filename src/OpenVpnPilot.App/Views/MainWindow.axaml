@@ -673,6 +673,11 @@
                             Classes.problem="{Binding IsProblem}" />
                     <TextBlock Text="{Binding Text}" Classes="muted" VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis" MaxWidth="520" />
+                    <TextBlock Text="{Binding Notice}" VerticalAlignment="Center"
+                               Foreground="{DynamicResource StatePending}"
+                               TextTrimming="CharacterEllipsis" MaxWidth="520"
+                               IsVisible="{Binding HasNotice}"
+                               ToolTip.Tip="{Binding Notice}" />
                   </StackPanel>
                   <Button.Flyout>
                     <MenuFlyout Placement="TopEdgeAlignedLeft">

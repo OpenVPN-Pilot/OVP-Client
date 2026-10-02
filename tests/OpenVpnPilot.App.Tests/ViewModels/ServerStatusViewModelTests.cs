@@ -52,6 +52,47 @@ public sealed class ServerStatusViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Notice_RaisedBySync_IsShownUntilItsTimeIsUp()
+    {
+        ManualTime time = new(Now);
+        ServerNotices notices = new();
+        FixedStatus source = new(Snapshot(SyncState.Synchronised, signedIn: true));
+        using ServerStatusViewModel model = new(new StubLocalizer(), new FakeSettingsService(), new ImmediateThread(), time, source, notices);
+
+        Assert.False(model.HasNotice);
+
+        notices.Raise(new ServerNotice(ServerNoticeKind.ConnectedProfilesRemoved, ["example-site"], Now));
+
+        Assert.True(model.HasNotice);
+        Assert.Equal("shared.connectedRemovedOne", model.Notice);
+
+        time.Advance(ServerStatusViewModel.NoticeDuration);
+
+        Assert.False(model.HasNotice);
+        Assert.Empty(model.Notice);
+    }
+
+    [Fact]
+    public void Notice_NewerOneRaised_KeepsItsFullTime()
+    {
+        ManualTime time = new(Now);
+        ServerNotices notices = new();
+        FixedStatus source = new(Snapshot(SyncState.Synchronised, signedIn: true));
+        using ServerStatusViewModel model = new(new StubLocalizer(), new FakeSettingsService(), new ImmediateThread(), time, source, notices);
+
+        notices.Raise(new ServerNotice(ServerNoticeKind.ConnectedProfilesRemoved, ["example-site"], Now));
+        time.Advance(ServerStatusViewModel.NoticeDuration / 2);
+        notices.Raise(new ServerNotice(ServerNoticeKind.ConnectedProfilesRemoved, ["example-a", "example-b"], Now));
+        time.Advance(ServerStatusViewModel.NoticeDuration / 2);
+
+        Assert.Equal("shared.connectedRemovedMany", model.Notice);
+
+        time.Advance(ServerStatusViewModel.NoticeDuration / 2);
+
+        Assert.False(model.HasNotice);
+    }
+
+    [Fact]
     public void Compact_SynchronisedWithWaitingChanges_NamesHostLatencyTimeAndCount()
     {
         ServerStatusSnapshot snapshot = Snapshot(SyncState.ChangesWaiting, signedIn: true) with
