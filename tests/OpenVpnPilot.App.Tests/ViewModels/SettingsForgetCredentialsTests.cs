@@ -7,6 +7,7 @@ using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.Core.Server;
 using OpenVpnPilot.Core.Server.Contracts;
+using OpenVpnPilot.Core.Storage;
 
 namespace OpenVpnPilot.App.Tests.ViewModels;
 
@@ -73,7 +74,7 @@ public sealed class SettingsForgetCredentialsTests : IAsyncDisposable
             secrets,
             new NoAutoStart(),
             new SessionStore(database.Factory, TimeProvider.System),
-            new DiagnosticsBundle(new TemporaryPaths(Path.GetTempPath()), new ReadyEnvironmentProbe(), settings, database.Factory, TimeProvider.System),
+            new DiagnosticsBundle(new TemporaryPaths(Path.GetTempPath()), new ReadyEnvironmentProbe(), settings, database.Factory, TimeProvider.System, ActiveStorage.Resolve(new TemporaryPaths(Path.GetTempPath()), StorageSelection.Local)),
             SilentUpdates.Coordinator(),
             dock: null,
             server: server);

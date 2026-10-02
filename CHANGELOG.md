@@ -69,6 +69,11 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   synchronisation, waiting changes and switching the store are marked `server` in the log and in
   the files, and "Server only" in the source filter shows just them; "This application only" still
   includes them. "Show server log" opens the window with that filter.
+- **The diagnostics bundle says where the profiles live** in a new `storage.txt`: the mode, the
+  client version, and for a server its host, its version and API version as it answers then, the
+  last pull and push, the cursor, the last error code with its request id, the signed in role and
+  how many changes wait with the problem codes they met. Never a name, a token, a sign in or the
+  address as it was written.
 
 ### Fixed
 
