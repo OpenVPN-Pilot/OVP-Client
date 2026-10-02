@@ -35,6 +35,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenVpnPilot.Platform.MacOS
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenVpnPilot.Platform.MacOS.Tests", "tests\OpenVpnPilot.Platform.MacOS.Tests\OpenVpnPilot.Platform.MacOS.Tests.csproj", "{003FC488-EB2B-402A-920E-E69BB8944882}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenVpnPilot.Cli.Tests", "tests\OpenVpnPilot.Cli.Tests\OpenVpnPilot.Cli.Tests.csproj", "{99917007-0D8D-4620-A08A-ECFDE4E4FC97}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -213,6 +215,18 @@ Global
 		{003FC488-EB2B-402A-920E-E69BB8944882}.Release|x64.Build.0 = Release|Any CPU
 		{003FC488-EB2B-402A-920E-E69BB8944882}.Release|x86.ActiveCfg = Release|Any CPU
 		{003FC488-EB2B-402A-920E-E69BB8944882}.Release|x86.Build.0 = Release|Any CPU
+		{99917007-0D8D-4620-A08A-ECFDE4E4FC97}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{99917007-0D8D-4620-A08A-ECFDE4E4FC97}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{99917007-0D8D-4620-A08A-ECFDE4E4FC97}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{99917007-0D8D-4620-A08A-ECFDE4E4FC97}.Debug|x64.Build.0 = Debug|Any CPU
+		{99917007-0D8D-4620-A08A-ECFDE4E4FC97}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{99917007-0D8D-4620-A08A-ECFDE4E4FC97}.Debug|x86.Build.0 = Debug|Any CPU
+		{99917007-0D8D-4620-A08A-ECFDE4E4FC97}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{99917007-0D8D-4620-A08A-ECFDE4E4FC97}.Release|Any CPU.Build.0 = Release|Any CPU
+		{99917007-0D8D-4620-A08A-ECFDE4E4FC97}.Release|x64.ActiveCfg = Release|Any CPU
+		{99917007-0D8D-4620-A08A-ECFDE4E4FC97}.Release|x64.Build.0 = Release|Any CPU
+		{99917007-0D8D-4620-A08A-ECFDE4E4FC97}.Release|x86.ActiveCfg = Release|Any CPU
+		{99917007-0D8D-4620-A08A-ECFDE4E4FC97}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -232,5 +246,6 @@ Global
 		{96785FB2-5B21-4A90-B9B7-2E9FEE1C4B11} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{287B9BE6-86A0-4265-9DFD-CCD90FCF9F24} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{003FC488-EB2B-402A-920E-E69BB8944882} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{99917007-0D8D-4620-A08A-ECFDE4E4FC97} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

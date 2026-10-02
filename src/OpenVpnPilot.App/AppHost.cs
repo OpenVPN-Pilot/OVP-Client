@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using OpenVpnPilot.App.Localization;
 using OpenVpnPilot.App.Services;
 using OpenVpnPilot.App.Services.Server;
+using OpenVpnPilot.App.Services.Storage;
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
@@ -52,6 +53,10 @@ internal static class AppHost
     {
         UserApplicationPaths paths = new();
 
+        // Before anything is composed, because every store is composed against the one file this
+        // decides. Switching the mode restarts the process, so it is decided exactly once.
+        ActiveStorage storage = ActiveStorage.Resolve(paths, StorageModeReader.Read(paths.SettingsPath));
+
         HostApplicationBuilder builder = Host.CreateApplicationBuilder();
 
         // Built before the logger, because the logger writes into it. Both are handed to the
@@ -67,14 +72,13 @@ internal static class AppHost
         builder.Services.AddSingleton<OpenVpnLogRelay>();
 
         builder.Services.AddSingleton<IApplicationPaths>(paths);
+        builder.Services.AddSingleton<IActiveStorage>(storage);
         builder.Services.AddSingleton(TimeProvider.System);
 
         builder.Services.AddDbContextFactory<PilotDbContext>(options =>
-            options.UseSqlite($"Data Source={paths.DatabasePath}"));
+            options.UseSqlite($"Data Source={storage.DatabasePath}"));
 
-        // Until the mode is resolved from the settings before composing, every run is a local one,
-        // and the recorder writes nothing.
-        builder.Services.AddSingleton<IStorageModeContext, LocalStorageOnly>();
+        builder.Services.AddSingleton<IStorageModeContext>(storage);
         builder.Services.AddSingleton<IOutbox, Outbox>();
         builder.Services.AddSingleton<IChangeRecorder, ChangeRecorder>();
         builder.Services.AddSingleton<IServerProfileMaintenance, ServerProfileMaintenance>();
@@ -111,6 +115,8 @@ internal static class AppHost
         builder.Services.AddSingleton<IManagementChannelFactory, TcpManagementChannelFactory>();
         builder.Services.AddSingleton<IPortAllocator, LoopbackPortAllocator>();
         builder.Services.AddSingleton<ConnectionManager>();
+        builder.Services.AddSingleton<IActiveTunnels, ConnectionManagerTunnels>();
+        builder.Services.AddSingleton<IStorageModeSwitcher, StorageModeSwitcher>();
 
         // The name cache sits between the view model and the credential prompt. Pointing the
         // prompt straight at the view model would close a dependency cycle through the connection
@@ -180,6 +186,7 @@ internal static class AppHost
         services.AddSingleton<IAutoStartManager, RegistryAutoStartManager>();
         services.AddSingleton<IGlobalHotkeyService, WindowsGlobalHotkeyService>();
         services.AddSingleton<IWindowCloseOrigin, WindowsCloseOrigin>();
+        services.AddSingleton<IApplicationRestart, WindowsApplicationRestart>();
 
         // The icon and the notifications are one entry in the notification area, so they are one
         // object registered under both interfaces rather than two that would each add an icon.
@@ -213,6 +220,7 @@ internal static class AppHost
         services.AddSingleton<ISystemTrayIcon, MacStatusItem>();
         services.AddSingleton<IDockPresence, MacDockPresence>();
         services.AddSingleton<IApplicationActivation, MacApplicationActivation>();
+        services.AddSingleton<IApplicationRestart, MacApplicationRestart>();
 
         // Without this the application menu was never filled and kept the framework's entry about
         // itself, although everything that fills it existed.
@@ -261,12 +269,4 @@ internal static class AppHost
         "Fatal" => LogEventLevel.Fatal,
         _ => LogEventLevel.Information,
     };
-
-    /// <summary>
-    /// The storage mode of a build that cannot run against a server yet.
-    /// </summary>
-    private sealed class LocalStorageOnly : IStorageModeContext
-    {
-        public bool IsServerMode => false;
-    }
 }

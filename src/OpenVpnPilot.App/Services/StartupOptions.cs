@@ -1,3 +1,4 @@
+using System.Globalization;
 using OpenVpnPilot.Core.Ipc;
 
 namespace OpenVpnPilot.App.Services;
@@ -64,6 +65,17 @@ public sealed record StartupOptions
     public bool ShowHelp { get; init; }
 
     /// <summary>
+    /// The process this one replaces, which it waits for before claiming the single instance.
+    /// </summary>
+    /// <remarks>
+    /// Set by the application when it restarts itself, which it does to switch between the local
+    /// library and a server. The new copy is started while the old one still holds the claim, so
+    /// without waiting it would find the old one running, hand over to it and exit, and the restart
+    /// would end with no application at all.
+    /// </remarks>
+    public int? AfterRestartOf { get; init; }
+
+    /// <summary>
     /// True when the process was asked to do something rather than only to appear.
     /// </summary>
     public bool HasActions =>
@@ -83,6 +95,7 @@ public sealed record StartupOptions
         bool disconnectAll = false;
         bool quit = false;
         bool help = false;
+        int? afterRestartOf = null;
         List<string> connect = [];
         List<string> disconnect = [];
         List<string> files = [];
@@ -131,6 +144,17 @@ public sealed record StartupOptions
                     help = true;
                     break;
 
+                case "--after-restart":
+                    if (!TryTakeValue(args, ref index, out string? predecessor)
+                        || !int.TryParse(predecessor, NumberStyles.None, CultureInfo.InvariantCulture, out int processId)
+                        || processId <= 0)
+                    {
+                        return new StartupOptions { Error = "--after-restart needs a process id." };
+                    }
+
+                    afterRestartOf = processId;
+                    break;
+
                 default:
                     // Anything that is not an option is a file to import. An empty argument is not
                     // a path, and neither is something that begins with a dash: that is a mistyped
@@ -155,6 +179,7 @@ public sealed record StartupOptions
             Quit = quit,
             ShowHelp = help,
             FilesToImport = files,
+            AfterRestartOf = afterRestartOf,
         };
     }
 
@@ -211,6 +236,8 @@ public sealed record StartupOptions
           --disconnect <profile> Disconnect a profile. May be given more than once.
           --disconnect-all       Disconnect everything.
           --quit                 End the copy that is running.
+          --after-restart <pid>  Wait for that process to end before starting. The application
+                                 passes this to itself when it restarts.
           -h, --help             Show this text.
 
         Only one copy runs per user. A second launch hands its options to the copy that already

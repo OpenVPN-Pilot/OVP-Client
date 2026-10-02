@@ -136,13 +136,25 @@ internal static class StoreFactory
     /// </summary>
     public static IApplicationPaths Paths { get; } = new UserApplicationPaths();
 
-    public static async Task<PilotDbContext> OpenAsync()
-    {
-        DbContextOptions<PilotDbContext> options = new DbContextOptionsBuilder<PilotDbContext>()
-            .UseSqlite($"Data Source={Paths.DatabasePath}")
+    /// <summary>
+    /// The store the settings name: the local library, or the copy of the configured server.
+    /// </summary>
+    /// <remarks>
+    /// Resolved the way the application resolves it, from the same file, so a command reads what the
+    /// window shows. The application changes the mode only by restarting, so reading it once per
+    /// command is reading it often enough.
+    /// </remarks>
+    public static IActiveStorage Storage { get; } =
+        ActiveStorage.Resolve(Paths, StorageModeReader.Read(Paths.SettingsPath));
+
+    public static DbContextOptions<PilotDbContext> Options() =>
+        new DbContextOptionsBuilder<PilotDbContext>()
+            .UseSqlite($"Data Source={Storage.DatabasePath}")
             .Options;
 
-        PilotDbContext context = new(options);
+    public static async Task<PilotDbContext> OpenAsync()
+    {
+        PilotDbContext context = new(Options());
         await context.Database.MigrateAsync();
         return context;
     }

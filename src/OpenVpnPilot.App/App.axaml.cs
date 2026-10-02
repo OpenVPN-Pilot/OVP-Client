@@ -11,10 +11,13 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenVpnPilot.App.Localization;
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.App.Services.Storage;
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.App.Views;
 using OpenVpnPilot.Core.Abstractions;
+using OpenVpnPilot.Core.Server;
 using OpenVpnPilot.Core.Settings;
+using OpenVpnPilot.Core.Storage;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.OpenVpn.Runtime;
@@ -122,6 +125,11 @@ public partial class App : Application
             InstanceGuard.CommandHandler = remote.HandleAsync;
         }
 
+        // Switching between the local library and a server ends this copy once the next one has been
+        // started. The tunnels are already down, because switching is refused while one is up.
+        host.Services.GetRequiredService<IStorageModeSwitcher>().ShutdownRequested += (_, _) =>
+            Dispatcher.UIThread.Post(() => desktop.Shutdown());
+
         // Closing the application must not leave tunnels running unattended, and Exit is the only
         // event that reports every way out. Measured against Avalonia 12.1: ending the Windows
         // session raises ShutdownRequested and then closes the windows, while the application
@@ -150,6 +158,7 @@ public partial class App : Application
         Version? version = typeof(App).Assembly.GetName().Version;
 
         AppLog.Started(logger, version, Environment.OSVersion.VersionString);
+        ReportStorage(services.GetRequiredService<IActiveStorage>(), logger);
 
         services.GetRequiredService<SessionRecorder>().Attach();
         services.GetRequiredService<PingMonitor>().Start();
@@ -206,6 +215,25 @@ public partial class App : Application
         }
     }
 
+    /// <summary>
+    /// Records which store this run works on, which every later line of the log depends on.
+    /// </summary>
+    private static void ReportStorage(IActiveStorage storage, ILogger logger)
+    {
+        if (storage.Problem != ServerAddressProblem.None)
+        {
+            StorageLog.ServerAddressUnusable(logger, storage.Problem);
+        }
+
+        if (storage is { Mode: StorageMode.Server, ServerAddress: { } address, ServerKey: { } key })
+        {
+            StorageLog.ServerStoreOpened(logger, address, key);
+        }
+        else
+        {
+            StorageLog.LocalStoreOpened(logger, storage.DatabasePath);
+        }
+    }
     /// <summary>
     /// Handles what the platform asks of a running application other than through its windows.
     /// </summary>

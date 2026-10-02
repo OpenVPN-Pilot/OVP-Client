@@ -8,6 +8,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged. A release tag is `v<version>`, for example `v1.2.0`.
 
+## [Unreleased]
+
+### Added
+
+- **The settings file names where the profiles live and which installation this is.** `storage`
+  holds the mode, `Local` or `Server`, and the server's address; `installation` holds an identity
+  generated once, the first time this version reads the file, and never again. An existing
+  installation stays `Local`. Both are this machine's own: an exported package carries neither, and
+  importing one keeps the values that were here.
+- **The copy of a server's profiles is a database of its own**, in `servers/<key>/pilot.db` beside
+  the local `pilot.db`, one folder per server, the key derived from the server's address. The
+  application and `ovp` open the one the settings name, and neither mode ever touches the other's
+  file. A settings file naming a server whose address is not a plain `https://` address opens the
+  local library and says why in the log.
+- **`ovp` exit code 7**: a command that would change the copy of a server's profiles,
+  `import --commit`, `unpack --commit`, `favourite` or `remove`, is refused with it while the
+  application works with a server. A change written there would never reach the server and would be
+  overwritten by the next synchronisation. Everything that reads works in both modes.
+- **`--after-restart <pid>`**, which the application passes to itself when it restarts: the new copy
+  waits up to thirty seconds for that process to end before it takes the single instance claim.
+  Switching between this computer's profiles and a server is such a restart. It is refused while a
+  tunnel is up, and it deletes nothing: going back finds the other side exactly as it was left.
+
 ## [1.9.0] - 2026-09-17
 
 ### Added
