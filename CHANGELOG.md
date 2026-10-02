@@ -108,7 +108,8 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   sees a server's profiles in the editor as they are, with only the favourite and the shortcut slot
   to change, and is offered neither importing, deleting nor tagging. An administrator edits as on
   this computer, and can replace the sign in the server shares for a profile from the editor while
-  the server can be reached. Deleting a server's profile removes its stored sign ins too.
+  the server can be reached. Deleting a server's profile removes its stored sign ins too. A tag that
+  loses its last profile is deleted on the server as well, as it is here.
 - **Importing into a server's copy uploads at once**, in batches of up to 500, and the review list
   then says for every profile whether the server created it, already had it or refused it, with the
   server's reason. A profile the server refused is not kept. While the server cannot be reached the

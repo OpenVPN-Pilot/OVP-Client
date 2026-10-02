@@ -154,15 +154,15 @@ public sealed class OutboxTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RecordAsync_TagDeleteAfterTagUpdate_ReplacesTheUpdate()
+    public async Task RecordAsync_TagDeleteTwice_KeepsOne()
     {
         Guid tagId = Guid.NewGuid();
 
-        await outbox.RecordAsync(PendingChangeKind.TagUpdate, tagId);
-        await outbox.RecordAsync(PendingChangeKind.TagUpdate, tagId);
         await outbox.RecordAsync(PendingChangeKind.TagDelete, tagId);
+        await outbox.RecordAsync(PendingChangeKind.TagDelete, tagId);
+        await outbox.RecordAsync(PendingChangeKind.TagDelete, Guid.NewGuid());
 
-        Assert.Equal(PendingChangeKind.TagDelete, Assert.Single(await database.MarkersAsync()).Kind);
+        Assert.Equal(2, await outbox.CountAsync());
     }
 
     [Fact]

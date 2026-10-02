@@ -367,21 +367,42 @@ public sealed class SyncEnginePushTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SynchronizeAsync_TagRenameRefusedAsDuplicate_DropsIt()
+    public async Task SynchronizeAsync_TagLeftByItsLastProfile_IsDeletedOnTheServerToo()
     {
+        UseDeltas();
+        await AddServerProfileAsync(ServerProfile, "example-site", Configuration);
         Guid tagId = Guid.NewGuid();
         await harness.ChangeAsync(context =>
         {
             context.Tags.Add(new Tag { Id = tagId, Name = "Office" });
+            context.ProfileTags.Add(new ProfileTag { ProfileId = ServerProfile, TagId = tagId });
             return Task.CompletedTask;
         });
 
-        await harness.Outbox.RecordAsync(PendingChangeKind.TagUpdate, tagId);
-        harness.Server.On(HttpMethod.Put, $"/api/v1/tags/{tagId:D}", _ => Answers.Problem(HttpStatusCode.Conflict, ServerErrorCodes.TagDuplicate));
+        await Store().SetProfileTagsAsync(ServerProfile, []);
+
+        Assert.Equal(
+            [(PendingChangeKind.ProfileUpdate, (Guid?)ServerProfile), (PendingChangeKind.TagDelete, tagId)],
+            (await harness.Database.MarkersAsync()).Select(marker => (marker.Kind, marker.EntityId)));
 
         SyncCycleResult result = await harness.Engine.SynchronizeAsync(CancellationToken.None);
 
-        Assert.Equal(1, result.Dropped);
+        Assert.Equal(2, result.Pushed);
+        Assert.Equal(0, Assert.Single(harness.Sent(HttpMethod.Put, $"/api/v1/profiles/{ServerProfile:D}")).Json.GetProperty("tags").GetArrayLength());
+        Assert.Equal(1, harness.Count(HttpMethod.Delete, $"/api/v1/tags/{tagId:D}"));
+        Assert.Empty(await harness.Database.MarkersAsync());
+    }
+
+    [Fact]
+    public async Task TagLeftByItsLastProfile_OnTheLocalLibrary_RecordsNothing()
+    {
+        Profile local = await harness.Database.AddProfileAsync("example-site", Configuration);
+        ProfileStore store = new(harness.Database.Factory, TimeProvider.System, new ChangeRecorder(harness.Outbox, new FixedStorageMode(false)));
+
+        await store.SetProfileTagsAsync(local.Id, ["Office"]);
+        await store.SetProfileTagsAsync(local.Id, []);
+
+        Assert.Empty(await harness.QueryAsync(context => context.Tags.ToListAsync()));
         Assert.Empty(await harness.Database.MarkersAsync());
     }
 

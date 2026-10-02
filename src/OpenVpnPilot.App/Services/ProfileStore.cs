@@ -481,11 +481,7 @@ public sealed class ProfileStore : IProfileStore
         }
 
         await context.SaveChangesAsync(cancellationToken);
-
-        // A tag nobody uses is noise in the sidebar, so it goes when its last profile lets it go.
-        await context.Tags
-            .Where(tag => !tag.Profiles.Any())
-            .ExecuteDeleteAsync(cancellationToken);
+        await RemoveUnusedTagsAsync(context, cancellationToken);
     }
 
     public async Task DeleteProfileAsync(Guid profileId, CancellationToken cancellationToken = default)
@@ -509,9 +505,36 @@ public sealed class ProfileStore : IProfileStore
             }
         }
 
-        await context.Tags
+        await RemoveUnusedTagsAsync(context, cancellationToken);
+    }
+
+    /// <summary>
+    /// Removes the tags no profile carries any more, and tells the server so.
+    /// </summary>
+    /// <remarks>
+    /// A tag nobody uses is noise in the sidebar, so it goes when its last profile lets it go. The
+    /// server keeps a tag until it is deleted there, and its next complete answer would bring the tag
+    /// back, so on a server's copy the deletion is sent like any other change.
+    /// </remarks>
+    private async Task RemoveUnusedTagsAsync(PilotDbContext context, CancellationToken cancellationToken)
+    {
+        List<Tag> unused = await context.Tags
             .Where(tag => !tag.Profiles.Any())
-            .ExecuteDeleteAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
+
+        if (unused.Count == 0)
+        {
+            return;
+        }
+
+        context.Tags.RemoveRange(unused);
+
+        foreach (Tag tag in unused)
+        {
+            await changeRecorder.StageAsync(context, PendingChangeKind.TagDelete, tag.Id, cancellationToken: cancellationToken);
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     private Task StageUpdateAsync(

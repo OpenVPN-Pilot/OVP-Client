@@ -280,7 +280,6 @@ internal sealed partial class ChangeFeedPuller
                         set.Profiles.Add(id);
                         break;
 
-                    case PendingChangeKind.TagUpdate:
                     case PendingChangeKind.TagDelete:
                         set.Tags.Add(id);
                         break;

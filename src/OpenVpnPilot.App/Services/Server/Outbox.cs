@@ -96,12 +96,6 @@ public sealed class Outbox : IOutbox
         PendingChangeKind.VaultAdd,
     ];
 
-    private static readonly PendingChangeKind[] TagKinds =
-    [
-        PendingChangeKind.TagUpdate,
-        PendingChangeKind.TagDelete,
-    ];
-
     private readonly IDbContextFactory<PilotDbContext> contextFactory;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<Outbox> logger;
@@ -252,7 +246,6 @@ public sealed class Outbox : IOutbox
             case PendingChangeKind.ProfileCreate:
             case PendingChangeKind.ProfileUpdate:
             case PendingChangeKind.ProfileDelete:
-            case PendingChangeKind.TagUpdate:
             case PendingChangeKind.TagDelete:
                 if (entityId is null)
                 {
@@ -280,9 +273,7 @@ public sealed class Outbox : IOutbox
         Guid? entityId,
         CancellationToken cancellationToken)
     {
-        PendingChangeKind[] related = ProfileKinds.Contains(kind) ? ProfileKinds
-            : TagKinds.Contains(kind) ? TagKinds
-            : [kind];
+        PendingChangeKind[] related = ProfileKinds.Contains(kind) ? ProfileKinds : [kind];
 
         // Loading into the change tracker and then reading the local view sees markers this unit of
         // work staged and has not saved, and leaves out those it already removed.
@@ -366,25 +357,9 @@ public sealed class Outbox : IOutbox
 
                 break;
 
-            case PendingChangeKind.TagUpdate:
-                if (pending.Count > 0)
-                {
-                    return false;
-                }
-
-                break;
-
-            case PendingChangeKind.TagDelete:
-                if (Has(PendingChangeKind.TagDelete))
-                {
-                    return false;
-                }
-
-                Supersede(context, pending, kind, entityId);
-                break;
-
             default:
-                // The lists are sent whole, so one marker covers any number of changes.
+                // The lists are sent whole and a tag is deleted once, so one marker covers any number
+                // of changes.
                 if (pending.Count > 0)
                 {
                     return false;

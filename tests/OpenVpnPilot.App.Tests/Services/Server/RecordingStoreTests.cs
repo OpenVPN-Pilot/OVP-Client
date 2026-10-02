@@ -106,8 +106,10 @@ public sealed class RecordingStoreTests : IAsyncLifetime
         await store.SetProfileTagsAsync(profile.Id, ["Office"]);
         await store.DeleteProfileAsync(profile.Id);
 
-        PendingChange marker = Assert.Single(await database.MarkersAsync());
-        Assert.Equal(PendingChangeKind.ProfileDelete, marker.Kind);
+        // The tag went with its last profile, and the server is told about both.
+        Assert.Equal(
+            [PendingChangeKind.ProfileDelete, PendingChangeKind.TagDelete],
+            (await database.MarkersAsync()).Select(marker => marker.Kind));
 
         await using PilotDbContext context = await database.Factory.CreateDbContextAsync();
         Assert.Empty(await context.Profiles.ToListAsync());

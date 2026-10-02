@@ -111,7 +111,6 @@ internal static class SyncFailures
         PendingChangeKind.ProfileCreate,
         PendingChangeKind.ProfileUpdate,
         PendingChangeKind.ProfileDelete,
-        PendingChangeKind.TagUpdate,
         PendingChangeKind.TagDelete,
     ];
 

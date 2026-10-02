@@ -113,7 +113,6 @@ internal sealed partial class OutboxPusher
         {
             PendingChangeKind.ProfileUpdate => UpdateAsync(marker, cycle, cancellationToken),
             PendingChangeKind.ProfileDelete => SendAsync(marker, cycle, api.DeleteProfileAsync(marker.EntityId!.Value, cancellationToken), notFoundIsDone: true, cancellationToken),
-            PendingChangeKind.TagUpdate => UpdateTagAsync(marker, cycle, cancellationToken),
             PendingChangeKind.TagDelete => SendAsync(marker, cycle, api.DeleteTagAsync(marker.EntityId!.Value, cancellationToken), notFoundIsDone: true, cancellationToken),
             PendingChangeKind.VaultAdd => AddVaultEntryAsync(marker, cycle, cancellationToken),
             PendingChangeKind.Favourites => PushFavouritesAsync(marker, cycle, cancellationToken),
@@ -142,24 +141,6 @@ internal sealed partial class OutboxPusher
         await outbox.DropAsync(marker.Id, cancellationToken);
         cycle.Pushed++;
         return SyncStep.Continue;
-    }
-
-    private async Task<SyncStep> UpdateTagAsync(PendingChange marker, SyncCycle cycle, CancellationToken cancellationToken)
-    {
-        Tag? tag;
-
-        await using (PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken))
-        {
-            tag = await context.Tags.AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == marker.EntityId, cancellationToken);
-        }
-
-        if (tag is null)
-        {
-            return await DropUnsendableAsync(marker, cancellationToken);
-        }
-
-        Task<ServerResult> call = Widen(api.UpdateTagAsync(tag.Id, new TagRequest(tag.Name, tag.Colour), cancellationToken));
-        return await SendAsync(marker, cycle, call, notFoundIsDone: true, cancellationToken);
     }
 
     private async Task<SyncStep> AddVaultEntryAsync(PendingChange marker, SyncCycle cycle, CancellationToken cancellationToken)
@@ -394,6 +375,4 @@ internal sealed partial class OutboxPusher
         cycle.Note(result);
         SyncEngineLog.AdministratorChangesDropped(logger, result.RequestId, dropped);
     }
-
-    private static async Task<ServerResult> Widen<T>(Task<ServerResult<T>> call) => await call;
 }

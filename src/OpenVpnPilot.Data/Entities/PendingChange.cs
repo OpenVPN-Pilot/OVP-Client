@@ -66,8 +66,12 @@ public enum PendingChangeKind
 
     ProfileDelete = 2,
 
-    TagUpdate = 3,
+    // 3 named a changed tag. Nothing in the client renames a tag or changes its colour, so nothing
+    // could record one; the number stays unused so that it never means something else.
 
+    /// <summary>
+    /// A tag no profile of this copy carries any more, which the server keeps until it is deleted.
+    /// </summary>
     TagDelete = 4,
 
     /// <summary>
