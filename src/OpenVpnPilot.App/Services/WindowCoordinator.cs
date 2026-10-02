@@ -303,6 +303,10 @@ public sealed class WindowCoordinator
                 lifetime.Shutdown();
                 break;
 
+            case TrayIconController.SyncNowAction:
+                services.GetService<Server.IServerStatusSource>()?.RequestSync();
+                break;
+
             default:
                 break;
         }
@@ -390,6 +394,19 @@ public sealed class WindowCoordinator
             return;
         }
 
+        if (screen == AppScreen.StorageSettings)
+        {
+            Open(AppScreen.Settings);
+
+            if (open.TryGetValue(AppScreen.Settings, out Window? settingsWindow)
+                && settingsWindow.DataContext is SettingsViewModel settingsModel)
+            {
+                settingsModel.SelectedTabIndex = SettingsViewModel.StorageTabIndex;
+            }
+
+            return;
+        }
+
         if (open.TryGetValue(screen, out Window? existing))
         {
             Reveal(existing);
@@ -432,8 +449,65 @@ public sealed class WindowCoordinator
         AppScreen.Import => CreateImport(),
         AppScreen.Export => CreateExport(),
         AppScreen.ProfileEditor => CreateProfileEditor(),
+        AppScreen.ServerSwitch => CreateServerSwitch(),
+        AppScreen.ServerSignIn => CreateServerSignIn(),
         _ => null,
     };
+
+    /// <summary>
+    /// The address and sign in steps of the first start, for switching to a server from the settings.
+    /// </summary>
+    /// <remarks>
+    /// Signing in succeeds before anything is written, and the switch then restarts the application,
+    /// so a window given up on leaves everything as it was.
+    /// </remarks>
+    private FirstRunWindow CreateServerSwitch()
+    {
+        FirstRunViewModel model = ActivatorUtilities.CreateInstance<FirstRunViewModel>(services);
+        Core.Storage.IActiveStorage storage = services.GetRequiredService<Core.Storage.IActiveStorage>();
+
+        model.BeginServerSwitch(settings.Current.Storage.ServerUrl ?? storage.ServerAddress, storage.ServerAddress);
+
+        FirstRunWindow window = new() { DataContext = model };
+
+        model.Cancelled += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            if (window.IsVisible)
+            {
+                window.Close();
+            }
+        });
+
+        window.Closed += (_, _) => model.Dispose();
+
+        return window;
+    }
+
+    /// <summary>
+    /// Signing in again to the server the application works with. Not offered on the local library.
+    /// </summary>
+    private ServerSignInWindow? CreateServerSignIn()
+    {
+        if (services.GetService<Core.Server.IServerSignIn>() is not { } signIn
+            || services.GetService<Core.Server.IServerApi>() is not { } api)
+        {
+            return null;
+        }
+
+        ServerSignInViewModel model = new(
+            services.GetRequiredService<Core.Localization.ILocalizer>(),
+            signIn,
+            services.GetRequiredService<Server.IEntraSignIn>(),
+            api);
+
+        ServerSignInWindow window = new() { DataContext = model };
+
+        model.Closed += (_, _) => window.Close();
+        window.Opened += async (_, _) => await model.LoadAsync();
+        window.Closed += (_, _) => model.Dispose();
+
+        return window;
+    }
 
     private QuickSwitcherWindow CreateQuickSwitcher(QuickSwitcherMode mode)
     {
@@ -503,6 +577,7 @@ public sealed class WindowCoordinator
         model.ScreenRequested += (_, screen) => Open(screen);
         model.ProfileReloadRequested += async (_, _) => await viewModel.LoadAsync();
         window.Opened += async (_, _) => await model.LoadAsync();
+        window.Closed += (_, _) => model.Storage?.Dispose();
 
         return window;
     }

@@ -74,6 +74,28 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   last pull and push, the cursor, the last error code with its request id, the signed in role and
   how many changes wait with the problem codes they met. Never a name, a token, a sign in or the
   address as it was written.
+- **A Storage page in the settings** ("Speicherort" in German) says where the profiles live and, for
+  a server, its address, who is signed in with which role and provider, the server's version, the
+  last synchronisation and the changes waiting, with "Sync now", "Sign out" or "Sign in" and the
+  server's log. Switching to a server, to another server or back to this computer is offered there:
+  refused while a tunnel is up, confirmed first, and for a server it runs the same address and sign
+  in steps as the first start before the application restarts into it. Another address is another
+  server, with a copy of its own.
+- **The status bar shows the server**: a dot green when synchronised, blue while synchronising,
+  amber while offline, degraded or with changes waiting and red when something blocks, beside a line
+  such as `pilot.example.com · 23 ms · synced 2 min ago · 3 changes waiting`. The round trip is
+  measured every 30 seconds, less often while the server cannot be reached, and a server whose
+  readiness check fails shows as degraded. The tooltip has the details and a click offers "Sync
+  now", the server's log, signing in again and the storage settings. On this computer's own library
+  the bar shows a grey "Local" instead. The tray menu, and the application menu on macOS, carry the
+  same line and "Sync now".
+- **Banners for what blocks the synchronisation**: a sign in that is needed, a client too old for
+  the server (with the way to the update), a clock the server refuses (with both times) and a
+  certificate this computer does not trust. Being offline is not one: the application keeps working
+  from the copy.
+- **A server that withdraws the account while it is being signed in to from the settings or the
+  first start** has what this computer still kept of it removed, its copy, the stored sign ins of
+  its profiles and its session, and the person is told. The application stays where it was.
 
 ### Changed
 

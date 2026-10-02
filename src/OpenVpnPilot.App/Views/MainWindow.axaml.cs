@@ -70,6 +70,29 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Shows the server's segment of the status bar and its banners.
+    /// </summary>
+    /// <remarks>
+    /// A view model of its own rather than more of the main one's, handed in once the window exists;
+    /// until then both places are empty.
+    /// </remarks>
+    public void AttachServerStatus(ServerStatusViewModel status)
+    {
+        ArgumentNullException.ThrowIfNull(status);
+
+        this.FindControl<ContentControl>("ServerBannerHost")!.Content = status;
+        this.FindControl<ContentControl>("ServerStatusHost")!.Content = status;
+
+        status.PageRequested += async (_, url) =>
+        {
+            if (Uri.TryCreate(url, UriKind.Absolute, out Uri? page) && TopLevel.GetTopLevel(this)?.Launcher is { } launcher)
+            {
+                await launcher.LaunchUriAsync(page);
+            }
+        };
+    }
+
+    /// <summary>
     /// Opens the release the update notice found.
     /// </summary>
     /// <remarks>

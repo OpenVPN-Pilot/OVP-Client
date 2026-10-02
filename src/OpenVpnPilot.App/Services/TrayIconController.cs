@@ -1,4 +1,5 @@
 using Avalonia.Threading;
+using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.Core.Settings;
@@ -26,6 +27,12 @@ public sealed class TrayIconController : IDisposable
     public const string AboutAction = "about";
     public const string ShowInDockAction = "show-in-dock";
     public const string QuitAction = "quit";
+    public const string SyncNowAction = "sync-now";
+
+    /// <summary>
+    /// The line that says how the server stands. Never invoked: it is drawn greyed out.
+    /// </summary>
+    public const string ServerStateEntry = "server-state";
 
     private readonly ISystemTrayIcon tray;
     private readonly ConnectionManager connections;
@@ -51,6 +58,13 @@ public sealed class TrayIconController : IDisposable
     /// </remarks>
     private readonly IApplicationMenu? applicationMenu;
 
+    /// <summary>
+    /// The server, in Server mode, whose state the menu names and which "Sync now" asks.
+    /// </summary>
+    private readonly IServerStatusSource? serverStatus;
+
+    private readonly TimeProvider time;
+    private string? serverLine;
     private bool disposed;
 
     public TrayIconController(
@@ -59,7 +73,9 @@ public sealed class TrayIconController : IDisposable
         ILocalizer localizer,
         ISettingsService settings,
         IApplicationMenu? applicationMenu = null,
-        IDockPresence? dock = null)
+        IDockPresence? dock = null,
+        IServerStatusSource? serverStatus = null,
+        TimeProvider? time = null)
     {
         ArgumentNullException.ThrowIfNull(tray);
         ArgumentNullException.ThrowIfNull(connections);
@@ -72,6 +88,8 @@ public sealed class TrayIconController : IDisposable
         this.settings = settings;
         this.applicationMenu = applicationMenu;
         this.dock = dock;
+        this.serverStatus = serverStatus;
+        this.time = time ?? TimeProvider.System;
     }
 
     /// <summary>
@@ -104,7 +122,29 @@ public sealed class TrayIconController : IDisposable
         connections.StateChanged += OnStateChanged;
         localizer.LanguageChanged += OnLanguageChanged;
         settings.Changed += OnSettingsChanged;
+
+        if (serverStatus is not null)
+        {
+            serverStatus.Changed += OnServerStatusChanged;
+        }
     }
+
+    /// <summary>
+    /// Rebuilds only when the line would read differently, because the status changes every time the
+    /// server is asked how quickly it answers.
+    /// </summary>
+    private void OnServerStatusChanged(object? sender, EventArgs e) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!string.Equals(serverLine, ServerLine(), StringComparison.Ordinal))
+            {
+                RebuildMenu();
+            }
+        });
+
+    private string? ServerLine() => serverStatus is null
+        ? null
+        : ServerStatusText.Compact(localizer, serverStatus.Current, time.GetUtcNow());
 
     private void OnSettingsChanged(object? sender, PilotSettings changed) =>
         Dispatcher.UIThread.Post(RebuildMenu);
@@ -151,6 +191,20 @@ public sealed class TrayIconController : IDisposable
             TrayMenuEntry.Separator,
         ];
 
+        serverLine = ServerLine();
+
+        if (serverStatus is not null && serverLine is not null)
+        {
+            ServerStatusSnapshot snapshot = serverStatus.Current;
+
+            entries.Add(new TrayMenuEntry(ServerStateEntry, serverLine, IsEnabled: false));
+            entries.Add(new TrayMenuEntry(
+                SyncNowAction,
+                localizer["tray.syncNow"],
+                snapshot.SignedIn && snapshot.State != SyncState.Synchronising));
+            entries.Add(TrayMenuEntry.Separator);
+        }
+
         if (dock is not null)
         {
             entries.Add(new TrayMenuEntry(
@@ -180,6 +234,11 @@ public sealed class TrayIconController : IDisposable
 
         disposed = true;
         settings.Changed -= OnSettingsChanged;
+
+        if (serverStatus is not null)
+        {
+            serverStatus.Changed -= OnServerStatusChanged;
+        }
 
         tray.Activated -= OnActivated;
         tray.MenuItemInvoked -= OnMenuItemInvoked;
