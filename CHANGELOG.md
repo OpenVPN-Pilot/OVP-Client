@@ -31,6 +31,16 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   Switching between this computer's profiles and a server is such a restart. It is refused while a
   tunnel is up, and it deletes nothing: going back finds the other side exactly as it was left.
 
+### Fixed
+
+- **A settings file that is briefly locked is no longer replaced by the defaults.** When another
+  program held `settings.json` open at start, the defaults stood in for it, were mistaken for a file
+  from an older build and written back over it with a new installation identity, which lost every
+  setting the moment the lock was gone. Opening the file is now tried again for half a second; if it
+  stays out of reach the defaults apply for that run only, nothing is written to the file until the
+  next start, and no identity is created. A file that does not parse and cannot be moved aside is
+  left in place for the same reason.
+
 ## [1.9.0] - 2026-09-17
 
 ### Added
