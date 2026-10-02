@@ -47,6 +47,14 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   from the disk, the settings that followed it return to their defaults, and the application says
   in plain words that the account no longer has access and starts again on this computer's own
   profiles, which are untouched. The server is not asked again.
+- **The first start asks where the profiles should live**: on this computer, on a server, or
+  decide later, which keeps them on this computer. Only a true first start asks; an installation
+  that updates keeps its profiles where they are. Choosing a server checks its address (`https://`
+  only, and plain `http://` is refused with the reason), shows its name, version and way of signing
+  in or the precise problem, and signs in. Only then does the application restart into the server,
+  passing itself `--first-sync`, and the new copy runs the first synchronisation with its progress
+  on screen before the main window appears. A failure offers going back and using this computer
+  instead.
 - **"Forget all stored credentials" signs out of the server first**, in Server mode, so the session
   ends on the server rather than lingering until it expires.
 
