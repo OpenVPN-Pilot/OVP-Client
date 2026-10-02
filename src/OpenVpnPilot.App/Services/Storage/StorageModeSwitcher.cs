@@ -39,10 +39,51 @@ public interface IStorageModeSwitcher
     /// Switches to a server, or to another server when one is already in use.
     /// </summary>
     /// <param name="serverAddress">The address as typed; it is stored in its normal form.</param>
+    /// <param name="followUp">What the next copy does before its main window, see <see cref="StorageSwitchFollowUp"/>.</param>
     /// <param name="cancellationToken">Cancels before anything has been written.</param>
     public Task<StorageSwitchResult> SwitchToServerAsync(
         string serverAddress,
+        StorageSwitchFollowUp followUp = StorageSwitchFollowUp.None,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Leaves a server that told this client to wipe: back to this computer, the server forgotten,
+    /// the person told, then the restart.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The one switch that is not a person's choice, so nothing is asked and the tunnel check is not
+    /// made: the wipe has ended every tunnel before it comes here. The server's address is removed
+    /// rather than kept for the way back, because the account it was used with no longer exists.
+    /// </para>
+    /// <para>
+    /// The mode is written first and the person told second, so the next start is local even when
+    /// the application is ended while the message is still on screen. This copy is ended in every
+    /// case: it works on a copy that no longer exists. When the settings did not take the change or
+    /// the new copy could not be started, the outcome says so and nobody is started.
+    /// </para>
+    /// </remarks>
+    /// <param name="announce">Tells the person; awaited before the restart.</param>
+    public Task<StorageSwitchResult> LeaveRevokedServerAsync(
+        Func<CancellationToken, Task> announce,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// What the copy started by a switch does before it shows its main window.
+/// </summary>
+public enum StorageSwitchFollowUp
+{
+    /// <summary>
+    /// Starts as usual.
+    /// </summary>
+    None,
+
+    /// <summary>
+    /// Continues a setup whose sign in this copy made: confirms the session it stored and runs the
+    /// first synchronisation with its progress on screen.
+    /// </summary>
+    FirstSynchronisation,
 }
 
 /// <summary>
@@ -101,6 +142,11 @@ public sealed class StorageModeSwitcher : IStorageModeSwitcher
     /// </summary>
     public const string AfterRestartOption = "--after-restart";
 
+    /// <summary>
+    /// The option that makes the new copy continue a setup with the first synchronisation.
+    /// </summary>
+    public const string FirstSynchronisationOption = "--first-sync";
+
     private readonly ISettingsService settings;
     private readonly IActiveStorage active;
     private readonly IApplicationPaths paths;
@@ -150,10 +196,11 @@ public sealed class StorageModeSwitcher : IStorageModeSwitcher
     public event EventHandler? ShutdownRequested;
 
     public Task<StorageSwitchResult> SwitchToLocalAsync(CancellationToken cancellationToken = default) =>
-        SwitchAsync(StorageMode.Local, null, cancellationToken);
+        SwitchAsync(StorageMode.Local, null, StorageSwitchFollowUp.None, cancellationToken);
 
     public Task<StorageSwitchResult> SwitchToServerAsync(
         string serverAddress,
+        StorageSwitchFollowUp followUp = StorageSwitchFollowUp.None,
         CancellationToken cancellationToken = default)
     {
         if (!ServerKey.TryNormalise(serverAddress, out string? normalised, out ServerAddressProblem problem))
@@ -161,12 +208,72 @@ public sealed class StorageModeSwitcher : IStorageModeSwitcher
             return Task.FromResult(new StorageSwitchResult(StorageSwitchOutcome.AddressUnusable, problem));
         }
 
-        return SwitchAsync(StorageMode.Server, normalised, cancellationToken);
+        return SwitchAsync(StorageMode.Server, normalised, followUp, cancellationToken);
+    }
+
+    public async Task<StorageSwitchResult> LeaveRevokedServerAsync(
+        Func<CancellationToken, Task> announce,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(announce);
+
+        if (Interlocked.CompareExchange(ref switching, 1, 0) != 0)
+        {
+            return new StorageSwitchResult(StorageSwitchOutcome.InProgress);
+        }
+
+        // From here on this copy is on its way out whatever happens, so it stays switching.
+        StorageSwitchOutcome outcome = StorageSwitchOutcome.Restarting;
+
+        await settings.UpdateAsync(
+            next =>
+            {
+                next.Storage.Mode = StorageMode.Local;
+                next.Storage.ServerUrl = null;
+            },
+            cancellationToken);
+
+        bool saved = FileSelects(StorageMode.Local, null)
+            && StorageModeReader.Read(paths.SettingsPath).ServerUrl is null;
+
+        if (!saved)
+        {
+            StorageLog.SwitchNotSaved(logger, StorageMode.Local);
+            outcome = StorageSwitchOutcome.SettingsNotSaved;
+        }
+
+        await announce(cancellationToken);
+
+        if (saved)
+        {
+            if (restart.TryStartSuccessor(SuccessorArguments(StorageSwitchFollowUp.None)))
+            {
+                StorageLog.Switching(logger, active.Mode, StorageMode.Local, null);
+            }
+            else
+            {
+                StorageLog.LeaveRestartFailed(logger);
+                outcome = StorageSwitchOutcome.RestartFailed;
+            }
+        }
+
+        ShutdownRequested?.Invoke(this, EventArgs.Empty);
+        return new StorageSwitchResult(outcome);
+    }
+
+    private string[] SuccessorArguments(StorageSwitchFollowUp followUp)
+    {
+        string[] arguments = [AfterRestartOption, processId.ToString(CultureInfo.InvariantCulture)];
+
+        return followUp == StorageSwitchFollowUp.FirstSynchronisation
+            ? [.. arguments, FirstSynchronisationOption]
+            : arguments;
     }
 
     private async Task<StorageSwitchResult> SwitchAsync(
         StorageMode mode,
         string? serverAddress,
+        StorageSwitchFollowUp followUp,
         CancellationToken cancellationToken)
     {
         // A second click while the first is writing, or after it has already started the new copy,
@@ -218,9 +325,7 @@ public sealed class StorageModeSwitcher : IStorageModeSwitcher
                 return new StorageSwitchResult(StorageSwitchOutcome.SettingsNotSaved);
             }
 
-            string[] arguments = [AfterRestartOption, processId.ToString(CultureInfo.InvariantCulture)];
-
-            if (!restart.TryStartSuccessor(arguments))
+            if (!restart.TryStartSuccessor(SuccessorArguments(followUp)))
             {
                 StorageLog.SwitchRestartFailed(logger, mode);
                 await settings.UpdateAsync(next => next.Storage = previous, CancellationToken.None);

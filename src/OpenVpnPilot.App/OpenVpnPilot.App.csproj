@@ -25,8 +25,7 @@
       The icon also ships as a file. The shell reads it from disk when it looks up the application
       identity that labels the notifications, and it cannot reach one embedded in the assembly.
     -->
-    <Content Include="..\..\assets\artwork\OpenVpnPilot.ico" Link="openvpnpilot.ico"
-             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\artwork\OpenVpnPilot.ico" Link="openvpnpilot.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -45,6 +44,7 @@
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.90.1" />
     <PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />

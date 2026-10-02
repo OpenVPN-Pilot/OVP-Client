@@ -1,0 +1,101 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:OpenVpnPilot.App.ViewModels"
+        xmlns:views="using:OpenVpnPilot.App.Views"
+        xmlns:loc="using:OpenVpnPilot.App.Localization"
+        x:Class="OpenVpnPilot.App.Views.FirstRunWindow"
+        x:DataType="vm:FirstRunViewModel"
+        Width="560" SizeToContent="Height"
+        WindowStartupLocation="CenterScreen"
+        CanResize="False"
+        Background="{DynamicResource SurfaceWindow}"
+        Icon="/Assets/openvpnpilot.ico"
+        Title="{loc:Translate firstRun.windowTitle}">
+
+  <StackPanel Margin="28,24" Spacing="16">
+
+    <!-- Where should the profiles live? -->
+    <StackPanel Spacing="14" IsVisible="{Binding IsChoice}">
+      <TextBlock Text="{loc:Translate firstRun.question}" Classes="title" TextWrapping="Wrap" />
+
+      <Button Classes="choice" Command="{Binding ChooseThisComputerCommand}">
+        <StackPanel Spacing="4">
+          <TextBlock Text="{loc:Translate firstRun.thisComputer}" Classes="body" FontWeight="SemiBold" />
+          <TextBlock Text="{loc:Translate firstRun.thisComputerHint}" Classes="muted" TextWrapping="Wrap" />
+        </StackPanel>
+      </Button>
+
+      <Button Classes="choice" Command="{Binding ChooseServerCommand}">
+        <StackPanel Spacing="4">
+          <TextBlock Text="{loc:Translate firstRun.server}" Classes="body" FontWeight="SemiBold" />
+          <TextBlock Text="{loc:Translate firstRun.serverHint}" Classes="muted" TextWrapping="Wrap" />
+        </StackPanel>
+      </Button>
+
+      <Button Content="{loc:Translate firstRun.decideLater}" Classes="quiet"
+              HorizontalAlignment="Left" Command="{Binding DecideLaterCommand}" />
+    </StackPanel>
+
+    <!-- Which server? -->
+    <StackPanel Spacing="12" IsVisible="{Binding IsAddress}">
+      <TextBlock Text="{loc:Translate firstRun.addressTitle}" Classes="title" TextWrapping="Wrap" />
+      <TextBlock Text="{loc:Translate firstRun.addressHint}" Classes="muted" TextWrapping="Wrap" />
+
+      <StackPanel Spacing="5">
+        <TextBlock Text="{loc:Translate firstRun.address}" Classes="muted" />
+        <TextBox Name="AddressBox" Text="{Binding Address}" IsEnabled="{Binding IsIdle}"
+                 PlaceholderText="{loc:Translate firstRun.addressPlaceholder}" />
+      </StackPanel>
+
+      <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsChecking}">
+        <ProgressBar IsIndeterminate="True" Width="80" VerticalAlignment="Center" />
+        <TextBlock Text="{loc:Translate firstRun.checking}" Classes="muted" VerticalAlignment="Center" />
+      </StackPanel>
+    </StackPanel>
+
+    <!-- Signing in, under what the server said about itself. -->
+    <StackPanel Spacing="12" IsVisible="{Binding IsSignIn}">
+      <Border Background="{DynamicResource SurfaceCard}" CornerRadius="{StaticResource RadiusMedium}"
+              Padding="12,8" IsVisible="{Binding HasServerSummary}">
+        <TextBlock Text="{Binding ServerSummary}" Classes="muted" TextWrapping="Wrap" />
+      </Border>
+      <ContentControl Content="{Binding SignIn}">
+        <ContentControl.ContentTemplate>
+          <DataTemplate x:DataType="vm:SignInViewModel">
+            <views:SignInView />
+          </DataTemplate>
+        </ContentControl.ContentTemplate>
+      </ContentControl>
+    </StackPanel>
+
+    <!-- Signed in; on the way into the server. -->
+    <StackPanel Spacing="12" IsVisible="{Binding IsRestarting}">
+      <TextBlock Text="{loc:Translate firstRun.restarting}" Classes="body" TextWrapping="Wrap" />
+      <ProgressBar IsIndeterminate="True" />
+    </StackPanel>
+
+    <!-- What went wrong with the address, the server, or leaving for it. -->
+    <Border Background="{DynamicResource StateFailedSoft}"
+            CornerRadius="{StaticResource RadiusMedium}" Padding="10,7"
+            IsVisible="{Binding HasMessage}">
+      <StackPanel Spacing="3">
+        <TextBlock Text="{Binding Message}" Foreground="{DynamicResource StateFailed}"
+                   TextWrapping="Wrap" FontSize="12" />
+        <TextBlock Text="{Binding Reference}" Classes="muted" TextWrapping="Wrap"
+                   IsVisible="{Binding HasReference}" />
+      </StackPanel>
+    </Border>
+
+    <Grid ColumnDefinitions="Auto,*,Auto" IsVisible="{Binding CanGoBack}">
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+        <Button Content="{loc:Translate common.back}" Command="{Binding BackCommand}" MinWidth="92" />
+        <Button Content="{loc:Translate firstRun.useThisComputer}" Classes="quiet"
+                Command="{Binding UseThisComputerCommand}" />
+      </StackPanel>
+      <Button Grid.Column="2" Content="{loc:Translate firstRun.continue}"
+              Command="{Binding ContinueCommand}" Classes="primary" MinWidth="120"
+              IsDefault="True" IsVisible="{Binding IsAddress}" />
+    </Grid>
+
+  </StackPanel>
+</Window>

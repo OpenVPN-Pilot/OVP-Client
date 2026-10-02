@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenVpnPilot.App.Services.Storage;
+using OpenVpnPilot.App.Tests.Services.Server;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Server;
 using OpenVpnPilot.Core.Settings;
@@ -206,6 +207,54 @@ public sealed class StorageModeSwitcherTests : IDisposable
         Assert.Equal(1, harness.ShutdownRequests);
     }
 
+    [Fact]
+    public async Task SwitchToServer_WithFirstSynchronisation_TellsTheNextCopyToContinueTheSetup()
+    {
+        Harness harness = await Harness.CreateAsync(root);
+
+        StorageSwitchResult result = await harness.Switcher.SwitchToServerAsync(
+            "https://pilot.example.com",
+            StorageSwitchFollowUp.FirstSynchronisation);
+
+        Assert.Equal(StorageSwitchOutcome.Restarting, result.Outcome);
+        string[] arguments = Assert.Single(harness.Restart.Started);
+        Assert.Equal(["--after-restart", "4242", "--first-sync"], arguments);
+        Assert.True(OpenVpnPilot.App.Services.StartupOptions.Parse(arguments).FirstSynchronisation);
+    }
+
+    [Fact]
+    public async Task LeaveRevokedServer_WritesLocalAndForgetsTheServerBeforeTellingThePerson()
+    {
+        Harness harness = await Harness.CreateAsync(root, StorageMode.Server, "https://pilot.example.com");
+        StorageSelection? seenWhileTelling = null;
+
+        StorageSwitchResult result = await harness.Switcher.LeaveRevokedServerAsync(_ =>
+        {
+            seenWhileTelling = StorageModeReader.Read(harness.Paths.SettingsPath);
+            Assert.Empty(harness.Restart.Started);
+            return Task.CompletedTask;
+        });
+
+        Assert.Equal(StorageSwitchOutcome.Restarting, result.Outcome);
+        Assert.Equal(StorageMode.Local, seenWhileTelling!.Mode);
+        Assert.Null(seenWhileTelling.ServerUrl);
+        Assert.Equal(["--after-restart", "4242"], Assert.Single(harness.Restart.Started));
+        Assert.Equal(1, harness.ShutdownRequests);
+    }
+
+    [Fact]
+    public async Task LeaveRevokedServer_RestartImpossible_StillEndsThisCopyAndStaysLocal()
+    {
+        Harness harness = await Harness.CreateAsync(root, StorageMode.Server, "https://pilot.example.com");
+        harness.Restart.Succeeds = false;
+
+        StorageSwitchResult result = await harness.Switcher.LeaveRevokedServerAsync(_ => Task.CompletedTask);
+
+        Assert.Equal(StorageSwitchOutcome.RestartFailed, result.Outcome);
+        Assert.Equal(StorageMode.Local, StorageModeReader.Read(harness.Paths.SettingsPath).Mode);
+        Assert.Equal(1, harness.ShutdownRequests);
+    }
+
     public void Dispose()
     {
         try
@@ -282,49 +331,5 @@ public sealed class StorageModeSwitcherTests : IDisposable
             ActiveStorage storage = ActiveStorage.Resolve(paths, StorageModeReader.Read(paths.SettingsPath));
             return new Harness(paths, settings is null ? file : settings, storage);
         }
-    }
-
-    private sealed class CountedTunnels : IActiveTunnels
-    {
-        public int Count { get; set; }
-    }
-
-    private sealed class RecordingRestart : IApplicationRestart
-    {
-        public List<string[]> Started { get; } = [];
-
-        public bool Succeeds { get; set; } = true;
-
-        public bool TryStartSuccessor(IReadOnlyList<string> arguments)
-        {
-            if (!Succeeds)
-            {
-                return false;
-            }
-
-            Started.Add([.. arguments]);
-            return true;
-        }
-    }
-
-    private sealed class TemporaryPaths : IApplicationPaths
-    {
-        public TemporaryPaths(string root) => DataDirectory = root;
-
-        public string DataDirectory { get; }
-
-        public string LocalDatabasePath => Path.Combine(DataDirectory, "pilot.db");
-
-        public string ServersDirectory => Path.Combine(DataDirectory, "servers");
-
-        public string LogDirectory => Path.Combine(DataDirectory, "logs");
-
-        public string SettingsPath => Path.Combine(DataDirectory, "settings.json");
-
-        public string SecretsDirectory => Path.Combine(DataDirectory, "secrets");
-
-        public string InstalledLanguageDirectory => Path.Combine(DataDirectory, "installed");
-
-        public string UserLanguageDirectory => Path.Combine(DataDirectory, "lang");
     }
 }

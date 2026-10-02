@@ -38,6 +38,33 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   someone else changed meanwhile is overwritten. A change the server refuses for good is dropped and
   counted; one it cannot take now waits. Connection history, the last connection and the number of
   connections never leave the machine.
+- **Signing in to a server**, in whichever way the server asks: a user name alone, a user name and
+  a password for the user file and the directory, or the Microsoft sign in in the system browser
+  for Entra ID. A wrong password, an account outside the allowed group, an unreachable directory,
+  too many attempts (with how long to wait), a wrong clock (with both times), a client that is too
+  old and a certificate this computer does not trust each have a sentence of their own, with the
+  request id beneath it for the server's operator. A certificate that is not trusted is never
+  offered as something to get past.
+- **The session with the server is kept between starts** and picked up without waiting for the
+  network, so the role is known while offline. Signing in as somebody other than the person this
+  copy last knew first discards the previous person's waiting changes, favourites and shortcuts and
+  then synchronises everything again; the same person simply continues. Signing out keeps the copy
+  and its waiting changes.
+- **When a server withdraws the account**, everything that came from it is removed: every tunnel
+  ends, the stored sign ins of its profiles and the session go from the keystore, its copy goes
+  from the disk, the settings that followed it return to their defaults, and the application says
+  in plain words that the account no longer has access and starts again on this computer's own
+  profiles, which are untouched. The server is not asked again.
+- **The first start asks where the profiles should live**: on this computer, on a server, or
+  decide later, which keeps them on this computer. Only a true first start asks; an installation
+  that updates keeps its profiles where they are. Choosing a server checks its address (`https://`
+  only, and plain `http://` is refused with the reason), shows its name, version and way of signing
+  in or the precise problem, and signs in. Only then does the application restart into the server,
+  passing itself `--first-sync`, and the new copy runs the first synchronisation with its progress
+  on screen before the main window appears. A failure offers going back and using this computer
+  instead.
+- **"Forget all stored credentials" signs out of the server first**, in Server mode, so the session
+  ends on the server rather than lingering until it expires.
 
 ### Fixed
 
