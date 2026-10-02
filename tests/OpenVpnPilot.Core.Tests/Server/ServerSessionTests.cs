@@ -173,6 +173,33 @@ public sealed class ServerSessionTests
         Assert.Equal("refresh-2", server.Secrets.Entries[TestServer.RefreshReference].Password);
     }
 
+    [Fact]
+    public async Task Refresh_KeystoreRefusesTheNewToken_RemovesTheUsedOneAndCarriesOnFromMemory()
+    {
+        using TestServer server = new(request => request.Path switch
+        {
+            RefreshPath => Answers.Tokens("access-2", "refresh-2", TestServer.Start.AddMinutes(30)),
+            _ when request.Bearer == "access-1" => Answers.Problem(HttpStatusCode.Unauthorized, ServerErrorCodes.TokenExpired),
+            _ => Answers.Json(Answers.NoTags),
+        });
+        await server.SignedInAsync();
+        server.Secrets.RefusesWrites = true;
+
+        ServerResult result = await server.Api.GetTagsAsync();
+
+        // This run goes on with the new pair; the next start finds no token and asks for a sign in,
+        // instead of presenting one the server has already seen used.
+        Assert.True(result.IsSuccess);
+        Assert.True(server.Session.IsSignedIn);
+        Assert.False(server.Secrets.Entries.ContainsKey(TestServer.RefreshReference));
+
+        int refused = server.Journal.IndexOf($"refuse {TestServer.RefreshReference}");
+        int removed = server.Journal.IndexOf($"delete {TestServer.RefreshReference}");
+        int used = server.Journal.IndexOf($"send {TagsPath} access-2");
+        Assert.True(refused >= 0 && removed > refused, "The used refresh token was left in the keystore.");
+        Assert.True(used > removed, "The new access token was used before the used refresh token was removed.");
+    }
+
     [Theory]
     [InlineData(ServerErrorCodes.RefreshTokenInvalid)]
     [InlineData(ServerErrorCodes.RefreshTokenReused)]

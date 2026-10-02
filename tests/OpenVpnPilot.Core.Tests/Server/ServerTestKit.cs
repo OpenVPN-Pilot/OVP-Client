@@ -194,6 +194,11 @@ internal sealed class FakeSecretStore(Journal? journal = null) : ISecretStore
 
     public bool IsAvailable { get; set; } = true;
 
+    /// <summary>
+    /// Makes every write fail the way a keystore that is locked or full does.
+    /// </summary>
+    public bool RefusesWrites { get; set; }
+
     public IReadOnlyDictionary<string, StoredSecret> Entries => entries;
 
     public Task<StoredSecret?> TryReadAsync(string reference, CancellationToken cancellationToken = default) =>
@@ -201,6 +206,12 @@ internal sealed class FakeSecretStore(Journal? journal = null) : ISecretStore
 
     public Task WriteAsync(string reference, StoredSecret secret, CancellationToken cancellationToken = default)
     {
+        if (RefusesWrites)
+        {
+            journal?.Add($"refuse {reference}");
+            throw new IOException("The keystore refused the write.");
+        }
+
         entries[reference] = secret;
         journal?.Add($"store {reference} {secret.Password}");
         return Task.CompletedTask;

@@ -479,9 +479,16 @@ public sealed class ServerSession : IServerSession, IDisposable
     /// Stores the refresh token, and only then makes the access token usable.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The previous refresh token is already used up on the server, so when the keystore refuses
     /// the new one the session carries on from memory for this run rather than ending now: ending
     /// it would not bring the old token back.
+    /// </para>
+    /// <para>
+    /// What the keystore still holds is then removed. Presented at the next start it would be a
+    /// token used twice, which the server answers by ending the session as reused; without it the
+    /// next start simply asks for a sign in.
+    /// </para>
     /// </remarks>
     private async Task KeepAsync(TokenResponse tokens, CancellationToken cancellationToken)
     {
@@ -497,6 +504,7 @@ public sealed class ServerSession : IServerSession, IDisposable
                 or InvalidOperationException)
             {
                 ServerSessionLog.RefreshTokenNotStored(logger, ServerKey, exception);
+                await RemoveStoredTokenAsync(cancellationToken);
             }
         }
 
@@ -523,11 +531,18 @@ public sealed class ServerSession : IServerSession, IDisposable
             generation++;
         }
 
-        if (!secrets.IsAvailable)
+        if (secrets.IsAvailable)
         {
-            return;
+            await RemoveStoredTokenAsync(cancellationToken);
         }
+    }
 
+    /// <summary>
+    /// Removes the refresh token from the keystore. A failure is written down and not passed on,
+    /// because nothing the caller could do differently follows from it.
+    /// </summary>
+    private async Task RemoveStoredTokenAsync(CancellationToken cancellationToken)
+    {
         try
         {
             await secrets.DeleteAsync(refreshReference, cancellationToken);

@@ -50,7 +50,9 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   network, so the role is known while offline. Signing in as somebody other than the person this
   copy last knew first discards the previous person's waiting changes, favourites and shortcuts and
   then synchronises everything again; the same person simply continues. Signing out keeps the copy
-  and its waiting changes.
+  and its waiting changes. When the keystore refuses a renewed session token, the session goes on
+  for this run and the used token is removed, so the next start asks for a sign in rather than
+  presenting a token the server has already seen.
 - **When a server withdraws the account**, everything that came from it is removed: every tunnel
   ends, the stored sign ins of its profiles and the session go from the keystore, its copy goes
   from the disk, the settings that followed it return to their defaults, and the application says
