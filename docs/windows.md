@@ -69,11 +69,15 @@ machine still keeps each person's profiles apart.
 | | |
 | --- | --- |
 | Profiles, tags and history | `%LOCALAPPDATA%\OpenVpnPilot\pilot.db` |
+| The copy of a server's profiles | `%LOCALAPPDATA%\OpenVpnPilot\servers\<key>\pilot.db`, one folder per server |
 | Settings | `%LOCALAPPDATA%\OpenVpnPilot\settings.json`, editable by hand |
 | Credentials | `%LOCALAPPDATA%\OpenVpnPilot\secrets\`, one protected file each |
 | Logs | `%LOCALAPPDATA%\OpenVpnPilot\logs\`, one `yyyy-MM-dd_HH.log` per hour, seven days and a gigabyte at most by default |
 | Added languages | `%LOCALAPPDATA%\OpenVpnPilot\lang\` |
 | Configurations while connected | `%ProgramData%\OpenVpnPilot\runtime\<user SID>\` |
+
+A server's copy is filed under a key derived from its address, so every server has a copy of its own,
+and switching between servers or back to the profiles kept on the computer removes nothing.
 
 A materialised configuration carries its private key inline, which is why it lives under
 `%ProgramData%` with an access control list for one user rather than in a temporary directory. It

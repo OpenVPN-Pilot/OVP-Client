@@ -211,11 +211,15 @@ machine still keeps each person's profiles apart.
 | | |
 | --- | --- |
 | Profiles, tags and history | `~/Library/Application Support/OpenVpnPilot/pilot.db` |
+| The copy of a server's profiles | `~/Library/Application Support/OpenVpnPilot/servers/<key>/pilot.db`, one folder per server |
 | Settings | `~/Library/Application Support/OpenVpnPilot/settings.json`, editable by hand |
 | Credentials | the login keychain, all of them in one item under the service `OpenVpnPilot` |
 | Logs | `~/Library/Application Support/OpenVpnPilot/logs/`, one `yyyy-MM-dd_HH.log` per hour, seven days and a gigabyte at most by default |
 | Added languages | `~/Library/Application Support/OpenVpnPilot/lang/` |
 | Autostart | `~/Library/LaunchAgents/org.openvpnpilot.app.login.plist`, only while "start with the system" is on |
+
+A server's copy is filed under a key derived from its address, so every server has a copy of its own,
+and switching between servers or back to the profiles kept on the computer removes nothing.
 
 Credentials go to the keychain through the Security framework, never through the `security` command,
 which would put the secret in the process list for anyone to read.

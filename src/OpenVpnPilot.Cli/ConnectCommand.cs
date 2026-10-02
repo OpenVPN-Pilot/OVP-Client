@@ -238,21 +238,14 @@ internal static class ConnectCommand
 
     private static async Task<StoredProfile?> LoadProfileAsync(string name)
     {
-        string databasePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "OpenVpnPilot",
-            "pilot.db");
-
-        if (!File.Exists(databasePath))
+        // A store that was never created holds no profile, and creating one to find that out would
+        // leave an empty database behind for a command that only wanted to read.
+        if (!File.Exists(StoreFactory.Storage.DatabasePath))
         {
             return null;
         }
 
-        DbContextOptions<PilotDbContext> options = new DbContextOptionsBuilder<PilotDbContext>()
-            .UseSqlite($"Data Source={databasePath}")
-            .Options;
-
-        await using PilotDbContext context = new(options);
+        await using PilotDbContext context = new(StoreFactory.Options());
 
         Profile? match = await context.Profiles
             .Where(profile => EF.Functions.Like(profile.Name, $"%{name}%"))

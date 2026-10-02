@@ -51,6 +51,10 @@ internal static class AppHost
     {
         UserApplicationPaths paths = new();
 
+        // Before anything is composed, because every store is composed against the one file this
+        // decides. Switching the mode restarts the process, so it is decided exactly once.
+        ActiveStorage storage = ActiveStorage.Resolve(paths, StorageModeReader.Read(paths.SettingsPath));
+
         HostApplicationBuilder builder = Host.CreateApplicationBuilder();
 
         // Built before the logger, because the logger writes into it. Both are handed to the
@@ -66,10 +70,11 @@ internal static class AppHost
         builder.Services.AddSingleton<OpenVpnLogRelay>();
 
         builder.Services.AddSingleton<IApplicationPaths>(paths);
+        builder.Services.AddSingleton<IActiveStorage>(storage);
         builder.Services.AddSingleton(TimeProvider.System);
 
         builder.Services.AddDbContextFactory<PilotDbContext>(options =>
-            options.UseSqlite($"Data Source={paths.DatabasePath}"));
+            options.UseSqlite($"Data Source={storage.DatabasePath}"));
 
         builder.Services.AddSingleton<IProfileStore, ProfileStore>();
         builder.Services.AddSingleton<ISessionStore, SessionStore>();

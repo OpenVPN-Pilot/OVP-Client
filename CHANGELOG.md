@@ -17,6 +17,11 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   generated once, the first time this version reads the file, and never again. An existing
   installation stays `Local`. Both are this machine's own: an exported package carries neither, and
   importing one keeps the values that were here.
+- **The copy of a server's profiles is a database of its own**, in `servers/<key>/pilot.db` beside
+  the local `pilot.db`, one folder per server, the key derived from the server's address. The
+  application and `ovp` open the one the settings name, and neither mode ever touches the other's
+  file. A settings file naming a server whose address is not a plain `https://` address opens the
+  local library and says why in the log.
 
 ## [1.9.0] - 2026-09-17
 

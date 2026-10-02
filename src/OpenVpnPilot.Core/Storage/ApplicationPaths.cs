@@ -14,11 +14,23 @@ namespace OpenVpnPilot.Core.Storage;
 public interface IApplicationPaths
 {
     /// <summary>
-    /// Directory holding the profile database and the log files.
+    /// Directory holding the databases, the settings and the log files.
     /// </summary>
     public string DataDirectory { get; }
 
-    public string DatabasePath { get; }
+    /// <summary>
+    /// The library on this machine, which is the database in Local mode.
+    /// </summary>
+    /// <remarks>
+    /// Not necessarily the database this process works on: that is
+    /// <see cref="IActiveStorage.DatabasePath"/>, which is this file only in Local mode.
+    /// </remarks>
+    public string LocalDatabasePath { get; }
+
+    /// <summary>
+    /// Where the copy of each server this machine has worked with is kept, one folder per server.
+    /// </summary>
+    public string ServersDirectory { get; }
 
     public string LogDirectory { get; }
 
@@ -65,7 +77,9 @@ public sealed class UserApplicationPaths : IApplicationPaths
 
     public string DataDirectory { get; }
 
-    public string DatabasePath => Path.Combine(DataDirectory, "pilot.db");
+    public string LocalDatabasePath => Path.Combine(DataDirectory, ActiveStorage.DatabaseFileName);
+
+    public string ServersDirectory => Path.Combine(DataDirectory, "servers");
 
     public string LogDirectory => Path.Combine(DataDirectory, "logs");
 
