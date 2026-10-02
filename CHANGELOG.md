@@ -112,7 +112,8 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   when somebody was quicker, theirs is taken here instead. Nothing is shared for a sign in read from
   the keystore, for one that failed, or for an attempt that asked for a one time code. When
   "remember" was not ticked, the sign in is kept in memory only until it has been sent, and never
-  written to this computer.
+  written to this computer. A profile created while the server could not be reached shares its sign
+  ins in the same synchronisation that uploads it, under the id the server gave it.
 - **A profile deleted on the server while its tunnel is up** has its tunnel ended first, then it is
   removed, and the status bar says which one it was. A complete synchronisation keeps a stored sign
   in that is still waiting to be shared; everything else follows the server.

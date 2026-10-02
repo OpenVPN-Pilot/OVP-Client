@@ -191,6 +191,7 @@ public sealed class ServerWipeTests : IAsyncDisposable
             ServerProfileMaintenance maintenance = new(
                 copy.Factory,
                 secrets,
+                new TypedCredentials(new FixedStorageMode(true)),
                 new Outbox(copy.Factory, TimeProvider.System, NullLogger<Outbox>.Instance),
                 NullLogger<ServerProfileMaintenance>.Instance);
 

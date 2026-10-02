@@ -63,6 +63,7 @@ internal sealed partial class OutboxPusher
     public async Task<ServerResult?> PushAsync(SyncCycle cycle, CancellationToken cancellationToken)
     {
         IReadOnlyList<PendingChange> pending = await outbox.GetPendingAsync(cancellationToken);
+        long newest = pending.Count == 0 ? 0 : pending[^1].Id;
         int index = 0;
 
         while (index < pending.Count)
@@ -82,8 +83,15 @@ internal sealed partial class OutboxPusher
                 // Creates that follow each other go up together, which is what an import made
                 // while the server could not be reached becomes.
                 List<PendingChange> run = [.. pending.Skip(index).TakeWhile(change => change.Kind == PendingChangeKind.ProfileCreate)];
-                index += run.Count;
                 step = await CreateAsync(run, cycle, cancellationToken);
+
+                // An upload moved the markers of its profile to the server's id, so what was read
+                // before it names an id that is gone. The rest is read again, in the same order;
+                // what the uploads recorded themselves is the follow up cycle's, as before.
+                long handled = run[^1].Id;
+                pending = [.. (await outbox.GetPendingAsync(cancellationToken))
+                    .Where(change => change.Id > handled && change.Id <= newest)];
+                index = 0;
             }
             else
             {

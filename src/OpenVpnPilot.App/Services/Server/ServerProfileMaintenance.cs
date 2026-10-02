@@ -22,8 +22,8 @@ public interface IServerProfileMaintenance
     /// <remarks>
     /// <para>
     /// Sessions, shortcut bindings and pending markers follow the profile, the pending create is
-    /// completed, its stored sign ins move to the new id, and the favourites are marked to be sent
-    /// again, because the server only now knows the profile they name.
+    /// completed, its sign ins, stored or held in memory, move to the new id, and the favourites are
+    /// marked to be sent again, because the server only now knows the profile they name.
     /// </para>
     /// <para>
     /// When a profile with the server's id is already held, which is what answering a duplicate
@@ -105,22 +105,26 @@ public sealed class ServerProfileMaintenance : IServerProfileMaintenance
 
     private readonly IDbContextFactory<PilotDbContext> contextFactory;
     private readonly ISecretStore secrets;
+    private readonly IHeldVaultSecrets held;
     private readonly IOutbox outbox;
     private readonly ILogger<ServerProfileMaintenance> logger;
 
     public ServerProfileMaintenance(
         IDbContextFactory<PilotDbContext> contextFactory,
         ISecretStore secrets,
+        IHeldVaultSecrets held,
         IOutbox outbox,
         ILogger<ServerProfileMaintenance> logger)
     {
         ArgumentNullException.ThrowIfNull(contextFactory);
         ArgumentNullException.ThrowIfNull(secrets);
+        ArgumentNullException.ThrowIfNull(held);
         ArgumentNullException.ThrowIfNull(outbox);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.contextFactory = contextFactory;
         this.secrets = secrets;
+        this.held = held;
         this.outbox = outbox;
         this.logger = logger;
     }
@@ -190,6 +194,10 @@ public sealed class ServerProfileMaintenance : IServerProfileMaintenance
             OutboxLog.RekeyFailed(logger, temporaryId, serverId, exception);
             throw;
         }
+
+        // A sign in kept only in memory follows the profile as well, or the marker that names it
+        // under the new id would find nothing to share.
+        held.Move(temporaryId, serverId);
 
         foreach ((string reference, string realm) in formerSecrets)
         {

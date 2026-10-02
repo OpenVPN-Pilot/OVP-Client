@@ -20,6 +20,7 @@ public sealed class ServerProfileMaintenanceTests : IAsyncLifetime
 
     private TestDatabase database = null!;
     private Outbox outbox = null!;
+    private readonly TypedCredentials held = new(new FixedStorageMode(true));
 
     private Guid temporaryId;
     private Guid otherProfileId;
@@ -138,6 +139,25 @@ public sealed class ServerProfileMaintenanceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RekeyAsync_SignInHeldInMemory_MovesToTheServerIdOnlyWhenTheRekeyHappens()
+    {
+        StoredSecret typed = new("vpnuser", "typed-not-remembered");
+        held.Hold(temporaryId, "Auth", typed);
+        FailingSecrets failing = new(failOnWrite: 1);
+        await failing.SeedAsync(SecretReference.ForProfile(temporaryId, "Private Key"), Passphrase);
+
+        await Assert.ThrowsAsync<IOException>(() => CreateMaintenance(failing).RekeyAsync(temporaryId, serverId));
+
+        Assert.Equal(typed, held.Peek(temporaryId, "Auth"));
+        Assert.Null(held.Peek(serverId, "Auth"));
+
+        await CreateMaintenance(new FakeSecrets()).RekeyAsync(temporaryId, serverId);
+
+        Assert.Null(held.Peek(temporaryId, "Auth"));
+        Assert.Equal(typed, held.Peek(serverId, "Auth"));
+    }
+
+    [Fact]
     public async Task RekeyAsync_AfterAFailure_SucceedsWhenTriedAgain()
     {
         FakeSecrets secrets = await SeedAsync(new FakeSecrets());
@@ -243,6 +263,7 @@ public sealed class ServerProfileMaintenanceTests : IAsyncLifetime
     private ServerProfileMaintenance CreateMaintenance(ISecretStore secrets) => new(
         database.Factory,
         secrets,
+        held,
         outbox,
         NullLogger<ServerProfileMaintenance>.Instance);
 }

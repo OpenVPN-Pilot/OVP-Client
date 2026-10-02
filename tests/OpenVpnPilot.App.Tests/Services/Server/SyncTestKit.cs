@@ -367,6 +367,17 @@ internal sealed class SyncServer
             return Answers.Json(Profile(id, created.Name, stored, [.. created.Tags ?? []]), HttpStatusCode.Created);
         }
 
+        if (request.Method == HttpMethod.Post && path.StartsWith("/api/v1/profiles/", StringComparison.Ordinal)
+            && path.Split('/') is [_, _, _, _, string owner, "vault", string realm])
+        {
+            Guid id = Guid.Parse(owner);
+            VaultEntryRequest entry = request.Json.Deserialize<VaultEntryRequest>(ServerJson.Options)!;
+
+            return Configurations.ContainsKey(id)
+                ? Answers.Json(VaultEntry(id, realm, entry.Username, entry.Password), HttpStatusCode.Created)
+                : Answers.Problem(HttpStatusCode.NotFound, ServerErrorCodes.ProfileNotFound);
+        }
+
         if (request.Method == HttpMethod.Get && path.StartsWith("/api/v1/profiles/", StringComparison.Ordinal))
         {
             Guid id = Guid.Parse(path.Split('/')[4]);
@@ -420,7 +431,7 @@ internal sealed class SyncHarness : IAsyncDisposable
         Server = server;
         Network = network;
         Outbox = new Outbox(database.Factory, TimeProvider.System, NullLogger<Outbox>.Instance);
-        Maintenance = new ServerProfileMaintenance(database.Factory, network.Secrets, Outbox, NullLogger<ServerProfileMaintenance>.Instance);
+        Maintenance = new ServerProfileMaintenance(database.Factory, network.Secrets, Held, Outbox, NullLogger<ServerProfileMaintenance>.Instance);
         Settings = new RecordingSettingsService(
             SettingsBackend,
             new ChangeRecorder(Outbox, new FixedStorageMode(true)),

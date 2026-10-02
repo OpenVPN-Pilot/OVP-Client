@@ -65,6 +65,7 @@ public sealed class ServerLeftoversTests : IAsyncDisposable
             new ServerProfileMaintenance(
                 copy.Factory,
                 secrets,
+                new TypedCredentials(new FixedStorageMode(true)),
                 new Outbox(copy.Factory, TimeProvider.System, NullLogger<Outbox>.Instance),
                 NullLogger<ServerProfileMaintenance>.Instance),
             notice,

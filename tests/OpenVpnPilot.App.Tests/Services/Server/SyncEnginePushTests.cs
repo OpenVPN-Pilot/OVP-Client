@@ -53,6 +53,44 @@ public sealed class SyncEnginePushTests : IAsyncLifetime
         Assert.DoesNotContain(await harness.Database.MarkersAsync(), marker => marker.Kind == PendingChangeKind.ProfileCreate);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SynchronizeAsync_SignInOfAProfileCreatedOffline_IsSharedUnderTheServersIdInTheSameCycle(bool remembered)
+    {
+        UseDeltas();
+        Profile local = await harness.Database.AddProfileAsync("example-site", WithCredentialFile);
+        StoredSecret typed = new("vpnuser", "typed");
+
+        if (remembered)
+        {
+            await harness.Secrets.WriteAsync(SecretReference.ForProfile(local.Id, "Auth"), typed);
+        }
+        else
+        {
+            harness.Held.Hold(local.Id, "Auth", typed);
+        }
+
+        await harness.Outbox.RecordAsync(PendingChangeKind.ProfileCreate, local.Id);
+        await harness.Outbox.RecordAsync(PendingChangeKind.VaultAdd, local.Id, "Auth");
+
+        SyncCycleResult result = await harness.Engine.SynchronizeAsync(CancellationToken.None);
+
+        Assert.True(result.Completed);
+        Guid serverId = Assert.Single(harness.Server.Configurations.Keys);
+
+        List<string> writes = [.. harness.Requests
+            .Where(request => request.Method == HttpMethod.Post)
+            .Select(request => request.Path)];
+        Assert.Equal(["/api/v1/profiles", $"/api/v1/profiles/{serverId:D}/vault/Auth"], writes);
+
+        SentRequest shared = Assert.Single(harness.Sent(HttpMethod.Post, $"/api/v1/profiles/{serverId:D}/vault/Auth"));
+        Assert.Equal("typed", shared.Json.GetProperty("password").GetString());
+        Assert.DoesNotContain(await harness.Database.MarkersAsync(), marker => marker.Kind == PendingChangeKind.VaultAdd);
+        Assert.Null(harness.Held.Peek(local.Id, "Auth"));
+        Assert.Null(harness.Held.Peek(serverId, "Auth"));
+    }
+
     [Fact]
     public async Task SynchronizeAsync_ProfileEditedWhileItsUploadIsUnderWay_SendsTheEditAgainUnderTheNewId()
     {

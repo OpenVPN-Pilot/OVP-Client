@@ -82,6 +82,14 @@ public interface IHeldVaultSecrets
     public void Release(Guid profileId, string realm);
 
     /// <summary>
+    /// Moves what is held for a profile to the id the server gave it, as the keystore entries are.
+    /// </summary>
+    /// <remarks>
+    /// One already held under the new id stays, the rule the keystore follows as well.
+    /// </remarks>
+    public void Move(Guid fromProfileId, Guid toProfileId);
+
+    /// <summary>
     /// Forgets every one, which is part of forgetting every stored credential.
     /// </summary>
     public void Clear();
@@ -198,6 +206,18 @@ public sealed class TypedCredentials : ITypedCredentialLedger, IHeldVaultSecrets
         lock (gate)
         {
             held.Remove((profileId, realm));
+        }
+    }
+
+    public void Move(Guid fromProfileId, Guid toProfileId)
+    {
+        lock (gate)
+        {
+            foreach (((Guid ProfileId, string Realm) key, StoredSecret secret) in held.Where(entry => entry.Key.ProfileId == fromProfileId).ToList())
+            {
+                held.Remove(key);
+                held.TryAdd((toProfileId, key.Realm), secret);
+            }
         }
     }
 
