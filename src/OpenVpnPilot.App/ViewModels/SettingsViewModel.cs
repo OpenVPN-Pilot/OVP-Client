@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using OpenVpnPilot.App.Services;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
+using OpenVpnPilot.Core.Server;
 using OpenVpnPilot.Core.Settings;
 using OpenVpnPilot.Core.Updates;
 
@@ -37,6 +38,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// </summary>
     private readonly IDockPresence? dock;
 
+    /// <summary>
+    /// The server this copy works with. Null on the local library, where there is none.
+    /// </summary>
+    private readonly IServerSignIn? server;
+
     private PilotSettings draft;
 
     public SettingsViewModel(
@@ -50,7 +56,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         ISessionStore sessions,
         DiagnosticsBundle diagnostics,
         UpdateCoordinator updates,
-        IDockPresence? dock = null)
+        IDockPresence? dock = null,
+        IServerSignIn? server = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(localizer);
@@ -74,6 +81,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         this.diagnostics = diagnostics;
         this.updates = updates;
         this.dock = dock;
+        this.server = server;
 
         draft = settings.Current.Clone();
 
@@ -472,6 +480,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private async Task ForgetStoredCredentialsAsync()
     {
+        // Signed out first, while the refresh token is still there to end the session with: removed
+        // from the keystore alone, the session would stay open on the server until it expired.
+        if (server is not null)
+        {
+            await server.SignOutAsync();
+        }
+
         // Everything goes, a server's refresh token included, but what is reported is the number of
         // profile sign ins, the same number the screen showed before the button was pressed.
         int removed = (await secrets.ListAsync()).Count(SecretReference.IsProfileReference);

@@ -10,6 +10,7 @@ using OpenVpnPilot.App.Services.Storage;
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
+using OpenVpnPilot.Core.Server;
 using OpenVpnPilot.Core.Settings;
 using OpenVpnPilot.Core.Storage;
 using OpenVpnPilot.Data;
@@ -94,6 +95,7 @@ internal static class AppHost
 
         RegisterSettings(builder.Services, paths);
         RegisterLocalization(builder.Services, paths);
+        RegisterServer(builder.Services, storage);
 
         if (OperatingSystem.IsWindows())
         {
@@ -156,6 +158,53 @@ internal static class AppHost
 
         services.AddSingleton<ISettingsService>(
             provider => provider.GetRequiredService<JsonSettingsService>());
+    }
+
+    /// <summary>
+    /// What talks to a server, and in Server mode the connection to the one this copy works with.
+    /// </summary>
+    /// <remarks>
+    /// The factories exist in both modes, because a server is checked and signed in to from the local
+    /// library before switching to it: the first start does, and so does choosing a server later.
+    /// They contact nothing until they are used. The connection itself, the session, the
+    /// coordinator and the wipe exist only in Server mode, where there is exactly one server for the
+    /// life of the process; the local library composes nothing that could reach a server by itself.
+    /// </remarks>
+    private static void RegisterServer(IServiceCollection services, ActiveStorage storage)
+    {
+        services.AddSingleton<IClientVersionProvider>(_ => new AssemblyClientVersionProvider(typeof(AppHost).Assembly));
+        services.AddSingleton<IInstallationIdProvider, SettingsInstallationId>();
+        services.AddSingleton<IServerHttpClientFactory>(provider => new ServerHttpClientFactory(
+            provider.GetRequiredService<IClientVersionProvider>(),
+            provider.GetRequiredService<IInstallationIdProvider>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<ILoggerFactory>()));
+        services.AddSingleton<IServerConnectionFactory, ServerConnectionFactory>();
+        services.AddSingleton<IEntraSignIn, MsalEntraSignIn>();
+
+        if (storage is not { IsServerMode: true, ServerAddress: { } address, ServerKey: { } key })
+        {
+            return;
+        }
+
+        services.AddSingleton(provider =>
+            provider.GetRequiredService<IServerConnectionFactory>().Create(new Uri(address), key));
+        services.AddSingleton(provider => provider.GetRequiredService<IServerConnection>().Session);
+        services.AddSingleton(provider => provider.GetRequiredService<IServerConnection>().Api);
+        services.AddSingleton(provider => provider.GetRequiredService<IServerConnection>().Wipe);
+
+        services.AddSingleton<IServerAccountState, ServerAccountState>();
+        services.AddSingleton<IServerWipe, ServerWipe>();
+        services.AddSingleton<IAccountRevokedNotice>(provider => new WindowAccountRevokedNotice(
+            provider.GetRequiredService<ILocalizer>(),
+            showsWindows: !App.Startup.Headless,
+            provider.GetService<IApplicationActivation>()));
+
+        // One coordinator, which is also the sign in everything in this mode uses, so that every
+        // sign in passes its rule for a different person.
+        services.AddSingleton<ServerSessionCoordinator>();
+        services.AddSingleton<IServerSessionCoordinator>(provider => provider.GetRequiredService<ServerSessionCoordinator>());
+        services.AddSingleton<IServerSignIn>(provider => provider.GetRequiredService<ServerSessionCoordinator>());
     }
 
     private static void RegisterLocalization(IServiceCollection services, UserApplicationPaths paths)

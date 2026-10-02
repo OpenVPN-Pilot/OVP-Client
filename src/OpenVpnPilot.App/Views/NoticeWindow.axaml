@@ -1,0 +1,30 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:OpenVpnPilot.App.ViewModels"
+        xmlns:loc="using:OpenVpnPilot.App.Localization"
+        x:Class="OpenVpnPilot.App.Views.NoticeWindow"
+        x:DataType="vm:NoticeViewModel"
+        Title="{Binding Title}"
+        Width="460" SizeToContent="Height"
+        WindowStartupLocation="CenterScreen"
+        CanResize="False"
+        Topmost="True"
+        Background="{DynamicResource SurfaceWindow}"
+        Icon="/Assets/openvpnpilot.ico">
+
+  <StackPanel Margin="24" Spacing="14">
+
+    <TextBlock Text="{Binding Title}" Classes="title" TextWrapping="Wrap" />
+
+    <TextBlock Text="{Binding Message}" Classes="body" TextWrapping="Wrap" />
+
+    <TextBlock Text="{Binding Reference}" Classes="muted" TextWrapping="Wrap"
+               IsVisible="{Binding HasReference}" />
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
+      <Button Content="{loc:Translate common.ok}" Command="{Binding AcknowledgeCommand}"
+              MinWidth="92" Classes="primary" IsDefault="True" IsCancel="True" />
+    </StackPanel>
+
+  </StackPanel>
+</Window>

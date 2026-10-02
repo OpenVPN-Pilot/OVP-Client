@@ -55,4 +55,10 @@ internal static partial class StorageLog
         Level = LogLevel.Information,
         Message = "Switching from {From} to {To} {ServerAddress}. The application restarts.")]
     public static partial void Switching(ILogger logger, StorageMode from, StorageMode to, string? serverAddress);
+
+    [LoggerMessage(
+        EventId = 3907,
+        Level = LogLevel.Warning,
+        Message = "Leaving the server after the wipe, the application could not start again. It ends now and starts locally next time.")]
+    public static partial void LeaveRestartFailed(ILogger logger);
 }

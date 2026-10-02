@@ -76,6 +76,13 @@ public sealed record StartupOptions
     public int? AfterRestartOf { get; init; }
 
     /// <summary>
+    /// True when the copy that started this one signed in to a server during the setup, and this one
+    /// continues it: it confirms the stored session and runs the first synchronisation before the
+    /// main window appears.
+    /// </summary>
+    public bool FirstSynchronisation { get; init; }
+
+    /// <summary>
     /// True when the process was asked to do something rather than only to appear.
     /// </summary>
     public bool HasActions =>
@@ -96,6 +103,7 @@ public sealed record StartupOptions
         bool quit = false;
         bool help = false;
         int? afterRestartOf = null;
+        bool firstSynchronisation = false;
         List<string> connect = [];
         List<string> disconnect = [];
         List<string> files = [];
@@ -155,6 +163,10 @@ public sealed record StartupOptions
                     afterRestartOf = processId;
                     break;
 
+                case "--first-sync":
+                    firstSynchronisation = true;
+                    break;
+
                 default:
                     // Anything that is not an option is a file to import. An empty argument is not
                     // a path, and neither is something that begins with a dash: that is a mistyped
@@ -180,6 +192,7 @@ public sealed record StartupOptions
             ShowHelp = help,
             FilesToImport = files,
             AfterRestartOf = afterRestartOf,
+            FirstSynchronisation = firstSynchronisation,
         };
     }
 
@@ -238,6 +251,9 @@ public sealed record StartupOptions
           --quit                 End the copy that is running.
           --after-restart <pid>  Wait for that process to end before starting. The application
                                  passes this to itself when it restarts.
+          --first-sync           Continue setting up a server by running the first
+                                 synchronisation before the window appears. The application
+                                 passes this to itself after the sign in of its setup.
           -h, --help             Show this text.
 
         Only one copy runs per user. A second launch hands its options to the copy that already

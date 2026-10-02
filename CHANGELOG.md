@@ -30,6 +30,25 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   waits up to thirty seconds for that process to end before it takes the single instance claim.
   Switching between this computer's profiles and a server is such a restart. It is refused while a
   tunnel is up, and it deletes nothing: going back finds the other side exactly as it was left.
+- **Signing in to a server**, in whichever way the server asks: a user name alone, a user name and
+  a password for the user file and the directory, or the Microsoft sign in in the system browser
+  for Entra ID. A wrong password, an account outside the allowed group, an unreachable directory,
+  too many attempts (with how long to wait), a wrong clock (with both times), a client that is too
+  old and a certificate this computer does not trust each have a sentence of their own, with the
+  request id beneath it for the server's operator. A certificate that is not trusted is never
+  offered as something to get past.
+- **The session with the server is kept between starts** and picked up without waiting for the
+  network, so the role is known while offline. Signing in as somebody other than the person this
+  copy last knew first discards the previous person's waiting changes, favourites and shortcuts and
+  then synchronises everything again; the same person simply continues. Signing out keeps the copy
+  and its waiting changes.
+- **When a server withdraws the account**, everything that came from it is removed: every tunnel
+  ends, the stored sign ins of its profiles and the session go from the keystore, its copy goes
+  from the disk, the settings that followed it return to their defaults, and the application says
+  in plain words that the account no longer has access and starts again on this computer's own
+  profiles, which are untouched. The server is not asked again.
+- **"Forget all stored credentials" signs out of the server first**, in Server mode, so the session
+  ends on the server rather than lingering until it expires.
 
 ### Fixed
 
