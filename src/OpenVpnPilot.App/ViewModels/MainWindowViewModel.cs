@@ -1291,6 +1291,14 @@ public enum AppScreen
     /// </summary>
     Log,
 
+    /// <summary>
+    /// The same live log, opened with only what concerns the server shown.
+    /// </summary>
+    /// <remarks>
+    /// Not a window of its own: it opens, or brings forward, the one log window and sets its filter.
+    /// </remarks>
+    ServerLog,
+
     Import,
     Export,
     ProfileEditor,

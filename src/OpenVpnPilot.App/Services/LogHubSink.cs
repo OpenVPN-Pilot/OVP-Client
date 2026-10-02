@@ -26,6 +26,22 @@ public sealed class LogHubSink : ILogEventSink
     private static readonly MessageTemplateTextFormatter Formatter =
         new("{Message:lj}", CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// The event ids reserved for server mode, which mark a line as the server's wherever it was written.
+    /// </summary>
+    private const int FirstServerEventId = 3600;
+
+    private const int LastServerEventId = 3999;
+
+    /// <summary>
+    /// The categories of the components that talk to a server.
+    /// </summary>
+    private static readonly string[] ServerCategories =
+    [
+        "OpenVpnPilot.Core.Server.",
+        "OpenVpnPilot.App.Services.Server.",
+    ];
+
     private readonly LogHub hub;
 
     public LogHubSink(LogHub hub)
@@ -50,10 +66,40 @@ public sealed class LogHubSink : ILogEventSink
 
         hub.Append(new LogEntry(
             logEvent.Timestamp,
-            LogSource.Pilot,
+            SourceOf(logEvent),
             Map(logEvent.Level),
             ScopeOf(logEvent),
             message));
+    }
+
+    /// <summary>
+    /// Whether a line concerns a server, which sets it apart from the rest of the application's.
+    /// </summary>
+    /// <remarks>
+    /// Two signs, because neither covers everything. The components that talk to a server live in
+    /// the server namespaces of the core and of the application, so their category says so. Some
+    /// of what concerns a server is written elsewhere, though: a sign in from the first start
+    /// window, or the startup reporting which store it opened. Those carry an event id from the
+    /// block reserved for server mode, 3600 to 3999, which is the second sign.
+    /// </remarks>
+    internal static LogSource SourceOf(LogEvent logEvent)
+    {
+        if (logEvent.Properties.TryGetValue("SourceContext", out LogEventPropertyValue? context)
+            && context is ScalarValue { Value: string category }
+            && ServerCategories.Any(prefix => category.StartsWith(prefix, StringComparison.Ordinal)))
+        {
+            return LogSource.Server;
+        }
+
+        if (logEvent.Properties.TryGetValue("EventId", out LogEventPropertyValue? eventId)
+            && eventId is StructureValue structure
+            && structure.Properties.FirstOrDefault(property => property.Name == "Id")?.Value is ScalarValue { Value: int id }
+            && id is >= FirstServerEventId and <= LastServerEventId)
+        {
+            return LogSource.Server;
+        }
+
+        return LogSource.Pilot;
     }
 
     /// <summary>

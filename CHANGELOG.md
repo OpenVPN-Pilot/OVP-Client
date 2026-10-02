@@ -65,6 +65,10 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   instead.
 - **"Forget all stored credentials" signs out of the server first**, in Server mode, so the session
   ends on the server rather than lingering until it expires.
+- **The log window can show the server on its own.** Calls to the server, signing in, the
+  synchronisation, waiting changes and switching the store are marked `server` in the log and in
+  the files, and "Server only" in the source filter shows just them; "This application only" still
+  includes them. "Show server log" opens the window with that filter.
 
 ### Fixed
 

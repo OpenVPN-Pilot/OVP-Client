@@ -362,11 +362,31 @@ public sealed class WindowCoordinator
         }
     }
 
+    /// <summary>
+    /// Opens the log window, or brings it forward, showing only the lines of one source.
+    /// </summary>
+    /// <param name="source">The source to show, or null for every line.</param>
+    public void OpenLog(LogSource? source)
+    {
+        Open(AppScreen.Log);
+
+        if (open.TryGetValue(AppScreen.Log, out Window? window) && window.DataContext is LogViewModel model)
+        {
+            model.ShowSource(source);
+        }
+    }
+
     public void Open(AppScreen screen)
     {
         if (screen == AppScreen.MainWindow)
         {
             Reveal(mainWindow);
+            return;
+        }
+
+        if (screen == AppScreen.ServerLog)
+        {
+            OpenLog(LogSource.Server);
             return;
         }
 
