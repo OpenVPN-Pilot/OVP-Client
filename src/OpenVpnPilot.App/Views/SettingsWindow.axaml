@@ -13,8 +13,8 @@
 
   <Grid RowDefinitions="*,Auto">
 
-    <!-- The storage page is opened directly from the status bar, by its position: keep StorageTabIndex in step. -->
-    <TabControl Grid.Row="0" Margin="12,10" SelectedIndex="{Binding SelectedTabIndex}">
+    <!-- The storage page is opened directly from the status bar, by its name, so the order is free. -->
+    <TabControl Name="Pages" Grid.Row="0" Margin="12,10">
 
       <!-- General -->
       <TabItem Header="{loc:Translate settings.tabGeneral}">
@@ -235,7 +235,7 @@
         Storage: where the profiles live, the server and its session, and switching between this
         computer and a server, which restarts the application.
       -->
-      <TabItem Header="{loc:Translate storage.tab}" IsVisible="{Binding HasStorage}">
+      <TabItem Name="StorageTab" Header="{loc:Translate storage.tab}" IsVisible="{Binding HasStorage}">
         <ScrollViewer>
           <StackPanel Margin="16" Spacing="12" DataContext="{Binding Storage}"
                       x:DataType="vm:StorageSettingsViewModel">

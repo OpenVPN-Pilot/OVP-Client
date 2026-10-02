@@ -159,9 +159,9 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     public event EventHandler? ProfileReloadRequested;
 
     /// <summary>
-    /// The position of the storage page among the tabs, for opening the settings there.
+    /// Raised when the settings are to show one page, wherever it stands among the tabs.
     /// </summary>
-    public const int StorageTabIndex = 5;
+    public event EventHandler<SettingsPage>? PageRequested;
 
     /// <summary>
     /// The storage page: where the profiles live, and switching that. Null where nothing composed it.
@@ -170,8 +170,10 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 
     public bool HasStorage => Storage is not null;
 
-    [ObservableProperty]
-    public partial int SelectedTabIndex { get; set; }
+    /// <summary>
+    /// Shows one page, for a screen elsewhere that opens the settings at it.
+    /// </summary>
+    public void ShowPage(SettingsPage page) => PageRequested?.Invoke(this, page);
 
     public ObservableCollection<LanguageChoice> Languages { get; }
 
@@ -691,3 +693,11 @@ public sealed record ThemeChoice(ThemePreference Preference, string Name);
 /// One entry in the picker for what the profile editor opens with.
 /// </summary>
 public sealed record EditorViewChoice(ProfileEditorView View, string Name);
+
+/// <summary>
+/// A page of the settings that another screen can open them at.
+/// </summary>
+public enum SettingsPage
+{
+    Storage,
+}

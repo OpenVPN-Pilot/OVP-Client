@@ -401,7 +401,7 @@ public sealed class WindowCoordinator
             if (open.TryGetValue(AppScreen.Settings, out Window? settingsWindow)
                 && settingsWindow.DataContext is SettingsViewModel settingsModel)
             {
-                settingsModel.SelectedTabIndex = SettingsViewModel.StorageTabIndex;
+                settingsModel.ShowPage(SettingsPage.Storage);
             }
 
             return;

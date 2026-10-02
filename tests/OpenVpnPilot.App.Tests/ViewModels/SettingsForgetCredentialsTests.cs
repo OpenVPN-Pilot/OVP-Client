@@ -79,6 +79,18 @@ public sealed class SettingsForgetCredentialsTests : IAsyncDisposable
         Assert.Empty(await secrets.ListAsync());
         Assert.False(model.ForgetsThisServerOnly);
     }
+    [Fact]
+    public async Task ShowPage_NamesThePageRatherThanItsPosition()
+    {
+        SettingsViewModel model = await ModelAsync(server: null);
+        List<SettingsPage> requested = [];
+        model.PageRequested += (_, page) => requested.Add(page);
+
+        model.ShowPage(SettingsPage.Storage);
+
+        Assert.Equal([SettingsPage.Storage], requested);
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (database is not null)
