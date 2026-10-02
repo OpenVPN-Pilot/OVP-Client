@@ -58,7 +58,32 @@ internal static class AppHost
         // decides. Switching the mode restarts the process, so it is decided exactly once.
         ActiveStorage storage = ActiveStorage.Resolve(paths, StorageModeReader.Read(paths.SettingsPath));
 
+        return Compose(paths, storage, App.Startup.Headless).Build();
+    }
+
+    /// <summary>
+    /// Registers the application against the given locations and store, ready to be built.
+    /// </summary>
+    /// <remarks>
+    /// The parameters exist so that the whole composition can be built and checked in a test,
+    /// against a temporary folder and in either mode, without touching anyone's own data. Server
+    /// mode composes a graph the local library never does, so a starting copy is not enough to know
+    /// that both are complete.
+    /// </remarks>
+    /// <param name="providerOptions">How strictly the container checks itself when it is built,
+    /// or null for the host's own choice.</param>
+    internal static HostApplicationBuilder Compose(
+        IApplicationPaths paths,
+        ActiveStorage storage,
+        bool headless,
+        ServiceProviderOptions? providerOptions = null)
+    {
         HostApplicationBuilder builder = Host.CreateApplicationBuilder();
+
+        if (providerOptions is not null)
+        {
+            builder.ConfigureContainer(new DefaultServiceProviderFactory(providerOptions));
+        }
 
         // Built before the logger, because the logger writes into it. Both are handed to the
         // container afterwards so that everything else reaches them the ordinary way.
@@ -97,7 +122,7 @@ internal static class AppHost
 
         RegisterSettings(builder.Services, paths);
         RegisterLocalization(builder.Services, paths);
-        RegisterServer(builder.Services, storage);
+        RegisterServer(builder.Services, storage, headless);
 
         if (OperatingSystem.IsWindows())
         {
@@ -149,10 +174,10 @@ internal static class AppHost
         builder.Services.AddTransient<ImportViewModel>();
         builder.Services.AddTransient<ExportViewModel>();
 
-        return builder.Build();
+        return builder;
     }
 
-    private static void RegisterSettings(IServiceCollection services, UserApplicationPaths paths)
+    private static void RegisterSettings(IServiceCollection services, IApplicationPaths paths)
     {
         services.AddSingleton<JsonSettingsService>(provider => new JsonSettingsService(
             paths.SettingsPath,
@@ -199,7 +224,7 @@ internal static class AppHost
     /// coordinator and the wipe exist only in Server mode, where there is exactly one server for the
     /// life of the process; the local library composes nothing that could reach a server by itself.
     /// </remarks>
-    private static void RegisterServer(IServiceCollection services, ActiveStorage storage)
+    private static void RegisterServer(IServiceCollection services, ActiveStorage storage, bool headless)
     {
         services.AddSingleton<IClientVersionProvider>(_ => new AssemblyClientVersionProvider(typeof(AppHost).Assembly));
         services.AddSingleton<IInstallationIdProvider, SettingsInstallationId>();
@@ -226,7 +251,7 @@ internal static class AppHost
         services.AddSingleton<IServerWipe, ServerWipe>();
         services.AddSingleton<IAccountRevokedNotice>(provider => new WindowAccountRevokedNotice(
             provider.GetRequiredService<ILocalizer>(),
-            showsWindows: !App.Startup.Headless,
+            showsWindows: !headless,
             provider.GetService<IApplicationActivation>()));
 
         // One coordinator, which is also the sign in everything in this mode uses, so that every
@@ -236,7 +261,7 @@ internal static class AppHost
         services.AddSingleton<IServerSignIn>(provider => provider.GetRequiredService<ServerSessionCoordinator>());
     }
 
-    private static void RegisterLocalization(IServiceCollection services, UserApplicationPaths paths)
+    private static void RegisterLocalization(IServiceCollection services, IApplicationPaths paths)
     {
         // Wording that names a part of one system, a key or a component, is chosen by platform.
         string? platform = OperatingSystem.IsMacOS() ? "macos" : null;
@@ -254,7 +279,7 @@ internal static class AppHost
     }
 
     [SupportedOSPlatform("windows")]
-    private static void RegisterWindowsServices(IServiceCollection services, UserApplicationPaths paths)
+    private static void RegisterWindowsServices(IServiceCollection services, IApplicationPaths paths)
     {
         services.AddSingleton<InteractiveServicePipeClient>();
         services.AddSingleton<IOpenVpnLauncher, WindowsOpenVpnLauncher>();
@@ -284,7 +309,7 @@ internal static class AppHost
     /// status item the way a balloon is attached to a notification area icon.
     /// </remarks>
     [SupportedOSPlatform("macos")]
-    private static void RegisterMacServices(IServiceCollection services, UserApplicationPaths paths)
+    private static void RegisterMacServices(IServiceCollection services, IApplicationPaths paths)
     {
         services.AddSingleton<HelperSession>();
         services.AddSingleton<IOpenVpnLauncher, MacOpenVpnLauncher>();
@@ -321,7 +346,7 @@ internal static class AppHost
     /// </remarks>
     private static void ConfigureLogging(
         HostApplicationBuilder builder,
-        UserApplicationPaths paths,
+        IApplicationPaths paths,
         LogHub hub,
         LoggingLevelSwitch levelSwitch)
     {
