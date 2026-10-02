@@ -253,6 +253,98 @@ public sealed class JsonSettingsServiceTests : IDisposable
         Assert.Null(service.Current.Storage.ServerUrl);
     }
 
+    [Fact]
+    public async Task LoadAsync_ExistingFile_LoadsItsValues()
+    {
+        await File.WriteAllTextAsync(Path, """{ "schemaVersion": 2, "general": { "language": "de" } }""");
+
+        using JsonSettingsService service = new(Path);
+        await service.LoadAsync();
+
+        Assert.Equal("de", service.Current.General.Language);
+        Assert.True(service.FileExistedAtLoad);
+    }
+
+    [Fact]
+    public async Task LoadAsync_LockedFile_LeavesTheFileExactlyAsItWas()
+    {
+        byte[] original = await WriteFileWithoutIdentityAsync();
+
+        using JsonSettingsService service = new(Path);
+
+        using (new FileStream(Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            await service.LoadAsync();
+        }
+
+        Assert.Equal(original, await File.ReadAllBytesAsync(Path));
+        Assert.True(service.FileExistedAtLoad);
+        Assert.Null(service.Current.Installation.Id);
+        Assert.False(File.Exists(Path + ".invalid"));
+    }
+
+    [Fact]
+    public async Task UpdateAsync_FileWasLockedAtLoad_DoesNotWriteTheDefaultsOverIt()
+    {
+        byte[] original = await WriteFileWithoutIdentityAsync();
+
+        using JsonSettingsService service = new(Path);
+
+        using (new FileStream(Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            await service.LoadAsync();
+        }
+
+        // The lock is gone, so only the service itself can keep the file from being replaced.
+        await service.UpdateAsync(settings => settings.Appearance.Theme = ThemePreference.Dark);
+
+        Assert.Equal(original, await File.ReadAllBytesAsync(Path));
+        Assert.Equal(ThemePreference.Dark, service.Current.Appearance.Theme);
+        Assert.False(File.Exists(Path + ".tmp"));
+    }
+
+    [Fact]
+    public async Task LoadAsync_LockReleasedDuringTheRetries_LoadsTheFile()
+    {
+        await File.WriteAllTextAsync(Path, """{ "schemaVersion": 2, "general": { "language": "de" } }""");
+
+        using JsonSettingsService service = new(Path);
+        FileStream holder = new(Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+        Task load = service.LoadAsync();
+        await Task.Delay(150);
+        await holder.DisposeAsync();
+        await load;
+
+        Assert.Equal("de", service.Current.General.Language);
+        Assert.NotNull(service.Current.Installation.Id);
+    }
+
+    [WindowsFact]
+    public async Task LoadAsync_InvalidFileThatCannotBeMovedAside_IsNotOverwritten()
+    {
+        await File.WriteAllTextAsync(Path, "{ not json at all");
+        byte[] original = await File.ReadAllBytesAsync(Path);
+
+        using JsonSettingsService service = new(Path);
+
+        // Reading is allowed, moving and replacing are not.
+        using (new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            await service.LoadAsync();
+        }
+
+        Assert.Equal(original, await File.ReadAllBytesAsync(Path));
+        Assert.False(File.Exists(Path + ".invalid"));
+    }
+
+    private async Task<byte[]> WriteFileWithoutIdentityAsync()
+    {
+        // A file from an older build is exactly the one the defaults used to be mistaken for.
+        await File.WriteAllTextAsync(Path, """{ "general": { "language": "de" } }""");
+        return await File.ReadAllBytesAsync(Path);
+    }
+
     public void Dispose()
     {
         try
