@@ -46,4 +46,41 @@ internal static partial class OutboxLog
         Level = LogLevel.Information,
         Message = "Discarded {Count} pending change(s).")]
     public static partial void Cleared(ILogger logger, int count);
+
+    [LoggerMessage(
+        EventId = 3960,
+        Level = LogLevel.Information,
+        Message = "Profile {TemporaryId} now has the server's id {ServerId} ({Outcome}); moved {Sessions} session(s), {Bindings} shortcut(s) and {Secrets} stored sign in(s).")]
+    public static partial void Rekeyed(
+        ILogger logger,
+        Guid temporaryId,
+        Guid serverId,
+        ProfileRekeyOutcome outcome,
+        int sessions,
+        int bindings,
+        int secrets);
+
+    [LoggerMessage(
+        EventId = 3961,
+        Level = LogLevel.Warning,
+        Message = "Giving profile {TemporaryId} the server's id {ServerId} failed; it stays as it was.")]
+    public static partial void RekeyFailed(ILogger logger, Guid temporaryId, Guid serverId, Exception exception);
+
+    [LoggerMessage(
+        EventId = 3962,
+        Level = LogLevel.Warning,
+        Message = "A stored sign in of realm {Realm} copied to profile {ServerId} by a failed re-key could not be removed again.")]
+    public static partial void CopiedSecretNotRemoved(ILogger logger, Guid serverId, string realm, Exception exception);
+
+    [LoggerMessage(
+        EventId = 3963,
+        Level = LogLevel.Warning,
+        Message = "The stored sign in of realm {Realm} under the former id {TemporaryId} could not be removed after the re-key.")]
+    public static partial void FormerSecretNotRemoved(ILogger logger, Guid temporaryId, string realm, Exception exception);
+
+    [LoggerMessage(
+        EventId = 3964,
+        Level = LogLevel.Information,
+        Message = "Removed {Count} stored sign in(s) of {Profiles} server profile(s).")]
+    public static partial void SecretsRemoved(ILogger logger, int count, int profiles);
 }

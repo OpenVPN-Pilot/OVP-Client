@@ -77,6 +77,7 @@ internal static class AppHost
         builder.Services.AddSingleton<IStorageModeContext, LocalStorageOnly>();
         builder.Services.AddSingleton<IOutbox, Outbox>();
         builder.Services.AddSingleton<IChangeRecorder, ChangeRecorder>();
+        builder.Services.AddSingleton<IServerProfileMaintenance, ServerProfileMaintenance>();
 
         builder.Services.AddSingleton<IProfileStore, ProfileStore>();
         builder.Services.AddSingleton<ISessionStore, SessionStore>();
