@@ -267,6 +267,29 @@ public sealed class ProfilePackageWriterTests : IAsyncLifetime
         Assert.False(counts.ContainsKey(beta));
     }
 
+    /// <summary>
+    /// A server's refresh token lives in the same store. It is bound to this installation and is
+    /// worthless anywhere else, but it is still a credential and has no business in a package.
+    /// </summary>
+    [Fact]
+    public async Task WriteAsync_WithCredentials_NeverCarriesAServerRefreshToken()
+    {
+        await secrets.WriteAsync(SecretReference.ForProfile(alpha, "Auth"), new StoredSecret("operator", "secret"));
+        await secrets.WriteAsync(
+            SecretReference.ForServerRefreshToken("0123456789abcdef0123456789abcdef"),
+            new StoredSecret(null, "refresh-token"));
+
+        PackageWriteResult result = await writer.WriteAsync(
+            PackagePath,
+            new PackageExportRequest([alpha, beta]) { IncludeCredentials = true },
+            "a passphrase");
+
+        IReadOnlyDictionary<Guid, int> counts = await writer.CountCredentialsAsync();
+
+        Assert.Equal(1, result.Credentials);
+        Assert.Equal(1, counts.Values.Sum());
+    }
+
     private async Task<PackageImportResult> ImportEverythingAsync(ProfilePackageWriter target)
     {
         OpenedPackage opened = await target.OpenAsync(PackagePath, "a passphrase");
