@@ -75,6 +75,12 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   how many changes wait with the problem codes they met. Never a name, a token, a sign in or the
   address as it was written.
 
+### Changed
+
+- **The update check is no longer described as the only network access.** The settings, the README
+  and the usage page now say that a server the profiles are kept on is contacted too, and nothing
+  else. The usage page has a section on working with a server.
+
 ### Fixed
 
 - **A settings file that is briefly locked is no longer replaced by the defaults.** When another

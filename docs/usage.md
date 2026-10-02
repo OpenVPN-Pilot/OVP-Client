@@ -62,6 +62,50 @@ Nothing that is not ticked is taken. A shortcut is added only where this machine
 action nor the combination yet, and the settings replace this machine's only when that is ticked. A
 package written by a newer version than the one opening it is refused rather than read in part.
 
+## Working with a server
+
+The profiles live in one of two places, never both: on this computer, as they always have, or on an
+[OpenVPN Pilot Server](https://github.com/OpenVPN-Pilot/OVP-Server) that a team shares. The first
+start asks which; "decide later" keeps them on this computer, and an installation that updates is
+never asked and stays where it was. **Settings, Storage** switches between the two. Switching is
+refused while a tunnel is up, restarts the application, and deletes nothing: going back finds the
+other side exactly as it was left.
+
+Choosing a server asks for its address, which has to start with `https://`, checks that an OpenVPN
+Pilot Server answers there and signs in the way that server asks for: a user name, a user name and
+a password, or the Microsoft sign in in the browser. A certificate this computer does not trust is
+reported as a problem to fix on the computer, never offered as something to get past.
+
+**What is shared and what is yours.** The profiles, their tags and the shared sign ins come from the
+server and are the same for everyone. Your favourites, shortcuts and portable settings follow you to
+every computer you sign in on. The connection history, when a profile was last connected and how
+often stay on this computer and never reach the server.
+
+**Roles.** A user connects, keeps their own favourites, shortcuts and settings, and can add a sign in
+the server does not have yet. An administrator can also import, change and delete profiles and
+tags and replace shared sign ins.
+
+**Offline.** The application keeps a copy of the server's profiles and works from it whenever the
+server cannot be reached: listing, searching, connecting, the history and, for an administrator,
+editing. The status bar turns amber and counts the changes waiting. When the server is back they are
+sent as they are, without asking: a change someone else made to the same profile meanwhile is
+overwritten. A change the server refuses for good is dropped, counted as not synchronised, and
+explained in the log.
+
+**Signing out** keeps the copy and the changes waiting; signing in again as the same person carries
+on. Signing in as somebody else first discards the previous person's waiting changes, favourites and
+shortcuts.
+
+**When the server withdraws the account**, everything that came from it is removed from this
+computer: its tunnels end, the stored sign ins of its profiles and the session go from the keystore,
+the copy goes from the disk, and the application says so and starts again on this computer's own
+profiles, which are untouched.
+
+The log window's **Server only** filter shows what the application did with the server, and **Show
+server log** in the storage settings opens it that way. Every failure there carries the request id
+the server's operator can find in the server's own log; the diagnostics bundle carries the last one
+too, with the server's host and version, but never a name, a token or a sign in.
+
 ## Adding a language
 
 Language files are JSON. The ones that ship live in `lang` beside the executable, and anything placed
@@ -110,8 +154,9 @@ command is, which is why a short run from a terminal is the way to look at it.
 
 ## Looking for a newer release
 
-The application can ask GitHub whether a newer release exists. It is the only thing here that
-contacts a network nobody asked it to, so it is worth saying exactly what it does:
+The application can ask GitHub whether a newer release exists. Apart from a server you chose to keep
+the profiles on (see [Working with a server](#working-with-a-server)), it is the only thing here that
+contacts a network, so it is worth saying exactly what it does:
 
 - It reads `https://api.github.com/repos/<owner>/<name>/releases/latest`, without credentials.
 - It compares the release tag with the running version and reports the result.

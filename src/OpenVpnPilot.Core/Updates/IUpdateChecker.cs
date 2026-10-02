@@ -4,9 +4,11 @@ namespace OpenVpnPilot.Core.Updates;
 /// Asks whether a newer release exists.
 /// </summary>
 /// <remarks>
-/// Checking is a request to a third party, so it is off unless the user turns it on and no
-/// repository is assumed. An application that quietly contacts a server the user never named is not
-/// something this project does.
+/// Checking is a request to a third party, so what it contacts is named in the settings, and clearing
+/// the repository or turning the check off stops it. Apart from the server the person chose to keep
+/// the profiles on, in Server mode, it is the only network access the application makes by itself.
+/// An application that quietly contacts a server the user never named is not something this
+/// project does.
 /// </remarks>
 public interface IUpdateChecker
 {

@@ -48,6 +48,12 @@ dotnet build
 dotnet test
 ```
 
+The tests need no network, no OpenVPN and no server: the server client and the synchronisation run
+against a scripted HTTP handler, databases are real SQLite files in a temporary folder, and
+`CompositionTests` builds the application's whole container in both storage modes, with every
+registration validated and created, so a service that cannot be composed fails a test rather than
+the first start against a server.
+
 Requires the .NET 10 SDK. The user interface is built with Avalonia. Building the macOS installers
 needs Xcode's command line tools as well, which `installer/build-macos.sh` checks for before it
 starts and which [docs/macos.md](macos.md) explains.

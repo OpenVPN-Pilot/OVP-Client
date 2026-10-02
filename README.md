@@ -34,7 +34,7 @@ The rest is one page per subject, so this one stays short:
 | --- | --- |
 | [Windows](docs/windows.md) | What it needs, installing it, deploying it with group policy, and what it writes |
 | [macOS](docs/macos.md) | What it needs, the helper package, Gatekeeper, and what it writes |
-| [Using it](docs/usage.md) | Tags and favourites, several tunnels at once, packages, languages, what reaches OpenVPN |
+| [Using it](docs/usage.md) | Tags and favourites, several tunnels at once, packages, languages, working with a server, what reaches OpenVPN |
 | [The `ovp` command](docs/cli.md) | The companion command, and driving the application from other software |
 | [Working on it](docs/development.md) | Architecture, building, the artwork, the ten server test lab, contributing |
 | [Changelog](CHANGELOG.md) | What changed in each version |
@@ -69,7 +69,10 @@ The rest is one page per subject, so this one stays short:
 - Notifications for connected, lost, reconnecting and failed, suppressible per event
 - A check at startup and before every connection that says which dependency is missing, rather than
   failing when a tunnel is asked for
-- An optional check for a newer release, which reads a GitHub release list and nothing else
+- Optionally, profiles, shared sign ins, favourites and settings from an OpenVPN Pilot Server, with
+  a local copy that keeps working while the server cannot be reached
+- An optional check for a newer release, which reads a GitHub release list and nothing else. It and
+  a server you chose to work with are the only things the application contacts
 - The quick menus open on the display you left them on, and move between displays with alt and an
   arrow key
 - Dark, light and system themes, autostart, bounded auto reconnect

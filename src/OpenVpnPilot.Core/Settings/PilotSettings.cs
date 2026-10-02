@@ -419,8 +419,9 @@ public sealed class AdvancedSettings
     /// <remarks>
     /// On, and switchable. Checking contacts GitHub, which is a third party, so what is contacted is
     /// named in the settings screen and in the README rather than being left for someone to discover
-    /// in a packet capture. Turning it off stops every request; nothing else here talks to a network
-    /// the user did not ask for.
+    /// in a packet capture. Turning it off stops every request. The only other thing here that talks
+    /// to a network is the server the person chose to keep the profiles on, in Server mode, and
+    /// nothing else.
     /// </remarks>
     public bool CheckForUpdates { get; set; } = true;
 
