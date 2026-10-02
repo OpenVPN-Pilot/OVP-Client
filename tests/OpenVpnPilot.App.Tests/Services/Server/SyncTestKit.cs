@@ -186,11 +186,23 @@ internal sealed class SyncServer
 {
     private readonly List<(HttpMethod Method, string Path, Func<SentRequest, Task<HttpResponseMessage>> Answer)> overrides = [];
 
+    public SyncServer()
+    {
+        Changes = since => Feed(since == 0, 1, profiles: Held());
+    }
+
     public static readonly DateTimeOffset Moment = new(2026, 9, 18, 9, 0, 0, TimeSpan.Zero);
 
     public bool Offline { get; set; }
 
-    public Func<long, SyncChangesResponse> Changes { get; set; } = since => Feed(since == 0, 1);
+    public Func<long, SyncChangesResponse> Changes { get; set; }
+
+    public Dictionary<Guid, string> Names { get; } = [];
+
+    /// <summary>
+    /// Every profile the server holds, as its feed and its list describe them.
+    /// </summary>
+    public List<ProfileResponse> Held() => [.. Configurations.Select(pair => Profile(pair.Key, Names.GetValueOrDefault(pair.Key, "held"), pair.Value))];
 
     public Dictionary<Guid, string> Configurations { get; } = [];
 
@@ -221,7 +233,7 @@ internal sealed class SyncServer
             }
         }
 
-        return Default(request);
+        return DefaultAnswer(request);
     }
 
     public static SyncChangesResponse Feed(
@@ -271,10 +283,11 @@ internal sealed class SyncServer
     public ProfileResponse Hold(Guid id, string name, string configuration, params string[] tags)
     {
         Configurations[id] = configuration;
+        Names[id] = name;
         return Profile(id, name, configuration, tags);
     }
 
-    private HttpResponseMessage Default(SentRequest request)
+    public HttpResponseMessage DefaultAnswer(SentRequest request)
     {
         string path = request.Path;
 
@@ -316,6 +329,7 @@ internal sealed class SyncServer
             Guid id = Guid.NewGuid();
             string stored = ServerContentHash.Normalise(created.Configuration);
             Configurations[id] = stored;
+            Names[id] = created.Name;
             return Answers.Json(Profile(id, created.Name, stored, [.. created.Tags ?? []]), HttpStatusCode.Created);
         }
 
@@ -324,7 +338,7 @@ internal sealed class SyncServer
             Guid id = Guid.Parse(path.Split('/')[4]);
 
             return Configurations.TryGetValue(id, out string? text)
-                ? Answers.Json(Profile(id, "held", text))
+                ? Answers.Json(Profile(id, Names.GetValueOrDefault(id, "held"), text))
                 : Answers.Problem(HttpStatusCode.NotFound, ServerErrorCodes.ProfileNotFound);
         }
 
@@ -332,6 +346,7 @@ internal sealed class SyncServer
         {
             Guid id = Guid.Parse(path.Split('/')[4]);
             ProfileUpdateRequest update = request.Json.Deserialize<ProfileUpdateRequest>(ServerJson.Options)!;
+            Names[id] = update.Name;
 
             if (update.Configuration is { } configuration)
             {
@@ -343,7 +358,7 @@ internal sealed class SyncServer
 
         if (request.Method == HttpMethod.Get && path == "/api/v1/profiles")
         {
-            return Answers.Json(Configurations.Select(pair => Profile(pair.Key, "held", pair.Value)).ToList());
+            return Answers.Json(Held());
         }
 
         if (request.Method == HttpMethod.Delete)
