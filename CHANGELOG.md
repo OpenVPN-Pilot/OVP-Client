@@ -8,6 +8,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged. A release tag is `v<version>`, for example `v1.2.0`.
 
+## [Unreleased]
+
+### Added
+
+- **The settings file names where the profiles live and which installation this is.** `storage`
+  holds the mode, `Local` or `Server`, and the server's address; `installation` holds an identity
+  generated once, the first time this version reads the file, and never again. An existing
+  installation stays `Local`. Both are this machine's own: an exported package carries neither, and
+  importing one keeps the values that were here.
+
 ## [1.9.0] - 2026-09-17
 
 ### Added

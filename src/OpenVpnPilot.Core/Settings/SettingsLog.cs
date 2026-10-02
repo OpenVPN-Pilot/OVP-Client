@@ -36,4 +36,10 @@ internal static partial class SettingsLog
         Level = LogLevel.Information,
         Message = "The settings file was brought up to layout {Version}.")]
     public static partial void Migrated(ILogger logger, int version);
+
+    [LoggerMessage(
+        EventId = 1305,
+        Level = LogLevel.Information,
+        Message = "This installation was given its identity.")]
+    public static partial void InstallationIdCreated(ILogger logger);
 }

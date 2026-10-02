@@ -35,18 +35,31 @@ public sealed class JsonSettingsService : ISettingsService, IDisposable
 
     public PilotSettings Current => current;
 
+    /// <summary>
+    /// Whether the settings file was there when <see cref="LoadAsync"/> ran. Null before it ran.
+    /// </summary>
+    /// <remarks>
+    /// This is the one signal for a true first start, and it is taken before the defaults are
+    /// written, because writing them makes the file exist. An installation that updates to a build
+    /// asking where the profiles should live already has a file and is therefore never asked. A file
+    /// that was there but could not be read still counts as there: somebody used this installation.
+    /// </remarks>
+    public bool? FileExistedAtLoad { get; private set; }
+
     public event EventHandler<PilotSettings>? Changed;
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(path))
+        FileExistedAtLoad = File.Exists(path);
+
+        if (FileExistedAtLoad == false)
         {
             // First start. Writing the defaults out immediately makes the file discoverable, and
             // stamping the layout stops the next build from mistaking them for an older file.
-            await PersistAsync(
-                new PilotSettings { SchemaVersion = PilotSettings.CurrentSchemaVersion },
-                cancellationToken);
+            PilotSettings defaults = new() { SchemaVersion = PilotSettings.CurrentSchemaVersion };
+            AssignInstallationId(defaults);
 
+            await PersistAsync(defaults, cancellationToken);
             return;
         }
 
@@ -75,9 +88,22 @@ public sealed class JsonSettingsService : ISettingsService, IDisposable
 
         // A file from an older build is brought up to date and written back once, so the change is
         // visible in the file rather than being reapplied invisibly on every start.
-        if (current.Migrate())
+        bool changed = current.Migrate();
+
+        if (changed)
         {
             SettingsLog.Migrated(logger, PilotSettings.CurrentSchemaVersion);
+        }
+
+        // A file written before installations had an identity gets one now, once, and keeps it.
+        if (current.Installation.Id is null || current.Installation.Id == Guid.Empty)
+        {
+            AssignInstallationId(current);
+            changed = true;
+        }
+
+        if (changed)
+        {
             await PersistAsync(current, cancellationToken);
         }
 
@@ -100,8 +126,21 @@ public sealed class JsonSettingsService : ISettingsService, IDisposable
         return PersistAsync(settings.Clone(), cancellationToken);
     }
 
+    private void AssignInstallationId(PilotSettings settings)
+    {
+        settings.Installation.Id = Guid.NewGuid();
+        SettingsLog.InstallationIdCreated(logger);
+    }
+
     private async Task PersistAsync(PilotSettings settings, CancellationToken cancellationToken)
     {
+        // Whole settings objects arrive from screens and imports that know nothing of the identity.
+        // Losing it would make this installation a stranger to the server it is signed in to.
+        if (settings.Installation.Id is null && current.Installation.Id is { } existing)
+        {
+            settings.Installation.Id = existing;
+        }
+
         await writeGate.WaitAsync(cancellationToken);
 
         try
