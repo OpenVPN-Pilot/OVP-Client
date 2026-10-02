@@ -11,6 +11,9 @@ namespace OpenVpnPilot.Core.Server.Contracts;
 /// does not arrive at all, is refused instead of becoming a null nobody expects. A refused answer is
 /// reported as one the client could not read, which is honest; a list that silently became null is
 /// a crash somewhere else later.
+///
+/// One instance for the whole process, and safe to share: it is made read only as it is created,
+/// so nobody who reads it can change how anybody else serialises.
 /// </remarks>
 public static class ServerJson
 {

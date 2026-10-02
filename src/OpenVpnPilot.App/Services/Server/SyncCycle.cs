@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using OpenVpnPilot.Core.Server;
 using OpenVpnPilot.Core.Server.Contracts;
 using OpenVpnPilot.Data.Entities;
@@ -106,13 +107,12 @@ internal sealed class SyncCycle
 /// </summary>
 internal static class SyncFailures
 {
-    public static readonly PendingChangeKind[] AdministratorKinds =
-    [
+    // Frozen and private, because it is shared by every cycle and nothing may change what it says.
+    private static readonly FrozenSet<PendingChangeKind> AdministratorKinds = FrozenSet.Create(
         PendingChangeKind.ProfileCreate,
         PendingChangeKind.ProfileUpdate,
         PendingChangeKind.ProfileDelete,
-        PendingChangeKind.TagDelete,
-    ];
+        PendingChangeKind.TagDelete);
 
     public static bool IsAdministratorKind(PendingChangeKind kind) => AdministratorKinds.Contains(kind);
 
