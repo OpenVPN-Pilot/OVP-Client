@@ -1,4 +1,3 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OpenVpnPilot.App.Services.Storage;
@@ -65,20 +64,6 @@ public interface IAccountRevokedNotice
 /// <inheritdoc cref="IServerWipe"/>
 public sealed class ServerWipe : IServerWipe
 {
-    /// <summary>
-    /// How often removing the folder is attempted.
-    /// </summary>
-    /// <remarks>
-    /// Windows refuses to delete a file that is open, and the database can be open for a moment
-    /// longer than the last query: the pool keeps connections, and a view that was reading as the
-    /// wipe began still holds one. The pools are emptied before every attempt, so a second attempt
-    /// finds the file closed. This is about the local file system only; the server is never asked
-    /// anything again.
-    /// </remarks>
-    private const int FolderAttempts = 5;
-
-    private static readonly TimeSpan FolderRetryDelay = TimeSpan.FromMilliseconds(200);
-
     private readonly IActiveStorage storage;
     private readonly IActiveTunnels tunnels;
     private readonly ISyncEngine engine;
@@ -171,7 +156,7 @@ public sealed class ServerWipe : IServerWipe
 
         bool refreshTokenRemoved = await StepAsync("refresh token", () => ForgetSessionAsync(serverKey, cancellationToken));
 
-        bool folderRemoved = await StepAsync("cache folder", () => DeleteFolderAsync(folder, cancellationToken));
+        bool folderRemoved = await StepAsync("cache folder", () => ServerCacheFolder.DeleteAsync(folder, logger, cancellationToken));
 
         await StepAsync("settings", () => ResetPortableSettingsAsync(cancellationToken));
 
@@ -207,35 +192,6 @@ public sealed class ServerWipe : IServerWipe
         await session.ForgetAsync(cancellationToken);
 
         return stored && await secrets.TryReadAsync(reference, cancellationToken) is null;
-    }
-
-    private async Task<bool> DeleteFolderAsync(string folder, CancellationToken cancellationToken)
-    {
-        for (int attempt = 1; ; attempt++)
-        {
-            // Pooled connections keep the database file open after the last context is gone.
-            SqliteConnection.ClearAllPools();
-
-            try
-            {
-                if (Directory.Exists(folder))
-                {
-                    Directory.Delete(folder, recursive: true);
-                }
-
-                return true;
-            }
-            catch (IOException exception) when (attempt < FolderAttempts)
-            {
-                ServerWipeLog.FolderBusy(logger, attempt, exception.Message);
-            }
-            catch (UnauthorizedAccessException exception) when (attempt < FolderAttempts)
-            {
-                ServerWipeLog.FolderBusy(logger, attempt, exception.Message);
-            }
-
-            await Task.Delay(FolderRetryDelay, cancellationToken);
-        }
     }
 
     /// <summary>
