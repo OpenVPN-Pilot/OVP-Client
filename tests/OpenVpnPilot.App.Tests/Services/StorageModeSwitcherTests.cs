@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenVpnPilot.App.Services.Storage;
 using OpenVpnPilot.App.Tests.Services.Server;
@@ -5,6 +6,7 @@ using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Server;
 using OpenVpnPilot.Core.Settings;
 using OpenVpnPilot.Core.Storage;
+using OpenVpnPilot.Core.Tests.Server;
 
 namespace OpenVpnPilot.App.Tests.Services;
 
@@ -255,6 +257,57 @@ public sealed class StorageModeSwitcherTests : IDisposable
         Assert.Equal(1, harness.ShutdownRequests);
     }
 
+    [Fact]
+    public async Task LeaveRevokedServer_SettingsCannotBeWritten_LogsWithTheRequestIdTellsThePersonAndEnds()
+    {
+        Harness harness = await Harness.CreateAsync(root, StorageMode.Server, "https://pilot.example.com");
+        RecordingLoggerFactory logs = new();
+        StorageModeSwitcher switcher = new(
+            new RefusingSettings(harness.Settings),
+            harness.Storage,
+            harness.Paths,
+            harness.Tunnels,
+            harness.Restart,
+            new Logger<StorageModeSwitcher>(logs),
+            4242);
+
+        int shutdowns = 0;
+        bool told = false;
+        switcher.ShutdownRequested += (_, _) => shutdowns++;
+
+        StorageSwitchResult result = await switcher.LeaveRevokedServerAsync(
+            _ =>
+            {
+                told = true;
+                return Task.CompletedTask;
+            },
+            "req-wipe");
+
+        Assert.Equal(StorageSwitchOutcome.SettingsNotSaved, result.Outcome);
+        Assert.True(told);
+        Assert.Empty(harness.Restart.Started);
+        Assert.Equal(1, shutdowns);
+        Assert.Contains(logs.Lines, line => line.Contains("req-wipe", StringComparison.Ordinal) && line.Contains("did not take the change", StringComparison.Ordinal));
+
+        // Defined from here on: this copy is ending, and nothing switches it anywhere else meanwhile.
+        Assert.Equal(StorageSwitchOutcome.InProgress, (await switcher.SwitchToLocalAsync()).Outcome);
+    }
+
+    [Fact]
+    public async Task LeaveRevokedServer_TellingThePersonFails_StillRestartsLocallyAndEnds()
+    {
+        Harness harness = await Harness.CreateAsync(root, StorageMode.Server, "https://pilot.example.com");
+
+        StorageSwitchResult result = await harness.Switcher.LeaveRevokedServerAsync(
+            _ => throw new InvalidOperationException("The window could not be shown."),
+            "req-wipe");
+
+        Assert.Equal(StorageSwitchOutcome.Restarting, result.Outcome);
+        Assert.Equal(StorageMode.Local, StorageModeReader.Read(harness.Paths.SettingsPath).Mode);
+        Assert.Single(harness.Restart.Started);
+        Assert.Equal(1, harness.ShutdownRequests);
+    }
+
     public void Dispose()
     {
         try
@@ -265,6 +318,28 @@ public sealed class StorageModeSwitcherTests : IDisposable
         {
             // A leftover temporary directory is not worth failing a test run over.
         }
+    }
+
+    /// <summary>
+    /// Settings whose file cannot be written, the way a full disk or a locked file refuses it.
+    /// </summary>
+    private sealed class RefusingSettings(ISettingsService inner) : ISettingsService
+    {
+        public PilotSettings Current => inner.Current;
+
+        public event EventHandler<PilotSettings>? Changed
+        {
+            add => inner.Changed += value;
+            remove => inner.Changed -= value;
+        }
+
+        public Task LoadAsync(CancellationToken cancellationToken = default) => inner.LoadAsync(cancellationToken);
+
+        public Task UpdateAsync(Action<PilotSettings> change, CancellationToken cancellationToken = default) =>
+            throw new IOException("The settings file is locked.");
+
+        public Task ReplaceAsync(PilotSettings settings, CancellationToken cancellationToken = default) =>
+            throw new IOException("The settings file is locked.");
     }
 
     private sealed class Harness

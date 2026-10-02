@@ -60,12 +60,16 @@ public interface IStorageModeSwitcher
     /// The mode is written first and the person told second, so the next start is local even when
     /// the application is ended while the message is still on screen. This copy is ended in every
     /// case: it works on a copy that no longer exists. When the settings did not take the change or
-    /// the new copy could not be started, the outcome says so and nobody is started.
+    /// the new copy could not be started, the outcome says so and nobody is started. Neither a
+    /// settings file that cannot be written nor a message that cannot be shown keeps it from ending;
+    /// each is logged with the request id.
     /// </para>
     /// </remarks>
     /// <param name="announce">Tells the person; awaited before the restart.</param>
+    /// <param name="requestId">The request that carried the wipe directive, for the log.</param>
     public Task<StorageSwitchResult> LeaveRevokedServerAsync(
         Func<CancellationToken, Task> announce,
+        string? requestId = null,
         CancellationToken cancellationToken = default);
 }
 
@@ -213,6 +217,7 @@ public sealed class StorageModeSwitcher : IStorageModeSwitcher
 
     public async Task<StorageSwitchResult> LeaveRevokedServerAsync(
         Func<CancellationToken, Task> announce,
+        string? requestId = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(announce);
@@ -222,27 +227,45 @@ public sealed class StorageModeSwitcher : IStorageModeSwitcher
             return new StorageSwitchResult(StorageSwitchOutcome.InProgress);
         }
 
-        // From here on this copy is on its way out whatever happens, so it stays switching.
+        // From here on this copy is on its way out whatever happens, so it stays switching, and
+        // neither step below may keep it from ending: it works on a copy that no longer exists.
         StorageSwitchOutcome outcome = StorageSwitchOutcome.Restarting;
+        Exception? saveFailure = null;
 
-        await settings.UpdateAsync(
-            next =>
-            {
-                next.Storage.Mode = StorageMode.Local;
-                next.Storage.ServerUrl = null;
-            },
-            cancellationToken);
+        try
+        {
+            await settings.UpdateAsync(
+                next =>
+                {
+                    next.Storage.Mode = StorageMode.Local;
+                    next.Storage.ServerUrl = null;
+                },
+                cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            // Reported below together with a write that went through without taking the change.
+            saveFailure = exception;
+        }
 
-        bool saved = FileSelects(StorageMode.Local, null)
+        bool saved = saveFailure is null
+            && FileSelects(StorageMode.Local, null)
             && StorageModeReader.Read(paths.SettingsPath).ServerUrl is null;
 
         if (!saved)
         {
-            StorageLog.SwitchNotSaved(logger, StorageMode.Local);
+            StorageLog.LeaveNotSaved(logger, requestId, saveFailure);
             outcome = StorageSwitchOutcome.SettingsNotSaved;
         }
 
-        await announce(cancellationToken);
+        try
+        {
+            await announce(cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            StorageLog.LeaveNotAnnounced(logger, requestId, exception);
+        }
 
         if (saved)
         {
@@ -252,7 +275,7 @@ public sealed class StorageModeSwitcher : IStorageModeSwitcher
             }
             else
             {
-                StorageLog.LeaveRestartFailed(logger);
+                StorageLog.LeaveRestartFailed(logger, requestId);
                 outcome = StorageSwitchOutcome.RestartFailed;
             }
         }

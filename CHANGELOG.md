@@ -59,7 +59,9 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   ends, the stored sign ins of its profiles and the session go from the keystore, its copy goes
   from the disk, the settings that followed it return to their defaults, and the application says
   in plain words that the account no longer has access and starts again on this computer's own
-  profiles, which are untouched. The server is not asked again.
+  profiles, which are untouched. The server is not asked again. A settings file that cannot be
+  written, or a message that cannot be shown, does not keep the application from ending; each is
+  logged with the request id of the answer that withdrew the account.
 - **The first start asks where the profiles should live**: on this computer, on a server, or
   decide later, which keeps them on this computer. Only a true first start asks; an installation
   that updates keeps its profiles where they are. Choosing a server checks its address (`https://`

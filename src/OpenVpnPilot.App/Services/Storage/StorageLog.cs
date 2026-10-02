@@ -59,6 +59,18 @@ internal static partial class StorageLog
     [LoggerMessage(
         EventId = 3907,
         Level = LogLevel.Warning,
-        Message = "Leaving the server after the wipe, the application could not start again. It ends now and starts locally next time.")]
-    public static partial void LeaveRestartFailed(ILogger logger);
+        Message = "Leaving the server after the wipe (request {RequestId}), the application could not start again. It ends now and starts locally next time.")]
+    public static partial void LeaveRestartFailed(ILogger logger, string? requestId);
+
+    [LoggerMessage(
+        EventId = 3929,
+        Level = LogLevel.Error,
+        Message = "Leaving the server after the wipe (request {RequestId}), the settings file did not take the change. The application ends without starting again, and the next start may still name the server.")]
+    public static partial void LeaveNotSaved(ILogger logger, string? requestId, Exception? exception);
+
+    [LoggerMessage(
+        EventId = 3930,
+        Level = LogLevel.Warning,
+        Message = "Leaving the server after the wipe (request {RequestId}), telling the person failed. The application leaves the server all the same.")]
+    public static partial void LeaveNotAnnounced(ILogger logger, string? requestId, Exception exception);
 }

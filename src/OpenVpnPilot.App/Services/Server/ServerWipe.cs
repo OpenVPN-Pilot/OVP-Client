@@ -172,6 +172,7 @@ public sealed class ServerWipe : IServerWipe
 
         StorageSwitchResult left = await switcher.LeaveRevokedServerAsync(
             token => notice.ShowAsync(directive, token),
+            directive.RequestId,
             cancellationToken);
 
         return new ServerWipeReport(tunnelsUp, profileIds.Count, removedSecrets, refreshTokenRemoved, folderRemoved, left.Outcome);

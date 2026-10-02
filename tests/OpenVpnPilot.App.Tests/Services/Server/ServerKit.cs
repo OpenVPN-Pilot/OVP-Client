@@ -334,6 +334,7 @@ internal sealed class RecordingSwitcher : IStorageModeSwitcher
 
     public async Task<StorageSwitchResult> LeaveRevokedServerAsync(
         Func<CancellationToken, Task> announce,
+        string? requestId = null,
         CancellationToken cancellationToken = default)
     {
         Calls.Add("leave");
