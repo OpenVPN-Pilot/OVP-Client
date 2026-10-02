@@ -78,7 +78,8 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   measured every 30 seconds, less often while the server cannot be reached, and a server whose
   readiness check fails shows as degraded. The tooltip has the details and a click offers "Sync
   now", the server's log, signing in again and the storage settings. On this computer's own library
-  the bar shows a grey "Local" instead.
+  the bar shows a grey "Local" instead. The tray menu, and the application menu on macOS, carry the
+  same line and "Sync now".
 - **Banners for what blocks the synchronisation**: a sign in that is needed, a client too old for
   the server (with the way to the update), a clock the server refuses (with both times) and a
   certificate this computer does not trust. Being offline is not one: the application keeps working

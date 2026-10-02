@@ -303,6 +303,10 @@ public sealed class WindowCoordinator
                 lifetime.Shutdown();
                 break;
 
+            case TrayIconController.SyncNowAction:
+                services.GetService<Server.IServerStatusSource>()?.RequestSync();
+                break;
+
             default:
                 break;
         }

@@ -147,7 +147,8 @@
       "quickSwitcher": "Quick switcher",
       "settings": "Settings",
       "about": "About OpenVPN Pilot",
-      "showInDock": "Show in the Dock"
+      "showInDock": "Show in the Dock",
+      "syncNow": "Sync now"
     },
     "switcher": {
       "placeholder": "Type to search profiles",
