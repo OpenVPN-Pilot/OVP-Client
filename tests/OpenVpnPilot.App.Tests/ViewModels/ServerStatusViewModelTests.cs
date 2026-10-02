@@ -152,6 +152,14 @@ public sealed class ServerStatusViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Details_NameTheRoleInWords()
+    {
+        string details = ServerStatusText.Details(new SpellingLocalizer(), Snapshot(SyncState.Synchronised, signedIn: true));
+
+        Assert.Contains("statusBar.detailUser(Alice Example, signIn.roleAdmin)", details, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Storage_SwitchWhileATunnelIsUp_IsRefusedBeforeAnythingIsAsked()
     {
         CountedTunnels tunnels = new() { Count = 1 };
@@ -240,6 +248,36 @@ public sealed class ServerStatusViewModelTests : IDisposable
         public void RequestSync()
         {
         }
+    }
+}
+
+/// <summary>
+/// Writes a translation as its key with the arguments it was given, so a test can see what went in.
+/// </summary>
+internal sealed class SpellingLocalizer : OpenVpnPilot.Core.Localization.ILocalizer
+{
+    private readonly StubLocalizer keys = new();
+
+    public string CurrentLanguage => keys.CurrentLanguage;
+
+    public IReadOnlyList<OpenVpnPilot.Core.Localization.LanguageDescriptor> AvailableLanguages => keys.AvailableLanguages;
+
+    public IReadOnlyCollection<string> Keys => keys.Keys;
+
+    public event EventHandler? LanguageChanged
+    {
+        add { }
+        remove { }
+    }
+
+    public string this[string key] => key;
+
+    public string Translate(string key, params object?[] arguments) => $"{key}({string.Join(", ", arguments)})";
+
+    public bool TrySetLanguage(string languageCode) => keys.TrySetLanguage(languageCode);
+
+    public void Reload()
+    {
     }
 }
 

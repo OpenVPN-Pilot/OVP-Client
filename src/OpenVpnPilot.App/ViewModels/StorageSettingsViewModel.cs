@@ -161,8 +161,8 @@ public sealed partial class StorageSettingsViewModel : ViewModelBase, IDisposabl
         User = snapshot.User is { } user
             ? (user.DisplayName is { Length: > 0 } name ? $"{name} ({user.Username})" : user.Username)
             : localizer["storage.nobody"];
-        Role = snapshot.User?.Role ?? unknown;
-        Provider = snapshot.User?.Provider ?? unknown;
+        Role = snapshot.User?.Role is { } role ? ServerMessages.Role(localizer, role) : unknown;
+        Provider = snapshot.User?.Provider is { } provider ? ServerMessages.Provider(localizer, provider) : unknown;
         ServerVersion = snapshot.Reachability.Info?.Version ?? unknown;
         LastSync = snapshot.Sync.LastPullAt?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? localizer["common.never"];
         Pending = snapshot.Sync.PendingChanges.ToString(CultureInfo.CurrentCulture);

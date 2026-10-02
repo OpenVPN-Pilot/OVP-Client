@@ -640,6 +640,8 @@
       "modeFile": "user name and password",
       "modeLdap": "directory account",
       "modeEntra": "Microsoft account",
+      "roleAdmin": "administrator",
+      "roleUser": "user",
       "entraWaiting": "Waiting for the Microsoft sign in in your browser...",
       "entraBrowserDone": "You are signed in. Close this tab and return to OpenVPN Pilot.",
       "entraBrowserFailed": "The sign in did not complete. Return to OpenVPN Pilot to try again.",

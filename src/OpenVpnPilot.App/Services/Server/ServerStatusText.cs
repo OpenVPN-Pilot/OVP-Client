@@ -155,7 +155,7 @@ public static class ServerStatusText
                 snapshot.Reachability.Info?.Version ?? unknown,
                 snapshot.Reachability.Info?.ApiVersion ?? unknown),
             snapshot.User is { } user
-                ? localizer.Translate("statusBar.detailUser", user.DisplayName ?? user.Username, user.Role)
+                ? localizer.Translate("statusBar.detailUser", user.DisplayName ?? user.Username, ServerMessages.Role(localizer, user.Role))
                 : localizer["statusBar.detailNoUser"],
             localizer.Translate("statusBar.detailCursor", sync.Cursor?.ToString(CultureInfo.InvariantCulture) ?? never),
             localizer.Translate("statusBar.detailPull", Time(sync.LastPullAt) ?? never),

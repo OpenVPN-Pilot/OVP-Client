@@ -87,6 +87,27 @@ public static class ServerMessages
         };
     }
 
+    /// <summary>
+    /// How a person signed in, which the server names with the same words as its ways of signing in.
+    /// </summary>
+    public static string Provider(ILocalizer localizer, string provider) => AuthMode(localizer, provider);
+
+    /// <summary>
+    /// What a person may do on the server, as a person would say it. A role this version does not
+    /// know is shown as the server wrote it.
+    /// </summary>
+    public static string Role(ILocalizer localizer, string role)
+    {
+        ArgumentNullException.ThrowIfNull(localizer);
+
+        return role switch
+        {
+            ServerRoles.Admin => localizer["signIn.roleAdmin"],
+            ServerRoles.User => localizer["signIn.roleUser"],
+            _ => role,
+        };
+    }
+
     private static string Problem(ILocalizer localizer, ServerResult result) => result.Code switch
     {
         ServerErrorCodes.InvalidCredentials => localizer["signIn.invalidCredentials"],
