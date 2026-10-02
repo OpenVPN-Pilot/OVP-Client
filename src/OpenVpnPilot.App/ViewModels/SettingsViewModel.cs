@@ -20,7 +20,7 @@ namespace OpenVpnPilot.App.ViewModels;
 /// OpenVPN is. The form edits a clone, so closing without saving leaves the running application
 /// exactly as it was.
 /// </remarks>
-public sealed partial class SettingsViewModel : ViewModelBase
+public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 {
     private readonly ISettingsService settings;
     private readonly ILocalizer localizer;
@@ -49,6 +49,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// </summary>
     private readonly IServerCredentialsReset? credentialsReset;
 
+    /// <summary>
+    /// Whether importing is offered. Null means the local library, where it always is.
+    /// </summary>
+    private readonly ILibraryPermissions? permissions;
+
+    private readonly IUserInterfaceThread? ui;
+
     private PilotSettings draft;
 
     public SettingsViewModel(
@@ -65,7 +72,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
         IDockPresence? dock = null,
         IServerSignIn? server = null,
         StorageSettingsViewModel? storage = null,
-        IServerCredentialsReset? credentialsReset = null)
+        IServerCredentialsReset? credentialsReset = null,
+        ILibraryPermissions? permissions = null,
+        IUserInterfaceThread? ui = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(localizer);
@@ -91,7 +100,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
         this.dock = dock;
         this.server = server;
         this.credentialsReset = credentialsReset;
+        this.permissions = permissions;
+        this.ui = ui;
         Storage = storage;
+
+        if (permissions is not null)
+        {
+            permissions.Changed += OnPermissionsChanged;
+        }
 
         if (storage is not null)
         {
@@ -486,6 +502,37 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     [RelayCommand]
     private void Cancel() => Closed?.Invoke(this, false);
+
+    /// <summary>
+    /// Whether the import is offered: only to whoever may change what everybody shares.
+    /// </summary>
+    public bool CanChangeShared => permissions?.CanChangeShared != false;
+
+    public void Dispose()
+    {
+        if (permissions is not null)
+        {
+            permissions.Changed -= OnPermissionsChanged;
+        }
+
+        Storage?.Dispose();
+    }
+
+    // The role can change on the synchronisation thread while the screen is open.
+    private void OnPermissionsChanged(object? sender, EventArgs e)
+    {
+        if (ui is null)
+        {
+            OnPropertyChanged(nameof(CanChangeShared));
+            return;
+        }
+
+        _ = ui.InvokeAsync(() =>
+        {
+            OnPropertyChanged(nameof(CanChangeShared));
+            return Task.CompletedTask;
+        });
+    }
 
     [RelayCommand]
     private void OpenImport() => ScreenRequested?.Invoke(this, AppScreen.Import);

@@ -315,6 +315,7 @@
             <TextBlock Text="{loc:Translate settings.transfer}" Classes="section" />
             <StackPanel Orientation="Horizontal" Spacing="8">
               <Button Content="{loc:Translate header.import}"
+                      IsVisible="{Binding CanChangeShared}"
                       Command="{Binding OpenImportCommand}" />
               <Button Content="{loc:Translate header.export}"
                       Command="{Binding OpenExportCommand}" />
