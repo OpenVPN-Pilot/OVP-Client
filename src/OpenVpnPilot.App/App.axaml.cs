@@ -163,6 +163,9 @@ public partial class App : Application
         services.GetRequiredService<SessionRecorder>().Attach();
         services.GetRequiredService<PingMonitor>().Start();
 
+        // What the synchronisation writes reaches the list and the shortcuts through this.
+        services.GetRequiredService<LibraryRefresh>().Attach();
+
         // A headless copy has no notification area entry, and a balloon has nothing to hang off.
         if (!Startup.Headless)
         {
