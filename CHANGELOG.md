@@ -66,9 +66,11 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   passing itself `--first-sync`, and the new copy runs the first synchronisation with its progress
   on screen before the main window appears. A failure offers going back and using this computer
   instead.
-- **"Forget all stored credentials" signs out of the server first**, in Server mode, so the session
-  ends on the server rather than lingering until it expires. It also forgets where the
-  synchronisation had got to, so the next one fetches every shared sign in again.
+- **"Forget this server's stored credentials"** takes the place of "Forget all stored credentials"
+  in Server mode. It signs out of the server first, so the session ends on the server rather than
+  lingering until it expires, and removes the sign ins of that server's profiles only: those of this
+  computer's own library and of other servers stay. It also forgets where the synchronisation had
+  got to, so the next one fetches every shared sign in again.
 - **The log window can show the server on its own.** Calls to the server, signing in, the
   synchronisation, waiting changes and switching the store are marked `server` in the log and in
   the files, and "Server only" in the source filter shows just them; "This application only" still

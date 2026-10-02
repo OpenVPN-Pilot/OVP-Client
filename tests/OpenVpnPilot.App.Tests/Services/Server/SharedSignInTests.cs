@@ -151,7 +151,7 @@ public sealed class SharedSignInTests : IAsyncLifetime
         await harness.Engine.SynchronizeAsync(CancellationToken.None);
         harness.Held.Hold(ProfileA, "Auth", new StoredSecret("vpnuser", "typed"));
 
-        await new ServerCredentialsReset(harness.Database.Factory, harness.Held, NullLogger<ServerCredentialsReset>.Instance).ResetAsync();
+        await new ServerCredentialsReset(harness.Database.Factory, harness.Secrets, harness.Held, NullLogger<ServerCredentialsReset>.Instance).ForgetAsync();
 
         Assert.Null(await harness.QueryAsync(context => context.SyncStates.Select(state => state.Cursor).SingleAsync()));
         Assert.Null(harness.Held.Peek(ProfileA, "Auth"));

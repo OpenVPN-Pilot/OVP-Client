@@ -221,6 +221,10 @@
               <TextBlock Classes="body" VerticalAlignment="Center"
                          Text="{Binding StoredSecretCount, StringFormat={}{0}}" />
               <Button Content="{loc:Translate settings.forgetCredentials}"
+                      IsVisible="{Binding !ForgetsThisServerOnly}"
+                      Command="{Binding ForgetStoredCredentialsCommand}" />
+              <Button Content="{loc:Translate settings.forgetServerCredentials}"
+                      IsVisible="{Binding ForgetsThisServerOnly}"
                       Command="{Binding ForgetStoredCredentialsCommand}" />
             </StackPanel>
           </StackPanel>

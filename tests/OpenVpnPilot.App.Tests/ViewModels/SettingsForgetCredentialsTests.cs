@@ -25,7 +25,6 @@ public sealed class SettingsForgetCredentialsTests : IAsyncDisposable
     public async Task ForgetStoredCredentials_InServerMode_SignsOutWhileTheRefreshTokenIsStillThere()
     {
         await secrets.WriteAsync(SecretReference.ForServerRefreshToken(ServerKey), new StoredSecret(null, "refresh"));
-        await secrets.WriteAsync(SecretReference.ForProfile(Guid.NewGuid(), "Auth"), new StoredSecret("me", "mine"));
         RecordingSignIn server = new(secrets);
 
         SettingsViewModel model = await ModelAsync(server);
@@ -33,7 +32,40 @@ public sealed class SettingsForgetCredentialsTests : IAsyncDisposable
 
         Assert.Equal(1, server.SignOuts);
         Assert.True(server.RefreshTokenWasThere);
-        Assert.Empty(await secrets.ListAsync());
+        Assert.Null(await secrets.TryReadAsync(SecretReference.ForServerRefreshToken(ServerKey)));
+    }
+
+    [Fact]
+    public async Task ForgetStoredCredentials_InServerMode_LeavesTheLocalLibraryAndOtherServersAlone()
+    {
+        database = await TestDatabase.CreateAsync();
+        Guid serverProfile = (await database.AddProfileAsync("example-site")).Id;
+        string serverSignIn = SecretReference.ForProfile(serverProfile, "Auth");
+        string localSignIn = SecretReference.ForProfile(Guid.NewGuid(), "Auth");
+        string otherServer = SecretReference.ForServerRefreshToken("fedcba9876543210fedcba9876543210");
+
+        await secrets.WriteAsync(SecretReference.ForServerRefreshToken(ServerKey), new StoredSecret(null, "refresh"));
+        await secrets.WriteAsync(serverSignIn, new StoredSecret("me", "shared"));
+        await secrets.WriteAsync(localSignIn, new StoredSecret("me", "local"));
+        await secrets.WriteAsync(otherServer, new StoredSecret(null, "other"));
+
+        TypedCredentials held = new(new FixedStorageMode(true));
+        held.Hold(serverProfile, "Auth", new StoredSecret("me", "typed"));
+
+        SettingsViewModel model = await ModelAsync(
+            new RecordingSignIn(secrets),
+            new ServerCredentialsReset(database.Factory, secrets, held, NullLogger<ServerCredentialsReset>.Instance));
+        await model.LoadAsync();
+
+        Assert.Equal(1, model.StoredSecretCount);
+        Assert.True(model.ForgetsThisServerOnly);
+
+        await model.ForgetStoredCredentialsCommand.ExecuteAsync(null);
+
+        Assert.Equal([localSignIn, otherServer], (await secrets.ListAsync()).Order(StringComparer.Ordinal));
+        Assert.Null(held.Peek(serverProfile, "Auth"));
+        Assert.Equal(0, model.StoredSecretCount);
+        Assert.Equal("settings.credentialsCleared", model.StatusMessage);
     }
 
     [Fact]
@@ -45,8 +77,8 @@ public sealed class SettingsForgetCredentialsTests : IAsyncDisposable
         await model.ForgetStoredCredentialsCommand.ExecuteAsync(null);
 
         Assert.Empty(await secrets.ListAsync());
+        Assert.False(model.ForgetsThisServerOnly);
     }
-
     public async ValueTask DisposeAsync()
     {
         if (database is not null)
@@ -55,9 +87,9 @@ public sealed class SettingsForgetCredentialsTests : IAsyncDisposable
         }
     }
 
-    private async Task<SettingsViewModel> ModelAsync(IServerSignIn? server)
+    private async Task<SettingsViewModel> ModelAsync(IServerSignIn? server, IServerCredentialsReset? credentialsReset = null)
     {
-        database = await TestDatabase.CreateAsync();
+        database ??= await TestDatabase.CreateAsync();
         FakeSettingsService settings = new();
         HotkeyStore hotkeyStore = new(
             database.Factory,
@@ -77,7 +109,8 @@ public sealed class SettingsForgetCredentialsTests : IAsyncDisposable
             new DiagnosticsBundle(new TemporaryPaths(Path.GetTempPath()), new ReadyEnvironmentProbe(), settings, database.Factory, TimeProvider.System, ActiveStorage.Resolve(new TemporaryPaths(Path.GetTempPath()), StorageSelection.Local)),
             SilentUpdates.Coordinator(),
             dock: null,
-            server: server);
+            server: server,
+            credentialsReset: credentialsReset);
     }
 
     private sealed class RecordingSignIn(FakeSecrets secrets) : IServerSignIn
@@ -99,6 +132,9 @@ public sealed class SettingsForgetCredentialsTests : IAsyncDisposable
         {
             SignOuts++;
             RefreshTokenWasThere = await secrets.TryReadAsync(SecretReference.ForServerRefreshToken(ServerKey), cancellationToken) is not null;
+
+            // As the session does once the server has been told.
+            await secrets.DeleteAsync(SecretReference.ForServerRefreshToken(ServerKey), cancellationToken);
         }
     }
 
