@@ -426,6 +426,26 @@
         "ScriptDirective@macos": "{0} führt ein Programm aus. Unter macOS läuft OpenVPN als root, daher lehnt der Helfer die Konfiguration ab und sie lässt sich nicht verbinden."
       }
     },
+    "shared": {
+      "connectedRemovedOne": "{0} wurde auf dem Server gelöscht. Der Tunnel wurde beendet und das Profil entfernt.",
+      "connectedRemovedMany": "{0} Profile wurden auf dem Server gelöscht. Ihre Tunnel wurden beendet und die Profile entfernt.",
+      "readOnly": "Dieses Profil kommt vom Server und kann nur von einem Administrator geändert werden. Favorit und Kurzwahlplatz gehören Ihnen.",
+      "replaceTitle": "Gemeinsame Anmeldung",
+      "replaceHint": "Ersetzt die Anmeldung, die alle verwenden, die sich mit diesem Profil verbinden. Der Server muss erreichbar sein.",
+      "realm": "Für",
+      "replace": "Für alle ersetzen",
+      "replaced": "Die gemeinsame Anmeldung für {0} wurde ersetzt.",
+      "replaceOffline": "Der Server ist nicht erreichbar. Die gemeinsame Anmeldung kann nur ersetzt werden, solange er erreichbar ist.",
+      "replaceRefused": "Der Server hat sie nicht ersetzt: {0}",
+      "replaceMissing": "Geben Sie das Passwort ein, das geteilt werden soll.",
+      "import": {
+        "created": "Auf dem Server",
+        "duplicate": "Bereits auf dem Server",
+        "rejected": "Vom Server abgelehnt",
+        "waiting": "Wird gesendet, sobald der Server erreichbar ist",
+        "summary": "{0} auf dem Server angelegt, {1} bereits vorhanden, {2} abgelehnt, {3} warten auf das Senden."
+      }
+    },
     "tags": {
       "applied": "{0} zu {1} Profil(en) hinzugefügt.",
       "alreadyThere": "Alles Gezogene trägt {0} bereits.",

@@ -87,6 +87,11 @@ internal sealed class SyncCycle
     /// </summary>
     public ServerResult? LastProblem { get; private set; }
 
+    /// <summary>
+    /// What became of each profile uploaded in this cycle, by the id it had here before.
+    /// </summary>
+    public Dictionary<Guid, ProfileUploadOutcome> Uploads { get; } = [];
+
     public void Stop(ServerResult failure)
     {
         Failure = failure;

@@ -348,6 +348,7 @@
                      TextWrapping="Wrap" TextAlignment="Center" />
           <Button Content="{loc:Translate header.import}" Classes="primary"
                   HorizontalAlignment="Center" Margin="0,6,0,0"
+                  IsVisible="{Binding CanChangeShared}"
                   Command="{Binding OpenImportCommand}" />
         </StackPanel>
 
@@ -378,6 +379,7 @@
                       VerticalAlignment="Top"
                       Content="{loc:Translate select.delete}"
                       IsEnabled="{Binding HasTicked}"
+                      IsVisible="{Binding CanChangeShared}"
                       Command="{Binding AskToDeleteTickedCommand}" />
               <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
                 <Button Content="{loc:Translate select.connect}" Classes="primary"
@@ -462,7 +464,7 @@
                       Command="{Binding SignInAgainCommand}"
                       CommandParameter="{Binding SelectedProfile}" />
               <Button Content="{loc:Translate profile.delete}" Classes="danger"
-                      IsVisible="{Binding !IsConfirmingProfileDelete}"
+                      IsVisible="{Binding OffersProfileDelete}"
                       Command="{Binding AskToDeleteSelectedCommand}" />
             </WrapPanel>
 

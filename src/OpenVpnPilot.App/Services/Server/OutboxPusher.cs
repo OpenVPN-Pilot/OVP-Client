@@ -32,6 +32,7 @@ internal sealed partial class OutboxPusher
     private readonly IOutbox outbox;
     private readonly IServerProfileMaintenance maintenance;
     private readonly ISecretStore secrets;
+    private readonly IHeldVaultSecrets held;
     private readonly IPortableSettings settings;
     private readonly PersonalDataSync personal;
     private readonly ILogger logger;
@@ -42,6 +43,7 @@ internal sealed partial class OutboxPusher
         IOutbox outbox,
         IServerProfileMaintenance maintenance,
         ISecretStore secrets,
+        IHeldVaultSecrets held,
         IPortableSettings settings,
         PersonalDataSync personal,
         ILogger logger)
@@ -51,6 +53,7 @@ internal sealed partial class OutboxPusher
         this.outbox = outbox;
         this.maintenance = maintenance;
         this.secrets = secrets;
+        this.held = held;
         this.settings = settings;
         this.personal = personal;
         this.logger = logger;
@@ -156,12 +159,30 @@ internal sealed partial class OutboxPusher
         Guid profileId = marker.EntityId!.Value;
         string realm = marker.Realm!;
 
-        // Read now, never kept in the outbox: the database must not hold a secret even briefly.
-        if (await secrets.TryReadAsync(SecretReference.ForProfile(profileId, realm), cancellationToken) is not { } secret)
+        // Read now, never kept in the outbox: the database must not hold a secret even briefly. One
+        // the person chose not to store is held in memory until this moment, and is what worked.
+        if ((held.Peek(profileId, realm)
+                ?? await secrets.TryReadAsync(SecretReference.ForProfile(profileId, realm), cancellationToken)) is not { } secret)
         {
             SyncEngineLog.VaultSecretMissing(logger, profileId, realm);
             return await DropUnsendableAsync(marker, cancellationToken);
         }
+
+        SyncStep step = await ShareAsync(marker, secret, cycle, cancellationToken);
+
+        // Kept only while the marker can still be sent again, which a stopped push leaves it for.
+        if (step == SyncStep.Continue)
+        {
+            held.Release(profileId, realm);
+        }
+
+        return step;
+    }
+
+    private async Task<SyncStep> ShareAsync(PendingChange marker, StoredSecret secret, SyncCycle cycle, CancellationToken cancellationToken)
+    {
+        Guid profileId = marker.EntityId!.Value;
+        string realm = marker.Realm!;
 
         ServerResult<VaultEntryResponse> added = await api.AddVaultEntryAsync(
             profileId,
@@ -349,6 +370,11 @@ internal sealed partial class OutboxPusher
         {
             if (SyncFailures.IsAdministratorKind(marker.Kind))
             {
+                if (marker.Kind == PendingChangeKind.ProfileCreate)
+                {
+                    cycle.Uploads[marker.EntityId!.Value] = new ProfileUploadOutcome(ProfileUploadKind.Rejected, Code: result.Code);
+                }
+
                 await outbox.DropAsync(marker.Id, cancellationToken);
                 dropped++;
             }

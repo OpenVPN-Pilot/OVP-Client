@@ -137,6 +137,40 @@ internal sealed class FakeNetwork : INetworkAvailability
     public void Raise(bool available) => AvailabilityChanged?.Invoke(this, available);
 }
 
+/// <summary>
+/// Tunnels that are up for the profiles a test names, and a record of which were ended and when.
+/// </summary>
+internal sealed class FakeRemovedTunnels : IRemovedProfileTunnels
+{
+    public HashSet<Guid> Up { get; } = [];
+
+    public List<Guid> Ended { get; } = [];
+
+    /// <summary>
+    /// Run as each tunnel ends, so a test can look at the database at that moment.
+    /// </summary>
+    public Func<Guid, Task>? OnEnded { get; set; }
+
+    public async Task<IReadOnlyList<Guid>> DisconnectAsync(IReadOnlyCollection<Guid> profileIds, CancellationToken cancellationToken)
+    {
+        List<Guid> ended = [];
+
+        foreach (Guid id in profileIds.Where(Up.Contains))
+        {
+            if (OnEnded is { } check)
+            {
+                await check(id);
+            }
+
+            Up.Remove(id);
+            ended.Add(id);
+        }
+
+        Ended.AddRange(ended);
+        return ended;
+    }
+}
+
 internal sealed class InlineUserInterfaceThread : IUserInterfaceThread
 {
     public Task InvokeAsync(Func<Task> work, CancellationToken cancellationToken = default) => work();
@@ -398,6 +432,9 @@ internal sealed class SyncHarness : IAsyncDisposable
             Outbox,
             Maintenance,
             network.Secrets,
+            Held,
+            Tunnels,
+            Notices,
             Settings,
             Notifier,
             NetworkAvailability,
@@ -422,6 +459,12 @@ internal sealed class SyncHarness : IAsyncDisposable
     public RecordingSettingsService Settings { get; }
 
     public RecordingNotifier Notifier { get; } = new();
+
+    public TypedCredentials Held { get; } = new(new FixedStorageMode(true));
+
+    public FakeRemovedTunnels Tunnels { get; } = new();
+
+    public ServerNotices Notices { get; } = new();
 
     public FakeNetwork NetworkAvailability { get; } = new();
 

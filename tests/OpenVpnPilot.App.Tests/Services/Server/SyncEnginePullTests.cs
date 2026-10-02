@@ -250,6 +250,8 @@ public sealed class SyncEnginePullTests : IAsyncLifetime
             harness.Database.Factory,
             harness.Secrets,
             harness.Maintenance,
+            harness.Tunnels,
+            harness.Notices,
             TimeProvider.System,
             NullLogger.Instance);
 

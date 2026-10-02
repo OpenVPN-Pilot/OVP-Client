@@ -22,6 +22,15 @@
                   IsVisible="{Binding !IsPlainText}">
       <StackPanel Margin="22,20" Spacing="14" IsEnabled="{Binding IsLoaded}">
 
+        <!-- A person who is not the server's administrator sees only what is theirs to change. -->
+        <Border CornerRadius="7" Padding="12,10"
+                Background="{DynamicResource StatePendingSoft}"
+                IsVisible="{Binding IsReadOnly}">
+          <TextBlock Text="{loc:Translate shared.readOnly}" TextWrapping="Wrap" FontSize="12"
+                     Foreground="{DynamicResource StatePending}" />
+        </Border>
+
+        <StackPanel Spacing="14" IsVisible="{Binding CanChangeShared}">
         <StackPanel Spacing="5">
           <TextBlock Text="{loc:Translate editor.name}" Classes="muted" />
           <TextBox Name="NameBox" Text="{Binding Name}" />
@@ -78,6 +87,7 @@
           </StackPanel>
           <TextBox Text="{Binding TagsInput}" PlaceholderText="{loc:Translate import.tagsHint}" />
         </StackPanel>
+        </StackPanel>
 
         <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
           <StackPanel Grid.Column="0" Spacing="5">
@@ -88,7 +98,7 @@
                       Margin="0,4,0,0" />
           </StackPanel>
 
-          <StackPanel Grid.Column="1" Spacing="5">
+          <StackPanel Grid.Column="1" Spacing="5" IsVisible="{Binding CanChangeShared}">
             <TextBlock Text="{loc:Translate editor.routing}" Classes="muted" />
             <ComboBox ItemsSource="{Binding RouteProtectionChoices}"
                       SelectedItem="{Binding SelectedRouteProtection}"
@@ -104,10 +114,31 @@
 
         <TextBlock Text="{loc:Translate editor.slotHint}" Classes="muted" TextWrapping="Wrap" />
 
+        <StackPanel Spacing="14" IsVisible="{Binding CanChangeShared}">
         <!-- Return starts a new line here, as it does in every field that holds more than one. -->
         <StackPanel Spacing="5">
           <TextBlock Text="{loc:Translate editor.notes}" Classes="muted" />
           <TextBox Text="{Binding Notes}" AcceptsReturn="True" Height="76" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <!-- The sign in a server shares for this profile, which only its administrator replaces. -->
+        <StackPanel Spacing="8" IsVisible="{Binding CanReplaceSharedSignIn}">
+          <Border Classes="divider" />
+          <TextBlock Text="{loc:Translate shared.replaceTitle}" Classes="section" />
+          <TextBlock Text="{loc:Translate shared.replaceHint}" Classes="muted" TextWrapping="Wrap" />
+          <Grid ColumnDefinitions="120,*,*" ColumnSpacing="10" RowDefinitions="Auto,Auto" RowSpacing="5">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Translate shared.realm}" Classes="muted" />
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="{loc:Translate credentials.username}" Classes="muted" />
+            <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Translate credentials.password}" Classes="muted" />
+            <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding SharedRealm}" />
+            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SharedUsername}" />
+            <TextBox Grid.Row="1" Grid.Column="2" Text="{Binding SharedPassword}" PasswordChar="•" />
+          </Grid>
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <Button Content="{loc:Translate shared.replace}" Command="{Binding ReplaceSharedSignInCommand}" />
+            <TextBlock Text="{Binding SharedSignInStatus}" Classes="muted" TextWrapping="Wrap"
+                       VerticalAlignment="Center" />
+          </StackPanel>
         </StackPanel>
 
         <Border Classes="divider" />
@@ -132,6 +163,7 @@
                   IsVisible="{Binding HasTlsKey}">
           <TextBox Text="{Binding TlsKeyText}" Classes="code" />
         </Expander>
+        </StackPanel>
 
       </StackPanel>
     </ScrollViewer>
@@ -186,9 +218,11 @@
         <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="8"
               IsVisible="{Binding !IsConfirmingDelete}">
           <Button Grid.Column="0" Classes="danger" Content="{loc:Translate editor.delete}"
+                  IsVisible="{Binding CanChangeShared}"
                   Command="{Binding RequestDeleteCommand}" />
           <Button Grid.Column="1" Classes="quiet" Content="{Binding ViewToggleLabel}"
                   IsEnabled="{Binding IsLoaded}"
+                  IsVisible="{Binding CanChangeShared}"
                   Command="{Binding ToggleViewCommand}" />
           <Button Grid.Column="3" Content="{loc:Translate common.cancel}" MinWidth="92"
                   IsCancel="True"

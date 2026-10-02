@@ -239,6 +239,7 @@ public partial class App : Application
         ReportStorage(services.GetRequiredService<IActiveStorage>(), logger);
 
         services.GetRequiredService<SessionRecorder>().Attach();
+        services.GetRequiredService<VaultShareRecorder>().Attach();
         services.GetRequiredService<PingMonitor>().Start();
 
         // What the synchronisation writes reaches the list and the shortcuts through this.
@@ -542,6 +543,8 @@ public partial class App : Application
             await recorder.CloseOpenSessionsAsync(SessionEndReason.ApplicationClosed);
             await recorder.DisposeAsync();
         });
+
+        RunStep(logger, started, "vault sharing", async () => await services.GetRequiredService<VaultShareRecorder>().DisposeAsync());
 
         RunStep(logger, started, "connections", () => services.GetRequiredService<ConnectionManager>().DisconnectAllAsync());
         RunStep(logger, "hotkeys", () => services.GetRequiredService<HotkeyCoordinator>().Dispose());

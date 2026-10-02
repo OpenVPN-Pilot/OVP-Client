@@ -64,7 +64,8 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   on screen before the main window appears. A failure offers going back and using this computer
   instead.
 - **"Forget all stored credentials" signs out of the server first**, in Server mode, so the session
-  ends on the server rather than lingering until it expires.
+  ends on the server rather than lingering until it expires. It also forgets where the
+  synchronisation had got to, so the next one fetches every shared sign in again.
 - **The log window can show the server on its own.** Calls to the server, signing in, the
   synchronisation, waiting changes and switching the store are marked `server` in the log and in
   the files, and "Server only" in the source filter shows just them; "This application only" still
@@ -96,6 +97,25 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
 - **A server that withdraws the account while it is being signed in to from the settings or the
   first start** has what this computer still kept of it removed, its copy, the stored sign ins of
   its profiles and its session, and the person is told. The application stays where it was.
+- **What a server's people may change follows their role.** Somebody who is not an administrator
+  sees a server's profiles in the editor as they are, with only the favourite and the shortcut slot
+  to change, and is offered neither importing, deleting nor tagging. An administrator edits as on
+  this computer, and can replace the sign in the server shares for a profile from the editor while
+  the server can be reached. Deleting a server's profile removes its stored sign ins too.
+- **Importing into a server's copy uploads at once**, in batches of up to 500, and the review list
+  then says for every profile whether the server created it, already had it or refused it, with the
+  server's reason. A profile the server refused is not kept. While the server cannot be reached the
+  imported profiles are kept here and sent when it can. Applying a package works the same way, and
+  the sign ins it carries are offered to the server's vault.
+- **A sign in that was typed and worked is shared with the server**, so nobody else has to type it:
+  once the tunnel is up, it is offered to the server's vault, which keeps the first one it is given;
+  when somebody was quicker, theirs is taken here instead. Nothing is shared for a sign in read from
+  the keystore, for one that failed, or for an attempt that asked for a one time code. When
+  "remember" was not ticked, the sign in is kept in memory only until it has been sent, and never
+  written to this computer.
+- **A profile deleted on the server while its tunnel is up** has its tunnel ended first, then it is
+  removed, and the status bar says which one it was. A complete synchronisation keeps a stored sign
+  in that is still waiting to be shared; everything else follows the server.
 
 ### Changed
 

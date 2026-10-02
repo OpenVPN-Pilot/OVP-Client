@@ -111,7 +111,11 @@ internal static class AppHost
         builder.Services.AddSingleton<IUserInterfaceThread, AvaloniaUserInterfaceThread>();
         RegisterSynchronisation(builder.Services, storage);
 
-        builder.Services.AddSingleton<IProfileStore, ProfileStore>();
+        builder.Services.AddSingleton<IProfileStore>(provider => new ProfileStore(
+            provider.GetRequiredService<IDbContextFactory<PilotDbContext>>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<IChangeRecorder>(),
+            storage.IsServerMode ? provider.GetRequiredService<IServerProfileMaintenance>() : null));
         builder.Services.AddSingleton<ISessionStore, SessionStore>();
         builder.Services.AddSingleton<IHotkeyStore, HotkeyStore>();
         builder.Services.AddSingleton<IProfileImportService, ProfileImportService>();
@@ -154,6 +158,13 @@ internal static class AppHost
         builder.Services.AddSingleton<IProfileNameLookup>(
             provider => provider.GetRequiredService<ProfileNameCache>());
         builder.Services.AddSingleton<ICredentialProvider, StoredCredentialProvider>();
+
+        // What was typed into the prompt and worked is shared with a server's vault. On the local
+        // library the ledger keeps nothing and the recorder records nothing.
+        builder.Services.AddSingleton<TypedCredentials>();
+        builder.Services.AddSingleton<ITypedCredentialLedger>(provider => provider.GetRequiredService<TypedCredentials>());
+        builder.Services.AddSingleton<IHeldVaultSecrets>(provider => provider.GetRequiredService<TypedCredentials>());
+        builder.Services.AddSingleton<VaultShareRecorder>();
 
         builder.Services.AddSingleton<SessionRecorder>();
         builder.Services.AddSingleton<NotificationService>();
@@ -208,11 +219,21 @@ internal static class AppHost
     {
         services.AddSingleton<ILibraryChangeNotifier, LibraryChangeNotifier>();
         services.AddSingleton<LibraryRefresh>();
+        services.AddSingleton<IServerNotices, ServerNotices>();
 
         if (storage.IsServerMode)
         {
             services.AddSingleton<INetworkAvailability, SystemNetworkAvailability>();
+            services.AddSingleton<IRemovedProfileTunnels, ConnectionManagerRemovedTunnels>();
+            services.AddSingleton<IServerCredentialsReset, ServerCredentialsReset>();
+            services.AddSingleton<ServerLibraryPermissions>();
+            services.AddSingleton<ILibraryPermissions>(provider => provider.GetRequiredService<ServerLibraryPermissions>());
+            services.AddSingleton<ISharedSignInReplacement, SharedSignInReplacement>();
             services.AddSingleton<ISyncEngine, SyncEngine>();
+        }
+        else
+        {
+            services.AddSingleton<ILibraryPermissions, LocalLibraryPermissions>();
         }
     }
 
