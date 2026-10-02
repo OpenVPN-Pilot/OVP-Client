@@ -1294,4 +1294,19 @@ public enum AppScreen
     Import,
     Export,
     ProfileEditor,
+
+    /// <summary>
+    /// The settings, opened at the storage page.
+    /// </summary>
+    StorageSettings,
+
+    /// <summary>
+    /// Choosing a server and signing in to it, before the application switches to it.
+    /// </summary>
+    ServerSwitch,
+
+    /// <summary>
+    /// Signing in again to the server the application works with.
+    /// </summary>
+    ServerSignIn,
 }

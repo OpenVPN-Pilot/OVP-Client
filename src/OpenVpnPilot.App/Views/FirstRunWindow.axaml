@@ -10,7 +10,7 @@
         CanResize="False"
         Background="{DynamicResource SurfaceWindow}"
         Icon="/Assets/openvpnpilot.ico"
-        Title="{loc:Translate firstRun.windowTitle}">
+        Title="{Binding WindowTitle}">
 
   <StackPanel Margin="28,24" Spacing="16">
 
@@ -90,7 +90,9 @@
       <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
         <Button Content="{loc:Translate common.back}" Command="{Binding BackCommand}" MinWidth="92" />
         <Button Content="{loc:Translate firstRun.useThisComputer}" Classes="quiet"
-                Command="{Binding UseThisComputerCommand}" />
+                Command="{Binding UseThisComputerCommand}" IsVisible="{Binding IsFirstRun}" />
+        <Button Content="{loc:Translate common.cancel}" Classes="quiet"
+                Command="{Binding UseThisComputerCommand}" IsVisible="{Binding IsSwitch}" />
       </StackPanel>
       <Button Grid.Column="2" Content="{loc:Translate firstRun.continue}"
               Command="{Binding ContinueCommand}" Classes="primary" MinWidth="120"

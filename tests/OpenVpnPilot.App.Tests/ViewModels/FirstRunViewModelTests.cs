@@ -163,6 +163,46 @@ public sealed class FirstRunViewModelTests : IDisposable
         Assert.Empty(switcher.Calls);
     }
 
+    [Fact]
+    public async Task Switch_ServerWipesDuringTheSignIn_RemovesItsLeftoversAndSwitchesNothing()
+    {
+        factory.Answer = request => request.RequestUri!.AbsolutePath == "/api/v1/server/info"
+            ? ServerAnswers.Json(ServerAnswers.Info())
+            : ServerAnswers.Problem(HttpStatusCode.Forbidden, "auth.forbidden", wipe: true);
+
+        RecordingLeftovers leftovers = new();
+        FirstRunViewModel model = new(
+            new StubLocalizer(),
+            factory,
+            switcher,
+            new UnusedEntra(),
+            NullLogger<FirstRunViewModel>.Instance,
+            leftovers);
+
+        model.BeginServerSwitch(null, activeAddress: null);
+        model.Address = "https://pilot.example.com";
+        await model.ContinueCommand.ExecuteAsync(null);
+        model.SignIn!.Username = "alice";
+        model.SignIn.Password = "secret";
+        await model.SignIn.SignInCommand.ExecuteAsync(null);
+
+        Assert.Equal(ServerKey.Compute("https://pilot.example.com"), await leftovers.Asked.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Equal("signIn.accountRevoked", model.SignIn.Message);
+        Assert.Empty(switcher.Calls);
+    }
+
+    [Fact]
+    public async Task Switch_TheServerAlreadyInUse_IsNotContacted()
+    {
+        FirstRunViewModel model = Model();
+        model.BeginServerSwitch("https://pilot.example.com", "https://pilot.example.com");
+
+        await model.ContinueCommand.ExecuteAsync(null);
+
+        Assert.Equal("storage.alreadyThisServer", model.Message);
+        Assert.Equal(0, factory.Created);
+    }
+
     public void Dispose()
     {
         try
@@ -181,6 +221,19 @@ public sealed class FirstRunViewModelTests : IDisposable
         switcher,
         new UnusedEntra(),
         NullLogger<FirstRunViewModel>.Instance);
+
+    private sealed class RecordingLeftovers : IServerLeftovers
+    {
+        private readonly TaskCompletionSource<string> asked = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<string> Asked => asked.Task;
+
+        public Task<ServerLeftoversReport?> RemoveAsync(ServerWipeDirective directive, string serverKey, CancellationToken cancellationToken = default)
+        {
+            asked.TrySetResult(serverKey);
+            return Task.FromResult<ServerLeftoversReport?>(new ServerLeftoversReport(0, 0, false, true));
+        }
+    }
 
     private sealed class CountingFactory : IServerConnectionFactory
     {

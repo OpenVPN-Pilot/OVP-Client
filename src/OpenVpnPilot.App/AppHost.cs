@@ -140,6 +140,8 @@ internal static class AppHost
         builder.Services.AddSingleton<MainWindowViewModel>();
         builder.Services.AddSingleton<QuickSwitcherViewModel>();
         builder.Services.AddSingleton<TrayIconController>();
+        builder.Services.AddSingleton<ServerStatusViewModel>();
+        builder.Services.AddTransient<StorageSettingsViewModel>();
 
         // One window at a time, but a fresh view model each time it opens, so a screen that was
         // closed without saving does not reopen with the abandoned edits still in it.
@@ -211,6 +213,14 @@ internal static class AppHost
         services.AddSingleton<IServerConnectionFactory, ServerConnectionFactory>();
         services.AddSingleton<IEntraSignIn, MsalEntraSignIn>();
 
+        // A sign in from this computer's library, or to another server, can be answered with the wipe
+        // directive too; what is kept of that server then goes, without switching anything.
+        services.AddSingleton<IServerLeftoversNotice>(provider => new WindowServerLeftoversNotice(
+            provider.GetRequiredService<ILocalizer>(),
+            showsWindows: !App.Startup.Headless,
+            provider.GetService<IApplicationActivation>()));
+        services.AddSingleton<IServerLeftovers, ServerLeftovers>();
+
         if (storage is not { IsServerMode: true, ServerAddress: { } address, ServerKey: { } key })
         {
             return;
@@ -234,6 +244,10 @@ internal static class AppHost
         services.AddSingleton<ServerSessionCoordinator>();
         services.AddSingleton<IServerSessionCoordinator>(provider => provider.GetRequiredService<ServerSessionCoordinator>());
         services.AddSingleton<IServerSignIn>(provider => provider.GetRequiredService<ServerSessionCoordinator>());
+
+        // What the status bar, the banners, the tray and the storage settings show about the server.
+        services.AddSingleton<ServerStatusSource>();
+        services.AddSingleton<IServerStatusSource>(provider => provider.GetRequiredService<ServerStatusSource>());
     }
 
     private static void RegisterLocalization(IServiceCollection services, UserApplicationPaths paths)

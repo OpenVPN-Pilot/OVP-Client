@@ -57,7 +57,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         DiagnosticsBundle diagnostics,
         UpdateCoordinator updates,
         IDockPresence? dock = null,
-        IServerSignIn? server = null)
+        IServerSignIn? server = null,
+        StorageSettingsViewModel? storage = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(localizer);
@@ -82,6 +83,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
         this.updates = updates;
         this.dock = dock;
         this.server = server;
+        Storage = storage;
+
+        if (storage is not null)
+        {
+            storage.ScreenRequested += (_, screen) => ScreenRequested?.Invoke(this, screen);
+        }
 
         draft = settings.Current.Clone();
 
@@ -126,6 +133,21 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// Raised when the profile list should be read from the store again.
     /// </summary>
     public event EventHandler? ProfileReloadRequested;
+
+    /// <summary>
+    /// The position of the storage page among the tabs, for opening the settings there.
+    /// </summary>
+    public const int StorageTabIndex = 5;
+
+    /// <summary>
+    /// The storage page: where the profiles live, and switching that. Null where nothing composed it.
+    /// </summary>
+    public StorageSettingsViewModel? Storage { get; }
+
+    public bool HasStorage => Storage is not null;
+
+    [ObservableProperty]
+    public partial int SelectedTabIndex { get; set; }
 
     public ObservableCollection<LanguageChoice> Languages { get; }
 
@@ -306,6 +328,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         // The registry is the truth for autostart, not the settings file, because the entry can be
         // removed from outside the application.
         StartWithSystem = autoStart.IsSupported && autoStart.IsEnabled();
+
+        Storage?.Refresh();
     }
 
     private void ReadFromDraft()

@@ -95,6 +95,11 @@ public partial class App : Application
         windows = new WindowCoordinator(host.Services, window, viewModel, desktop);
         windows.Attach();
 
+        // The server's place in the status bar and its banners, or the "Local" label.
+        ServerStatusViewModel serverStatus = host.Services.GetRequiredService<ServerStatusViewModel>();
+        serverStatus.ScreenRequested += (_, screen) => windows.Open(screen);
+        window.AttachServerStatus(serverStatus);
+
         // Before anything that takes time: a file opened from the Finder that started this process
         // arrives as an activation right after launch, and one raised before a handler exists is lost.
         AttachActivation(window);
@@ -471,6 +476,9 @@ public partial class App : Application
             string key = services.GetRequiredService<IActiveStorage>().ServerKey ?? string.Empty;
             ServerAccountLog.StartFailed(services.GetRequiredService<ILogger<App>>(), key, exception);
         }
+
+        // Only now does a missing session mean that somebody has to sign in.
+        services.GetService<IServerStatusSource>()?.Begin();
     }
 
     /// <summary>
@@ -521,6 +529,11 @@ public partial class App : Application
         if (services.GetService<IServerSessionCoordinator>() is { } server)
         {
             RunStep(logger, started, "server", () => server.StopAsync());
+        }
+
+        if (services.GetService<ServerStatusSource>() is { } serverStatus)
+        {
+            RunStep(logger, "server status", serverStatus.Dispose);
         }
 
         RunStep(logger, started, "sessions", async () =>

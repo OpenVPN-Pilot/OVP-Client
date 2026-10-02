@@ -54,7 +54,13 @@ public sealed partial class FirstRunViewModel : ViewModelBase, IDisposable
     private readonly IEntraSignIn entra;
     private readonly ILogger<FirstRunViewModel> logger;
 
+    /// <summary>
+    /// Removes what this computer kept of a server that withdraws the account during the sign in.
+    /// </summary>
+    private readonly IServerLeftovers? leftovers;
+
     private IServerConnection? connection;
+    private string? currentAddress;
     private string? normalisedAddress;
     private Func<string>? message;
     private Func<string?>? reference;
@@ -67,7 +73,8 @@ public sealed partial class FirstRunViewModel : ViewModelBase, IDisposable
         IServerConnectionFactory connections,
         IStorageModeSwitcher switcher,
         IEntraSignIn entra,
-        ILogger<FirstRunViewModel> logger)
+        ILogger<FirstRunViewModel> logger,
+        IServerLeftovers? leftovers = null)
     {
         ArgumentNullException.ThrowIfNull(localizer);
         ArgumentNullException.ThrowIfNull(connections);
@@ -80,6 +87,7 @@ public sealed partial class FirstRunViewModel : ViewModelBase, IDisposable
         this.switcher = switcher;
         this.entra = entra;
         this.logger = logger;
+        this.leftovers = leftovers;
 
         localizer.LanguageChanged += OnLanguageChanged;
     }
@@ -89,6 +97,36 @@ public sealed partial class FirstRunViewModel : ViewModelBase, IDisposable
     /// this copy instead, through the switcher.
     /// </summary>
     public event EventHandler<FirstRunChoice>? Finished;
+
+    /// <summary>
+    /// Raised once when a switch begun from the settings is abandoned; the application stays as it is.
+    /// </summary>
+    public event EventHandler? Cancelled;
+
+    /// <summary>
+    /// True for choosing a server from the settings rather than on the first start.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFirstRun), nameof(WindowTitle))]
+    public partial bool IsSwitch { get; set; }
+
+    public bool IsFirstRun => !IsSwitch;
+
+    public string WindowTitle => IsSwitch ? localizer["storage.switchTitle"] : localizer["firstRun.windowTitle"];
+
+    /// <summary>
+    /// Starts at the address, for switching to a server from the settings.
+    /// </summary>
+    /// <param name="suggestedAddress">The address to offer, such as the server used last.</param>
+    /// <param name="activeAddress">The server the application works with now, if any, which is not a switch.</param>
+    public void BeginServerSwitch(string? suggestedAddress, string? activeAddress)
+    {
+        IsSwitch = true;
+        currentAddress = activeAddress;
+        Address = suggestedAddress ?? string.Empty;
+        Show(null, null);
+        Step = FirstRunStep.Address;
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsChoice), nameof(IsAddress), nameof(IsSignIn), nameof(IsRestarting), nameof(CanGoBack))]
@@ -195,6 +233,10 @@ public sealed partial class FirstRunViewModel : ViewModelBase, IDisposable
                 Step = FirstRunStep.Address;
                 break;
 
+            case FirstRunStep.Address when IsSwitch:
+                Finish(FirstRunChoice.ThisComputer);
+                break;
+
             case FirstRunStep.Address:
                 Step = FirstRunStep.Choice;
                 break;
@@ -229,11 +271,19 @@ public sealed partial class FirstRunViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        if (IsSwitch && string.Equals(normalised, currentAddress, StringComparison.Ordinal))
+        {
+            Show(() => localizer["storage.alreadyThisServer"], null);
+            return;
+        }
+
         checking?.Dispose();
         checking = new CancellationTokenSource();
         CancellationToken cancellationToken = checking.Token;
 
-        IServerConnection candidate = connections.Create(new Uri(normalised), ServerKey.Compute(normalised));
+        string candidateKey = ServerKey.Compute(normalised);
+        IServerConnection candidate = connections.Create(new Uri(normalised), candidateKey);
+        candidate.Wipe.WipeRequested += (_, wiped) => RemoveLeftovers(wiped.Directive, candidateKey);
         IsChecking = true;
 
         try
@@ -309,8 +359,16 @@ public sealed partial class FirstRunViewModel : ViewModelBase, IDisposable
     private async Task LeaveForServerAsync(IServerConnection signedIn, string address, CurrentUserResponse user)
     {
         Step = FirstRunStep.Restarting;
-        ServerAccountLog.FirstRunChosen(logger, FirstRunChoice.Server);
-        ServerAccountLog.FirstRunSignedIn(logger, address, user.Id, user.Role);
+
+        if (IsSwitch)
+        {
+            ServerStatusLog.SwitchSignedIn(logger, address, user.Id, user.Role);
+        }
+        else
+        {
+            ServerAccountLog.FirstRunChosen(logger, FirstRunChoice.Server);
+            ServerAccountLog.FirstRunSignedIn(logger, address, user.Id, user.Role);
+        }
 
         StorageSwitchResult result = await switcher.SwitchToServerAsync(address, StorageSwitchFollowUp.FirstSynchronisation);
 
@@ -320,17 +378,56 @@ public sealed partial class FirstRunViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        ServerAccountLog.FirstRunSwitchFailed(logger, address, result.Outcome);
+        if (IsSwitch)
+        {
+            ServerStatusLog.SwitchAfterSignInFailed(logger, address, result.Outcome);
+        }
+        else
+        {
+            ServerAccountLog.FirstRunSwitchFailed(logger, address, result.Outcome);
+        }
 
         // Nothing changed, so the sign in that was made for the server is not left behind either.
         await signedIn.SignIn.SignOutAsync(CancellationToken.None);
 
         Step = FirstRunStep.SignIn;
         Show(
-            () => result.Outcome == StorageSwitchOutcome.RestartFailed
-                ? localizer["firstRun.restartFailed"]
-                : localizer["firstRun.switchFailed"],
+            () => result.Outcome switch
+            {
+                StorageSwitchOutcome.RestartFailed => localizer["firstRun.restartFailed"],
+                StorageSwitchOutcome.TunnelsUp => localizer["storage.disconnectFirst"],
+                _ => localizer["firstRun.switchFailed"],
+            },
             null);
+    }
+
+    /// <summary>
+    /// The server withdrew the account while it was being signed in to: what this computer kept of
+    /// it goes, and the application stays where it is.
+    /// </summary>
+    /// <remarks>
+    /// Raised on the thread that received the answer, which must not wait for folders being removed.
+    /// The sign in form says that the account has no access; the removal tells the person the rest.
+    /// </remarks>
+    private void RemoveLeftovers(ServerWipeDirective directive, string key)
+    {
+        if (leftovers is null)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await leftovers.RemoveAsync(directive, key, CancellationToken.None);
+            }
+            catch (Exception exception) when (exception is not OutOfMemoryException)
+            {
+                // Every step reports its own failures; this is what none of them caught.
+                ServerStatusLog.LeftoversStepFailed(logger, "leftovers", exception);
+            }
+        });
     }
 
     private void Finish(FirstRunChoice choice)
@@ -343,6 +440,13 @@ public sealed partial class FirstRunViewModel : ViewModelBase, IDisposable
         finished = true;
         checking?.Cancel();
         DropConnection();
+
+        if (IsSwitch)
+        {
+            Cancelled?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
         ServerAccountLog.FirstRunChosen(logger, choice);
         Finished?.Invoke(this, choice);
     }
@@ -386,6 +490,7 @@ public sealed partial class FirstRunViewModel : ViewModelBase, IDisposable
 
     private void OnLanguageChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() =>
     {
+        OnPropertyChanged(nameof(WindowTitle));
         OnPropertyChanged(nameof(Message));
         OnPropertyChanged(nameof(Reference));
         OnPropertyChanged(nameof(ServerSummary));

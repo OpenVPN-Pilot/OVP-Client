@@ -13,7 +13,8 @@
 
   <Grid RowDefinitions="*,Auto">
 
-    <TabControl Grid.Row="0" Margin="12,10">
+    <!-- The storage page is opened directly from the status bar, by its position: keep StorageTabIndex in step. -->
+    <TabControl Grid.Row="0" Margin="12,10" SelectedIndex="{Binding SelectedTabIndex}">
 
       <!-- General -->
       <TabItem Header="{loc:Translate settings.tabGeneral}">
@@ -227,6 +228,83 @@
       </TabItem>
 
       <!--
+        Storage: where the profiles live, the server and its session, and switching between this
+        computer and a server, which restarts the application.
+      -->
+      <TabItem Header="{loc:Translate storage.tab}" IsVisible="{Binding HasStorage}">
+        <ScrollViewer>
+          <StackPanel Margin="16" Spacing="12" DataContext="{Binding Storage}"
+                      x:DataType="vm:StorageSettingsViewModel">
+
+            <TextBlock Text="{loc:Translate storage.mode}" Classes="section" />
+            <TextBlock Text="{Binding ModeText}" Classes="body" />
+            <TextBlock Text="{Binding ModeHint}" Classes="muted" TextWrapping="Wrap" />
+
+            <StackPanel Spacing="12" IsVisible="{Binding IsServerMode}">
+              <Border Classes="divider" />
+              <TextBlock Text="{loc:Translate storage.server}" Classes="section" />
+
+              <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                    RowSpacing="6">
+                <TextBlock Grid.Row="0" Grid.Column="0" Classes="muted" Text="{loc:Translate storage.address}" />
+                <TextBlock Grid.Row="0" Grid.Column="1" Classes="body" Text="{Binding Address}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Classes="muted" Text="{loc:Translate storage.user}" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Classes="body" Text="{Binding User}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="2" Grid.Column="0" Classes="muted" Text="{loc:Translate storage.role}" />
+                <TextBlock Grid.Row="2" Grid.Column="1" Classes="body" Text="{Binding Role}" />
+                <TextBlock Grid.Row="3" Grid.Column="0" Classes="muted" Text="{loc:Translate storage.provider}" />
+                <TextBlock Grid.Row="3" Grid.Column="1" Classes="body" Text="{Binding Provider}" />
+                <TextBlock Grid.Row="4" Grid.Column="0" Classes="muted" Text="{loc:Translate storage.serverVersion}" />
+                <TextBlock Grid.Row="4" Grid.Column="1" Classes="body" Text="{Binding ServerVersion}" />
+                <TextBlock Grid.Row="5" Grid.Column="0" Classes="muted" Text="{loc:Translate storage.lastSync}" />
+                <TextBlock Grid.Row="5" Grid.Column="1" Classes="body" Text="{Binding LastSync}" />
+                <TextBlock Grid.Row="6" Grid.Column="0" Classes="muted" Text="{loc:Translate storage.pending}" />
+                <TextBlock Grid.Row="6" Grid.Column="1" Classes="body" Text="{Binding Pending}" />
+                <TextBlock Grid.Row="7" Grid.Column="0" Classes="muted" Text="{loc:Translate storage.state}" />
+                <TextBlock Grid.Row="7" Grid.Column="1" Classes="body" Text="{Binding State}" TextWrapping="Wrap" />
+              </Grid>
+
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="{loc:Translate storage.syncNow}" Command="{Binding SyncNowCommand}" />
+                <Button Content="{loc:Translate storage.signOut}" Command="{Binding SignOutCommand}"
+                        IsVisible="{Binding IsSignedIn}" />
+                <Button Content="{loc:Translate storage.signIn}" Classes="primary" Command="{Binding SignInCommand}"
+                        IsVisible="{Binding IsSignedOut}" />
+                <Button Content="{loc:Translate storage.showServerLog}" Classes="quiet"
+                        Command="{Binding ShowServerLogCommand}" />
+              </StackPanel>
+            </StackPanel>
+
+            <Border Classes="divider" />
+            <TextBlock Text="{loc:Translate storage.switch}" Classes="section" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="{Binding SwitchToServerLabel}" Command="{Binding RequestSwitchToServerCommand}" />
+              <Button Content="{loc:Translate storage.switchToLocal}" Command="{Binding RequestSwitchToLocalCommand}"
+                      IsVisible="{Binding IsServerMode}" />
+            </StackPanel>
+            <TextBlock Text="{loc:Translate storage.switchHint}" Classes="muted" TextWrapping="Wrap" />
+
+            <Border CornerRadius="7" Padding="12,10" Background="{DynamicResource StatePendingSoft}"
+                    IsVisible="{Binding IsConfirming}">
+              <StackPanel Spacing="9">
+                <TextBlock Text="{Binding Confirmation}" TextWrapping="Wrap" FontSize="12"
+                           Foreground="{DynamicResource TextPrimary}" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                  <Button Content="{loc:Translate common.cancel}" Classes="quiet"
+                          Command="{Binding CancelSwitchCommand}" />
+                  <Button Content="{loc:Translate storage.confirmSwitch}" Classes="primary"
+                          Command="{Binding ConfirmSwitchCommand}" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <TextBlock Text="{Binding Message}" Classes="muted" TextWrapping="Wrap" />
+
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!--
         Profiles: everything about getting configurations into the store and back out of it. The
         import and export screens are reached from here rather than from the main window, so the
         header carries only what is used while tunnels are running.
@@ -293,8 +371,9 @@
             <Border Classes="divider" />
 
             <!--
-              What is contacted is named here rather than left to be discovered. The check is the
-              only thing in the application that talks to a network the user did not ask for.
+              What is contacted is named here rather than left to be discovered. Apart from a server
+              the storage page names, the check is the only thing in the application that talks to
+              a network the user did not ask for.
             -->
             <CheckBox Content="{loc:Translate settings.checkForUpdates}"
                       IsChecked="{Binding CheckForUpdates}" />
