@@ -82,6 +82,8 @@ internal static class AppHost
         builder.Services.AddSingleton<IOutbox, Outbox>();
         builder.Services.AddSingleton<IChangeRecorder, ChangeRecorder>();
         builder.Services.AddSingleton<IServerProfileMaintenance, ServerProfileMaintenance>();
+        builder.Services.AddSingleton<IUserInterfaceThread, AvaloniaUserInterfaceThread>();
+        RegisterSynchronisation(builder.Services, storage);
 
         builder.Services.AddSingleton<IProfileStore, ProfileStore>();
         builder.Services.AddSingleton<ISessionStore, SessionStore>();
@@ -154,8 +156,35 @@ internal static class AppHost
             paths.SettingsPath,
             provider.GetRequiredService<ILogger<JsonSettingsService>>()));
 
-        services.AddSingleton<ISettingsService>(
-            provider => provider.GetRequiredService<JsonSettingsService>());
+        // Everything saves through the recording service, so a change to what follows the person
+        // to a server is noted for it. On the local library the recorder notes nothing.
+        services.AddSingleton(provider => new RecordingSettingsService(
+            provider.GetRequiredService<JsonSettingsService>(),
+            provider.GetRequiredService<IChangeRecorder>(),
+            provider.GetRequiredService<IUserInterfaceThread>()));
+
+        services.AddSingleton<ISettingsService>(provider => provider.GetRequiredService<RecordingSettingsService>());
+        services.AddSingleton<IPortableSettings>(provider => provider.GetRequiredService<RecordingSettingsService>());
+    }
+
+    /// <summary>
+    /// The synchronisation, which exists only while the application runs against a server.
+    /// </summary>
+    /// <remarks>
+    /// It is registered here and never resolved on the local library, so the local mode does not
+    /// need a server connection to start. The connection itself is registered by the sign in side,
+    /// and whoever signs in starts the engine; nothing starts it from here.
+    /// </remarks>
+    private static void RegisterSynchronisation(IServiceCollection services, ActiveStorage storage)
+    {
+        services.AddSingleton<ILibraryChangeNotifier, LibraryChangeNotifier>();
+        services.AddSingleton<LibraryRefresh>();
+
+        if (storage.IsServerMode)
+        {
+            services.AddSingleton<INetworkAvailability, SystemNetworkAvailability>();
+            services.AddSingleton<ISyncEngine, SyncEngine>();
+        }
     }
 
     private static void RegisterLocalization(IServiceCollection services, UserApplicationPaths paths)

@@ -61,11 +61,18 @@ public sealed class HotkeyCoordinator : IDisposable
     public bool IsAvailable => hotkeys.IsAvailable;
 
     /// <summary>
+    /// True once <see cref="AttachAsync"/> ran. A copy that never claims shortcuts, a headless one,
+    /// must not start claiming them because the stored bindings changed.
+    /// </summary>
+    public bool IsAttached { get; private set; }
+
+    /// <summary>
     /// Reads the bindings and claims them. Must be called from the user interface thread.
     /// </summary>
     public async Task AttachAsync(CancellationToken cancellationToken = default)
     {
         hotkeys.Pressed += OnPressed;
+        IsAttached = true;
 
         // Every start, not only the first. The store adds a default for an action that has no
         // binding yet and leaves every other one alone, so an action added in a later version

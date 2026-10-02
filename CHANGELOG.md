@@ -30,6 +30,14 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   waits up to thirty seconds for that process to end before it takes the single instance claim.
   Switching between this computer's profiles and a server is such a restart. It is refused while a
   tunnel is up, and it deletes nothing: going back finds the other side exactly as it was left.
+- **Synchronisation with a server.** The copy pushes its own changes first, then pulls the server's:
+  profiles, tags and shared sign ins from the change feed, then the person's favourites, shortcuts
+  and settings. It runs at start, every two minutes, two seconds after a local change, when the
+  network comes back and on request, and while the server cannot be reached it works from the copy
+  and tries again after 5, 15, 30 and then every 60 seconds. Changes are sent as they are: a profile
+  someone else changed meanwhile is overwritten. A change the server refuses for good is dropped and
+  counted; one it cannot take now waits. Connection history, the last connection and the number of
+  connections never leave the machine.
 
 ### Fixed
 
