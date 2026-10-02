@@ -25,9 +25,9 @@ internal static partial class ServerLibraryLog
 
     [LoggerMessage(
         EventId = 3972,
-        Level = LogLevel.Information,
-        Message = "Deleted server profile {ProfileId} here and removed {Secrets} stored sign in(s) of it.")]
-    public static partial void ProfileDeleted(ILogger logger, Guid profileId, int secrets);
+        Level = LogLevel.Warning,
+        Message = "Could not read the role the server last gave; what may be changed stays as it was.")]
+    public static partial void PermissionsUnread(ILogger logger, Exception exception);
 
     [LoggerMessage(
         EventId = 3973,

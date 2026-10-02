@@ -3,6 +3,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.Core.Settings;
@@ -33,6 +34,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly UpdateCoordinator updates;
     private readonly ILocalizer localizer;
     private readonly TimeProvider timeProvider;
+    private readonly ILibraryPermissions permissions;
 
     private readonly List<ProfileItemViewModel> allProfiles = [];
     private readonly Dictionary<Guid, ProfileItemViewModel> byId = [];
@@ -48,7 +50,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         EnvironmentGate environment,
         UpdateCoordinator updates,
         ILocalizer localizer,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ILibraryPermissions? permissions = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(connections);
@@ -69,8 +72,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         this.updates = updates;
         this.localizer = localizer;
         this.timeProvider = timeProvider;
+        this.permissions = permissions ?? new LocalLibraryPermissions();
 
         connections.StatusChanged += OnConnectionStatusChanged;
+        this.permissions.Changed += OnPermissionsChanged;
         localizer.LanguageChanged += OnLanguageChanged;
 
         Filters =
@@ -160,7 +165,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// Shown after asking to delete the profile in the detail panel.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OffersProfileDelete))]
     public partial bool IsConfirmingProfileDelete { get; set; }
+
+    /// <summary>
+    /// True while the detail panel offers deleting: the person may, and is not being asked already.
+    /// </summary>
+    public bool OffersProfileDelete => CanChangeShared && !IsConfirmingProfileDelete;
 
     /// <summary>
     /// The question, naming the profile it is about.
@@ -255,6 +266,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public bool HasSelection => SelectedProfile is not null;
 
+    /// <summary>
+    /// True when importing and deleting are offered: always on this computer's own library, and for
+    /// a server's administrators only.
+    /// </summary>
+    public bool CanChangeShared => permissions.CanChangeShared;
+
     public bool HasActiveConnections => ActiveCount > 0;
 
     /// <summary>
@@ -302,6 +319,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         try
         {
+            await permissions.RefreshAsync(cancellationToken);
+            OnPropertyChanged(nameof(CanChangeShared));
+            OnPropertyChanged(nameof(OffersProfileDelete));
+
             IReadOnlyList<Profile> profiles = await store.GetProfilesAsync(cancellationToken);
             IReadOnlyList<TagSummary> tags = await store.GetTagsAsync(cancellationToken);
             IReadOnlyDictionary<Guid, IReadOnlyList<string>> profileTags =
@@ -444,6 +465,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         ArgumentNullException.ThrowIfNull(profileIds);
         ArgumentException.ThrowIfNullOrWhiteSpace(tagName);
+
+        // A server's tags are its administrators' to change.
+        if (!CanChangeShared)
+        {
+            return;
+        }
 
         int changed = 0;
 
@@ -607,10 +634,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private void AskToDeleteTicked() => IsConfirmingDelete = TickedCount > 0;
+    private void AskToDeleteTicked() => IsConfirmingDelete = TickedCount > 0 && CanChangeShared;
 
     [RelayCommand]
-    private void AskToDeleteSelected() => IsConfirmingProfileDelete = SelectedProfile is not null;
+    private void AskToDeleteSelected() => IsConfirmingProfileDelete = SelectedProfile is not null && CanChangeShared;
+
+    private void OnPermissionsChanged(object? sender, EventArgs arguments) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            OnPropertyChanged(nameof(CanChangeShared));
+            OnPropertyChanged(nameof(OffersProfileDelete));
+
+            if (!CanChangeShared)
+            {
+                IsConfirmingDelete = false;
+                IsConfirmingProfileDelete = false;
+            }
+        });
 
     [RelayCommand]
     private void CancelDeleteSelected() => IsConfirmingProfileDelete = false;
@@ -623,7 +663,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         IsConfirmingProfileDelete = false;
 
-        if (SelectedProfile is not { } profile)
+        if (SelectedProfile is not { } profile || !CanChangeShared)
         {
             return;
         }
@@ -650,6 +690,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         List<ProfileItemViewModel> chosen = Chosen;
         IsConfirmingDelete = false;
+
+        if (!CanChangeShared)
+        {
+            return;
+        }
 
         foreach (ProfileItemViewModel profile in chosen)
         {
@@ -1267,6 +1312,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         uptimeTimer.IsEnabled = false;
         connections.StatusChanged -= OnConnectionStatusChanged;
         localizer.LanguageChanged -= OnLanguageChanged;
+        permissions.Changed -= OnPermissionsChanged;
     }
 }
 

@@ -510,8 +510,23 @@ public sealed class WindowCoordinator
         return window;
     }
 
-    private ImportWindow CreateImport()
+    /// <summary>
+    /// Whether the person may change what a server shares; always true on the local library.
+    /// </summary>
+    /// <remarks>
+    /// Asked here as well as by the buttons, because a dropped file, the settings screen and a
+    /// command from another process all open the import too.
+    /// </remarks>
+    private bool CanChangeShared =>
+        services.GetService<Server.ILibraryPermissions>()?.CanChangeShared != false;
+
+    private ImportWindow? CreateImport()
     {
+        if (!CanChangeShared)
+        {
+            return null;
+        }
+
         ImportViewModel model = services.GetRequiredService<ImportViewModel>();
         ImportWindow window = new() { DataContext = model };
 
@@ -552,7 +567,9 @@ public sealed class WindowCoordinator
             services.GetRequiredService<IProfileStore>(),
             services.GetRequiredService<Core.Localization.ILocalizer>(),
             profile,
-            startsInPlainText: settings.Current.General.ProfileEditor == ProfileEditorView.PlainText);
+            startsInPlainText: settings.Current.General.ProfileEditor == ProfileEditorView.PlainText,
+            canChangeShared: CanChangeShared,
+            sharedSignIns: services.GetService<Server.ISharedSignInReplacement>());
 
         ProfileEditorWindow window = new() { DataContext = model };
 

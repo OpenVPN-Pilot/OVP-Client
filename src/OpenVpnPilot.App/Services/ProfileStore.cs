@@ -115,11 +115,17 @@ public sealed class ProfileStore : IProfileStore
     private readonly IDbContextFactory<PilotDbContext> contextFactory;
     private readonly TimeProvider timeProvider;
     private readonly IChangeRecorder changeRecorder;
+    private readonly IServerProfileMaintenance? serverProfiles;
 
+    /// <param name="serverProfiles">
+    /// Given on a server's copy only, where deleting a profile takes its stored sign ins with it.
+    /// A local profile's stay, as they always have.
+    /// </param>
     public ProfileStore(
         IDbContextFactory<PilotDbContext> contextFactory,
         TimeProvider timeProvider,
-        IChangeRecorder changeRecorder)
+        IChangeRecorder changeRecorder,
+        IServerProfileMaintenance? serverProfiles = null)
     {
         ArgumentNullException.ThrowIfNull(contextFactory);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -128,6 +134,7 @@ public sealed class ProfileStore : IProfileStore
         this.contextFactory = contextFactory;
         this.timeProvider = timeProvider;
         this.changeRecorder = changeRecorder;
+        this.serverProfiles = serverProfiles;
     }
 
     public async Task<IReadOnlyList<Profile>> GetProfilesAsync(CancellationToken cancellationToken = default)
@@ -491,6 +498,11 @@ public sealed class ProfileStore : IProfileStore
             context.Profiles.Remove(profile);
             await changeRecorder.StageAsync(context, PendingChangeKind.ProfileDelete, profileId, cancellationToken: cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
+
+            if (serverProfiles is not null)
+            {
+                await serverProfiles.DeleteSecretsAsync([profileId], cancellationToken);
+            }
         }
 
         await context.Tags

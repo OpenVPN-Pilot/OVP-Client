@@ -66,6 +66,11 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
 - **"Forget all stored credentials" signs out of the server first**, in Server mode, so the session
   ends on the server rather than lingering until it expires. It also forgets where the
   synchronisation had got to, so the next one fetches every shared sign in again.
+- **What a server's people may change follows their role.** Somebody who is not an administrator
+  sees a server's profiles in the editor as they are, with only the favourite and the shortcut slot
+  to change, and is offered neither importing, deleting nor tagging. An administrator edits as on
+  this computer, and can replace the sign in the server shares for a profile from the editor while
+  the server can be reached. Deleting a server's profile removes its stored sign ins too.
 - **A sign in that was typed and worked is shared with the server**, so nobody else has to type it:
   once the tunnel is up, it is offered to the server's vault, which keeps the first one it is given;
   when somebody was quicker, theirs is taken here instead. Nothing is shared for a sign in read from
