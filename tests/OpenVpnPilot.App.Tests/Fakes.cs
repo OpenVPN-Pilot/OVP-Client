@@ -320,3 +320,48 @@ internal static class SilentUpdates
             Microsoft.Extensions.Logging.Abstractions.NullLogger<UpdateCoordinator>.Instance);
     }
 }
+
+/// <summary>
+/// A storage mode the test decides, so recording can be checked in both modes without settings.
+/// </summary>
+internal sealed class FixedStorageMode(bool isServerMode) : IStorageModeContext
+{
+    public bool IsServerMode { get; } = isServerMode;
+}
+
+/// <summary>
+/// A keystore that fails on a chosen write, to prove that whatever was half done is undone.
+/// </summary>
+internal sealed class FailingSecrets(int failOnWrite) : ISecretStore
+{
+    private readonly FakeSecrets inner = new();
+    private int writes;
+
+    public bool IsAvailable => true;
+
+    public Task<StoredSecret?> TryReadAsync(string reference, CancellationToken cancellationToken = default) =>
+        inner.TryReadAsync(reference, cancellationToken);
+
+    public Task WriteAsync(string reference, StoredSecret secret, CancellationToken cancellationToken = default)
+    {
+        writes++;
+
+        return writes == failOnWrite
+            ? throw new IOException("The keystore refused the write.")
+            : inner.WriteAsync(reference, secret, cancellationToken);
+    }
+
+    /// <summary>
+    /// Fills the store without counting towards the failing write.
+    /// </summary>
+    public Task SeedAsync(string reference, StoredSecret secret) => inner.WriteAsync(reference, secret);
+
+    public Task DeleteAsync(string reference, CancellationToken cancellationToken = default) =>
+        inner.DeleteAsync(reference, cancellationToken);
+
+    public Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default) =>
+        inner.ListAsync(cancellationToken);
+
+    public Task<int> ClearAsync(CancellationToken cancellationToken = default) =>
+        inner.ClearAsync(cancellationToken);
+}

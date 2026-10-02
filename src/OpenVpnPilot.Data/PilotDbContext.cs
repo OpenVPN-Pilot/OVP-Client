@@ -33,6 +33,10 @@ public sealed class PilotDbContext : DbContext
 
     public DbSet<HotkeyBinding> HotkeyBindings => Set<HotkeyBinding>();
 
+    public DbSet<SyncState> SyncStates => Set<SyncState>();
+
+    public DbSet<PendingChange> PendingChanges => Set<PendingChange>();
+
     /// <summary>
     /// Stores every instant as ticks since the epoch of <see cref="DateTimeOffset"/>.
     /// </summary>
@@ -134,6 +138,30 @@ public sealed class PilotDbContext : DbContext
             entity.Property(binding => binding.ActionId).HasMaxLength(100);
             entity.Property(binding => binding.Gesture).HasMaxLength(100);
             entity.HasIndex(binding => binding.ActionId).IsUnique();
+        });
+
+        modelBuilder.Entity<SyncState>(entity =>
+        {
+            // The key is always the same value, so the database must not invent one.
+            entity.Property(state => state.Id).ValueGeneratedNever();
+            entity.Property(state => state.LastErrorCode).HasMaxLength(100);
+            entity.Property(state => state.LastRequestId).HasMaxLength(100);
+            entity.Property(state => state.Username).HasMaxLength(200);
+            entity.Property(state => state.UserDisplayName).HasMaxLength(200);
+            entity.Property(state => state.UserRole).HasMaxLength(20);
+            entity.Property(state => state.UserProvider).HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<PendingChange>(entity =>
+        {
+            // The key is the push order. The provider makes an integer key AUTOINCREMENT, which keeps
+            // it growing even after the newest marker was removed, so a later marker never takes an
+            // earlier one's number.
+            entity.Property(change => change.Realm).HasMaxLength(200);
+            entity.Property(change => change.LastErrorCode).HasMaxLength(100);
+
+            // Collapsing a new marker into the pending ones looks them up by what they are about.
+            entity.HasIndex(change => new { change.Kind, change.EntityId });
         });
     }
     /// <summary>

@@ -105,4 +105,9 @@ public enum ProfileSource
     /// Imported once from a file, an archive or a package.
     /// </summary>
     Imported,
+
+    /// <summary>
+    /// A copy of a profile the configured server holds, kept up to date by synchronisation.
+    /// </summary>
+    Server,
 }
