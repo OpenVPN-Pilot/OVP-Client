@@ -50,7 +50,8 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   offered as something to get past.
 - **The session with the server is kept between starts** and picked up without waiting for the
   network, so the role is known while offline. Signing in as somebody other than the person this
-  copy last knew first discards the previous person's waiting changes, favourites and shortcuts and
+  copy last knew first discards the previous person's waiting changes, the profiles they created
+  that never reached the server with their stored sign ins, their favourites and shortcuts, and
   then synchronises everything again; the same person simply continues. Signing out keeps the copy
   and its waiting changes. When the keystore refuses a renewed session token, the session goes on
   for this run and the used token is removed, so the next start asks for a sign in rather than

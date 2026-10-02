@@ -30,8 +30,8 @@ internal static partial class ServerAccountLog
     [LoggerMessage(
         EventId = 3714,
         Level = LogLevel.Information,
-        Message = "Discarded {PendingChanges} change(s) waiting to be sent, {Favourites} favourite(s) and {Hotkeys} shortcut(s) of the previous user. The next synchronisation is a full one.")]
-    public static partial void PersonalDataDiscarded(ILogger logger, int pendingChanges, int favourites, int hotkeys);
+        Message = "Discarded {PendingChanges} change(s) waiting to be sent, {TemporaryProfiles} profile(s) that never reached the server, {Favourites} favourite(s) and {Hotkeys} shortcut(s) of the previous user. The next synchronisation is a full one.")]
+    public static partial void PersonalDataDiscarded(ILogger logger, int pendingChanges, int favourites, int hotkeys, int temporaryProfiles);
 
     [LoggerMessage(
         EventId = 3715,

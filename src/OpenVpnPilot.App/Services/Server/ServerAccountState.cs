@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using OpenVpnPilot.Core.Server.Contracts;
 using OpenVpnPilot.Data;
+using OpenVpnPilot.Data.Entities;
 using SyncStateRow = OpenVpnPilot.Data.Entities.SyncState;
 
 namespace OpenVpnPilot.App.Services.Server;
@@ -31,10 +32,13 @@ public interface IServerAccountState
     /// Discards everything that belonged to the previous person, for somebody else signing in.
     /// </summary>
     /// <remarks>
-    /// The changes waiting to be sent go, because they would be sent in the new person's name. Their
-    /// favourites and shortcuts go, because those are personal. The cursor goes, so the next
-    /// synchronisation is a full one and brings the new person's own. The shared profiles, the history
-    /// of this machine and the keystore entries stay: they belong to the team and to the machine.
+    /// The changes waiting to be sent go, because they would be sent in the new person's name. So do
+    /// the profiles the previous person created that never reached the server, still waiting to be
+    /// uploaded or refused by it, with their stored sign ins: they are changes waiting too, and kept
+    /// without their marker they would pass for the server's. Their favourites and shortcuts go,
+    /// because those are personal. The cursor goes, so the next synchronisation is a full one and
+    /// brings the new person's own. The server's profiles, the history of this machine with them and
+    /// their keystore entries stay: they belong to the team and to the machine.
     /// </remarks>
     public Task<PersonalDataDiscarded> DiscardPersonalDataAsync(CancellationToken cancellationToken = default);
 }
@@ -42,7 +46,7 @@ public interface IServerAccountState
 /// <summary>
 /// How much of the previous person's data was discarded. Counts, never values.
 /// </summary>
-public sealed record PersonalDataDiscarded(int PendingChanges, int Favourites, int Hotkeys);
+public sealed record PersonalDataDiscarded(int PendingChanges, int Favourites, int Hotkeys, int TemporaryProfiles);
 
 /// <summary>
 /// Keeps that state in the sync state row of the copy's database.
@@ -51,19 +55,23 @@ public sealed class ServerAccountState : IServerAccountState
 {
     private readonly IDbContextFactory<PilotDbContext> contextFactory;
     private readonly IOutbox outbox;
+    private readonly IServerProfileMaintenance maintenance;
     private readonly ILogger<ServerAccountState> logger;
 
     public ServerAccountState(
         IDbContextFactory<PilotDbContext> contextFactory,
         IOutbox outbox,
+        IServerProfileMaintenance maintenance,
         ILogger<ServerAccountState> logger)
     {
         ArgumentNullException.ThrowIfNull(contextFactory);
         ArgumentNullException.ThrowIfNull(outbox);
+        ArgumentNullException.ThrowIfNull(maintenance);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.contextFactory = contextFactory;
         this.outbox = outbox;
+        this.maintenance = maintenance;
         this.logger = logger;
     }
 
@@ -134,14 +142,28 @@ public sealed class ServerAccountState : IServerAccountState
 
         int hotkeys = await context.HotkeyBindings.ExecuteDeleteAsync(cancellationToken);
 
+        // Every profile of a server's copy that is not the server's is one that never reached it.
+        List<Guid> temporary = await context.Profiles
+            .Where(profile => profile.Source != ProfileSource.Server)
+            .Select(profile => profile.Id)
+            .ToListAsync(cancellationToken);
+
+        await context.Profiles
+            .Where(profile => temporary.Contains(profile.Id))
+            .ExecuteDeleteAsync(cancellationToken);
+
         await context.SyncStates
             .Where(row => row.Id == SyncStateRow.SingletonId)
             .ExecuteUpdateAsync(setters => setters.SetProperty(row => row.Cursor, (long?)null), cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
 
-        PersonalDataDiscarded discarded = new(pending, favourites, hotkeys);
-        ServerAccountLog.PersonalDataDiscarded(logger, discarded.PendingChanges, discarded.Favourites, discarded.Hotkeys);
+        // After the commit: the keystore cannot join the transaction, and a sign in left behind for a
+        // profile that is gone is unused, while one removed for a profile that stayed would be lost.
+        await maintenance.DeleteSecretsAsync(temporary, cancellationToken);
+
+        PersonalDataDiscarded discarded = new(pending, favourites, hotkeys, temporary.Count);
+        ServerAccountLog.PersonalDataDiscarded(logger, discarded.PendingChanges, discarded.Favourites, discarded.Hotkeys, discarded.TemporaryProfiles);
         return discarded;
     }
 

@@ -105,6 +105,22 @@ public sealed class ServerStatusViewModelTests : IDisposable
         Assert.Equal("pilot.example.com · statusBar.latency · statusBar.syncedMinutes · statusBar.waiting", text);
     }
 
+    [Theory]
+    [InlineData(SyncState.Synchronising, "pilot.example.com · statusBar.synchronising · statusBar.waiting", ServerStatusTone.Busy)]
+    [InlineData(SyncState.Synchronised, "pilot.example.com · statusBar.syncedMinutes · statusBar.waiting", ServerStatusTone.Good)]
+    [InlineData(SyncState.ClientOutdated, "pilot.example.com · statusBar.clientOutdated · statusBar.waiting", ServerStatusTone.Problem)]
+    [InlineData(SyncState.ClockWrong, "pilot.example.com · statusBar.clockWrong · statusBar.waiting", ServerStatusTone.Problem)]
+    [InlineData(SyncState.CertificateUntrusted, "pilot.example.com · statusBar.certificateUntrusted · statusBar.waiting", ServerStatusTone.Problem)]
+    [InlineData(SyncState.Degraded, "pilot.example.com · statusBar.degraded · statusBar.syncedMinutes · statusBar.waiting", ServerStatusTone.Warning)]
+    public void Footer_EachState_HasItsWordsAndColour(SyncState state, string expected, ServerStatusTone tone)
+    {
+        FixedStatus source = new(Snapshot(state, signedIn: true));
+        using ServerStatusViewModel model = new(new StubLocalizer(), new FakeSettingsService(), new ImmediateThread(), new ManualTime(Now), source);
+
+        Assert.Equal(expected, model.Text);
+        Assert.Equal(tone, model.Tone);
+    }
+
     [Fact]
     public void State_ServerUnreachableByTheProbe_IsOfflineBeforeTheNextCycle()
     {

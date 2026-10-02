@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenVpnPilot.App.Services;
 using OpenVpnPilot.App.Services.Server;
@@ -425,13 +426,13 @@ internal sealed class SyncServer
 /// </summary>
 internal sealed class SyncHarness : IAsyncDisposable
 {
-    private SyncHarness(TestDatabase database, SyncServer server, TestServer network, TimeProvider time)
+    private SyncHarness(TestDatabase database, SyncServer server, TestServer network, TimeProvider time, ILoggerFactory logs)
     {
         Database = database;
         Server = server;
         Network = network;
-        Outbox = new Outbox(database.Factory, TimeProvider.System, NullLogger<Outbox>.Instance);
-        Maintenance = new ServerProfileMaintenance(database.Factory, network.Secrets, Held, Outbox, NullLogger<ServerProfileMaintenance>.Instance);
+        Outbox = new Outbox(database.Factory, TimeProvider.System, new Logger<Outbox>(logs));
+        Maintenance = new ServerProfileMaintenance(database.Factory, network.Secrets, Held, Outbox, new Logger<ServerProfileMaintenance>(logs));
         Settings = new RecordingSettingsService(
             SettingsBackend,
             new ChangeRecorder(Outbox, new FixedStorageMode(true)),
@@ -450,7 +451,7 @@ internal sealed class SyncHarness : IAsyncDisposable
             Notifier,
             NetworkAvailability,
             time,
-            NullLogger<SyncEngine>.Instance);
+            new Logger<SyncEngine>(logs));
     }
 
     public TestDatabase Database { get; }
@@ -483,7 +484,8 @@ internal sealed class SyncHarness : IAsyncDisposable
 
     public IReadOnlyList<SentRequest> Requests => Network.Handler.Requests;
 
-    public static async Task<SyncHarness> CreateAsync(TimeProvider? time = null, bool signedIn = true)
+    /// <param name="logs">Where the engine, the outbox and the maintenance write; nowhere by default.</param>
+    public static async Task<SyncHarness> CreateAsync(TimeProvider? time = null, bool signedIn = true, ILoggerFactory? logs = null)
     {
         TestDatabase database = await TestDatabase.CreateAsync();
         SyncServer server = new();
@@ -494,7 +496,7 @@ internal sealed class SyncHarness : IAsyncDisposable
             await network.SignedInAsync();
         }
 
-        SyncHarness harness = new(database, server, network, time ?? TimeProvider.System);
+        SyncHarness harness = new(database, server, network, time ?? TimeProvider.System, logs ?? NullLoggerFactory.Instance);
 
         // As the settings service holds them once loaded: in the current layout.
         await harness.SettingsBackend.ReplaceAsync(new PilotSettings { SchemaVersion = PilotSettings.CurrentSchemaVersion });

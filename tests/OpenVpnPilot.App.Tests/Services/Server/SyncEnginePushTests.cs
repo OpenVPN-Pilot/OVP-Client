@@ -151,6 +151,52 @@ public sealed class SyncEnginePushTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SynchronizeAsync_MoreThanABatchCreatedOffline_UploadsThemInBatchesOfFiveHundred()
+    {
+        const int Count = ProfileBatchRequest.MaximumItems + 1;
+        await AddOfflineProfilesAsync(Count);
+
+        List<int> sizes = [];
+        harness.Server.On(HttpMethod.Post, "/api/v1/profiles/batch", request =>
+        {
+            ProfileBatchRequest batch = request.Json.Deserialize<ProfileBatchRequest>(ServerJson.Options)!;
+            sizes.Add(batch.Items.Count);
+
+            List<ProfileBatchItemResponse> items = [.. batch.Items.Select((item, index) => new ProfileBatchItemResponse(
+                index,
+                ProfileBatchOutcomes.Created,
+                harness.Server.Hold(Guid.NewGuid(), item.Name, item.Configuration),
+                null,
+                null))];
+
+            return Answers.Json(new ProfileBatchResponse(items.Count, 0, 0, items));
+        });
+
+        SyncCycleResult result = await harness.Engine.SynchronizeAsync(CancellationToken.None);
+
+        Assert.True(result.Completed);
+        Assert.Equal([ProfileBatchRequest.MaximumItems, 1], sizes);
+        Assert.Equal(Count, result.Pushed);
+        Assert.Equal(0, harness.Count(HttpMethod.Post, "/api/v1/profiles"));
+        Assert.DoesNotContain(await harness.Database.MarkersAsync(), marker => marker.Kind == PendingChangeKind.ProfileCreate);
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_BatchTooLarge_SendsItsProfilesOneByOne()
+    {
+        await AddOfflineProfilesAsync(3);
+        harness.Server.On(HttpMethod.Post, "/api/v1/profiles/batch", _ => Answers.Problem(HttpStatusCode.RequestEntityTooLarge, ServerErrorCodes.ValidationFailed));
+
+        SyncCycleResult result = await harness.Engine.SynchronizeAsync(CancellationToken.None);
+
+        Assert.True(result.Completed);
+        Assert.Equal(1, harness.Count(HttpMethod.Post, "/api/v1/profiles/batch"));
+        Assert.Equal(3, harness.Count(HttpMethod.Post, "/api/v1/profiles"));
+        Assert.Equal(3, harness.Server.Configurations.Count);
+        Assert.Equal(0, result.Dropped);
+    }
+
+    [Fact]
     public async Task SynchronizeAsync_UploadIsADuplicate_MatchesTheServersProfileAfterThePull()
     {
         UseDeltas();
@@ -328,6 +374,39 @@ public sealed class SyncEnginePushTests : IAsyncLifetime
 
         // The server's answer carries its hash, and the copy takes the configuration it names.
         Assert.Equal(AdministratorsEdit, (await harness.ProfileAsync(ServerProfile))!.Configuration);
+    }
+
+    /// <summary>
+    /// Two saves that each staged an update before either was written leave two markers. There is
+    /// deliberately no unique index to prevent it: the second save would then fail, and it carries
+    /// a person's edit. Both markers send the current state, so the duplicate costs one call.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_TwoWritersRecordedTheSameUpdate_SendsTheLatestStateAndLeavesNothing()
+    {
+        UseDeltas();
+        await AddServerProfileAsync(ServerProfile, "example-site", Configuration);
+
+        await using (PilotDbContext first = await harness.Database.Factory.CreateDbContextAsync())
+        await using (PilotDbContext second = await harness.Database.Factory.CreateDbContextAsync())
+        {
+            (await first.Profiles.SingleAsync(profile => profile.Id == ServerProfile)).Name = "example-site-a";
+            (await second.Profiles.SingleAsync(profile => profile.Id == ServerProfile)).Notes = "edited";
+            await harness.Outbox.StageAsync(first, PendingChangeKind.ProfileUpdate, ServerProfile);
+            await harness.Outbox.StageAsync(second, PendingChangeKind.ProfileUpdate, ServerProfile);
+            await first.SaveChangesAsync();
+            await second.SaveChangesAsync();
+        }
+
+        Assert.Equal(2, (await harness.Database.MarkersAsync()).Count(marker => marker.Kind == PendingChangeKind.ProfileUpdate));
+
+        SyncCycleResult result = await harness.Engine.SynchronizeAsync(CancellationToken.None);
+
+        Assert.True(result.Completed);
+        Assert.All(
+            harness.Sent(HttpMethod.Put, $"/api/v1/profiles/{ServerProfile:D}"),
+            put => Assert.Equal("edited", put.Json.GetProperty("notes").GetString()));
+        Assert.Empty(await harness.Database.MarkersAsync());
     }
 
     [Theory]
@@ -545,6 +624,37 @@ public sealed class SyncEnginePushTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SynchronizeAsync_ShortcutOfAProfileTheServerDeleted_SendsTheShortcutsAgainWithoutIt()
+    {
+        await AddServerProfileAsync(ServerProfile, "example-site", Configuration);
+        await AddServerProfileAsync(OtherServerProfile, "example-site-b", Configuration + "verb 4\n");
+        harness.Server.Configurations.Remove(OtherServerProfile);
+
+        await harness.ChangeAsync(context =>
+        {
+            context.HotkeyBindings.Add(new HotkeyBinding { ActionId = "ConnectProfile", Gesture = "Control+Alt+P", ProfileId = OtherServerProfile });
+            return Task.CompletedTask;
+        });
+
+        await harness.Outbox.RecordAsync(PendingChangeKind.Hotkeys);
+
+        harness.Server.On(HttpMethod.Put, "/api/v1/me/hotkeys", request =>
+            request.Body!.Contains(OtherServerProfile.ToString("D"), StringComparison.Ordinal)
+                ? Answers.Problem(HttpStatusCode.NotFound, ServerErrorCodes.ProfileNotFound)
+                : harness.Server.DefaultAnswer(request));
+
+        SyncCycleResult result = await harness.Engine.SynchronizeAsync(CancellationToken.None);
+
+        Assert.Equal(1, result.Pushed);
+        IReadOnlyList<SentRequest> puts = harness.Sent(HttpMethod.Put, "/api/v1/me/hotkeys");
+        Assert.Equal(2, puts.Count);
+
+        JsonElement kept = Assert.Single(puts[1].Json.GetProperty("items").EnumerateArray());
+        Assert.Equal("Control+Alt+P", kept.GetProperty("gesture").GetString());
+        Assert.Equal(JsonValueKind.Null, kept.GetProperty("profileId").ValueKind);
+    }
+
+    [Fact]
     public async Task SynchronizeAsync_Settings_AreSentWithoutIfMatchAndARefusalIsDropped()
     {
         await harness.SettingsBackend.UpdateAsync(settings => settings.Appearance.Theme = OpenVpnPilot.Core.Settings.ThemePreference.Dark);
@@ -605,6 +715,30 @@ public sealed class SyncEnginePushTests : IAsyncLifetime
     /// </summary>
     private void UseDeltas() =>
         harness.Server.Changes = since => SyncServer.Feed(false, 1, profiles: harness.Server.Held());
+
+    /// <summary>
+    /// Profiles created while the server could not be reached, each with a configuration of its own.
+    /// </summary>
+    private async Task AddOfflineProfilesAsync(int count)
+    {
+        await using PilotDbContext context = await harness.Database.Factory.CreateDbContextAsync();
+
+        for (int index = 0; index < count; index++)
+        {
+            string configuration = Configuration + "# " + index.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\n";
+            Profile profile = new()
+            {
+                Name = "example-site-" + index.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                Configuration = configuration,
+                ContentHash = ProfileImporter.ComputeHash(configuration),
+            };
+
+            context.Profiles.Add(profile);
+            await harness.Outbox.StageAsync(context, PendingChangeKind.ProfileCreate, profile.Id);
+        }
+
+        await context.SaveChangesAsync();
+    }
 
     /// <summary>
     /// The store the editor writes through, recording into the harness's outbox.

@@ -1,4 +1,5 @@
 using System.Net;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.App.Services.Storage;
@@ -6,6 +7,7 @@ using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Server;
 using OpenVpnPilot.Core.Settings;
 using OpenVpnPilot.Core.Storage;
+using OpenVpnPilot.Core.Tests.Server;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
 
@@ -26,6 +28,11 @@ public sealed class ServerWipeTests : IAsyncDisposable
         401,
         "req-wipe",
         DateTimeOffset.UtcNow);
+
+    private const string SharedPassword = "shared-password-value";
+    private const string KeyPassphrase = "key-passphrase-value";
+    private const string LocalPassword = "local-password-value";
+    private const string RefreshToken = "refresh-token-value";
 
     private readonly string root = Directory.CreateTempSubdirectory("ovp-wipe-").FullName;
     private readonly Guid localProfile = Guid.NewGuid();
@@ -98,6 +105,22 @@ public sealed class ServerWipeTests : IAsyncDisposable
         Assert.Equal(1, harness.Notice.Shown);
     }
 
+    [Fact]
+    public async Task Wipe_NeverWritesASecret()
+    {
+        RecordingLoggerFactory logs = new();
+        Harness harness = await ArrangeAsync(logs);
+
+        await harness.Wipe.WipeAsync(Directive);
+
+        Assert.NotEmpty(logs.Lines);
+
+        foreach (string secret in new[] { SharedPassword, KeyPassphrase, LocalPassword, RefreshToken })
+        {
+            Assert.DoesNotContain(logs.Lines, line => line.Contains(secret, StringComparison.Ordinal));
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         server?.Dispose();
@@ -117,7 +140,7 @@ public sealed class ServerWipeTests : IAsyncDisposable
         }
     }
 
-    private async Task<Harness> ArrangeAsync()
+    private async Task<Harness> ArrangeAsync(ILoggerFactory? logs = null)
     {
         TemporaryPaths paths = new(root);
 
@@ -150,15 +173,15 @@ public sealed class ServerWipeTests : IAsyncDisposable
         }
 
         FakeSecrets secrets = new();
-        await secrets.WriteAsync(SecretReference.ForProfile(serverProfile, "Auth"), new StoredSecret("vpnuser", "shared"));
-        await secrets.WriteAsync(SecretReference.ForProfile(serverProfile, "Private Key"), new StoredSecret(null, "passphrase"));
-        await secrets.WriteAsync(SecretReference.ForProfile(localProfile, "Auth"), new StoredSecret("me", "mine"));
-        await secrets.WriteAsync(SecretReference.ForServerRefreshToken(TestConnection.ServerKey), new StoredSecret(null, "refresh"));
+        await secrets.WriteAsync(SecretReference.ForProfile(serverProfile, "Auth"), new StoredSecret("vpnuser", SharedPassword));
+        await secrets.WriteAsync(SecretReference.ForProfile(serverProfile, "Private Key"), new StoredSecret(null, KeyPassphrase));
+        await secrets.WriteAsync(SecretReference.ForProfile(localProfile, "Auth"), new StoredSecret("me", LocalPassword));
+        await secrets.WriteAsync(SecretReference.ForServerRefreshToken(TestConnection.ServerKey), new StoredSecret(null, RefreshToken));
 
         server = new TestConnection(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError), secrets);
         await server.Connection.Session.RestoreAsync(ServerAnswers.Alice);
 
-        return new Harness(paths, storage, settings, secrets, copy, server.Connection.Session, serverProfile);
+        return new Harness(paths, storage, settings, secrets, copy, server.Connection.Session, serverProfile, logs ?? NullLoggerFactory.Instance);
     }
 
     private sealed class Harness
@@ -170,7 +193,8 @@ public sealed class ServerWipeTests : IAsyncDisposable
             FakeSecrets secrets,
             DatabaseAt copy,
             IServerSession session,
-            Guid serverProfile)
+            Guid serverProfile,
+            ILoggerFactory logs)
         {
             Paths = paths;
             Storage = storage;
@@ -183,7 +207,7 @@ public sealed class ServerWipeTests : IAsyncDisposable
                 paths,
                 Tunnels,
                 Restart,
-                NullLogger<StorageModeSwitcher>.Instance,
+                new Logger<StorageModeSwitcher>(logs),
                 4242);
 
             switcher.ShutdownRequested += (_, _) => ShutdownRequests++;
@@ -192,8 +216,8 @@ public sealed class ServerWipeTests : IAsyncDisposable
                 copy.Factory,
                 secrets,
                 new TypedCredentials(new FixedStorageMode(true)),
-                new Outbox(copy.Factory, TimeProvider.System, NullLogger<Outbox>.Instance),
-                NullLogger<ServerProfileMaintenance>.Instance);
+                new Outbox(copy.Factory, TimeProvider.System, new Logger<Outbox>(logs)),
+                new Logger<ServerProfileMaintenance>(logs));
 
             Wipe = new ServerWipe(
                 storage,
@@ -207,7 +231,7 @@ public sealed class ServerWipeTests : IAsyncDisposable
                 settings,
                 switcher,
                 Notice,
-                NullLogger<ServerWipe>.Instance);
+                new Logger<ServerWipe>(logs));
         }
 
         public TemporaryPaths Paths { get; }

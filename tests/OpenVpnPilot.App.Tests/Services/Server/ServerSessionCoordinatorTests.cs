@@ -50,6 +50,31 @@ public sealed class ServerSessionCoordinatorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task SignIn_DifferentUser_RemovesThePreviousPersonsProfilesThatNeverReachedTheServer()
+    {
+        (ServerSessionCoordinator coordinator, Profile shared) = await ArrangeAsync(lastKnown: ServerAnswers.Alice, signsIn: ServerAnswers.Bob);
+        Profile waiting = await database!.AddProfileAsync("example-site-offline");
+        Profile refused = await database.AddProfileAsync("example-site-refused");
+
+        await using (PilotDbContext context = await database.Factory.CreateDbContextAsync())
+        {
+            context.PendingChanges.Add(new PendingChange { Kind = PendingChangeKind.ProfileCreate, EntityId = waiting.Id, CreatedAt = DateTimeOffset.UtcNow });
+            (await context.Profiles.SingleAsync(profile => profile.Id == refused.Id)).UploadRefusedCode = ServerErrorCodes.ProfileNotSelfContained;
+            await context.SaveChangesAsync();
+        }
+
+        await server!.Secrets.WriteAsync(SecretReference.ForProfile(waiting.Id, "Auth"), new StoredSecret("alice", "typed"));
+        await server.Secrets.WriteAsync(SecretReference.ForProfile(shared.Id, "Auth"), new StoredSecret("team", "shared"));
+
+        await coordinator.SignInAsync("bob", "secret");
+
+        await using PilotDbContext after = await database.Factory.CreateDbContextAsync();
+        Assert.Equal([shared.Id], await after.Profiles.Select(profile => profile.Id).ToListAsync());
+        Assert.Null(await server.Secrets.TryReadAsync(SecretReference.ForProfile(waiting.Id, "Auth")));
+        Assert.NotNull(await server.Secrets.TryReadAsync(SecretReference.ForProfile(shared.Id, "Auth")));
+    }
+
+    [Fact]
     public async Task SignIn_SameUserAsLastKnown_KeepsWaitingChangesAndPersonalData()
     {
         (ServerSessionCoordinator coordinator, Profile favourite) = await ArrangeAsync(lastKnown: ServerAnswers.Alice, signsIn: ServerAnswers.Alice);
@@ -179,6 +204,7 @@ public sealed class ServerSessionCoordinatorTests : IAsyncDisposable
         await using (PilotDbContext context = await database.Factory.CreateDbContextAsync())
         {
             Profile tracked = await context.Profiles.SingleAsync(profile => profile.Id == favourite.Id);
+            tracked.Source = ProfileSource.Server;
             tracked.IsFavourite = true;
             tracked.FavouriteSlot = 3;
             context.HotkeyBindings.Add(new HotkeyBinding { ActionId = "ConnectFavourite3", Gesture = "Control+Alt+3", ProfileId = favourite.Id });
@@ -212,7 +238,11 @@ public sealed class ServerSessionCoordinatorTests : IAsyncDisposable
             secrets);
 
         Outbox outbox = new(database.Factory, TimeProvider.System, NullLogger<Outbox>.Instance);
-        ServerAccountState account = new(database.Factory, outbox, NullLogger<ServerAccountState>.Instance);
+        ServerAccountState account = new(
+            database.Factory,
+            outbox,
+            new ServerProfileMaintenance(database.Factory, server.Secrets, new TypedCredentials(new FixedStorageMode(true)), outbox, NullLogger<ServerProfileMaintenance>.Instance),
+            NullLogger<ServerAccountState>.Instance);
 
         ServerSessionCoordinator coordinator = new(
             server.Connection,

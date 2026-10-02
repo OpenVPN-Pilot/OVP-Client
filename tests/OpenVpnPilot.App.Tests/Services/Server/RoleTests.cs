@@ -28,7 +28,7 @@ public sealed class RoleTests : IAsyncLifetime
     [InlineData("user", false)]
     public async Task Permissions_FollowTheRoleLastKnown(string role, bool expected)
     {
-        ServerAccountState account = new(harness.Database.Factory, harness.Outbox, NullLogger<ServerAccountState>.Instance);
+        ServerAccountState account = new(harness.Database.Factory, harness.Outbox, harness.Maintenance, NullLogger<ServerAccountState>.Instance);
         using ServerLibraryPermissions permissions = new(account, harness.Engine, NullLogger<ServerLibraryPermissions>.Instance);
 
         Assert.False(permissions.CanChangeShared);

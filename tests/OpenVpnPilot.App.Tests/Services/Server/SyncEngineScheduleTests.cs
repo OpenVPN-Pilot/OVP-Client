@@ -1,4 +1,5 @@
 using OpenVpnPilot.App.Services.Server;
+using OpenVpnPilot.Core.Server.Contracts;
 using OpenVpnPilot.Core.Tests.Server;
 using OpenVpnPilot.Data.Entities;
 using SyncState = OpenVpnPilot.App.Services.Server.SyncState;
@@ -43,6 +44,29 @@ public sealed class SyncEngineScheduleTests
 
         Assert.Equal(2, harness.Count(HttpMethod.Get, "/api/v1/sync/changes"));
         Assert.Equal(1, mostAtOnce);
+    }
+
+    [Fact]
+    public async Task StartAsync_PushThrottled_KeepsTheChangeAndWaitsAsLongAsTheServerAsks()
+    {
+        ManualTime time = new(Start);
+        await using SyncHarness harness = await SyncHarness.CreateAsync(time);
+        await harness.Outbox.RecordAsync(PendingChangeKind.Settings);
+
+        harness.Server.On(HttpMethod.Put, "/api/v1/me/settings", _ =>
+        {
+            HttpResponseMessage throttled = Answers.Problem((System.Net.HttpStatusCode)429, ServerErrorCodes.TooManyRequests);
+            throttled.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromMinutes(5));
+            return throttled;
+        });
+
+        await harness.Engine.StartAsync(CancellationToken.None);
+        await SyncHarness.EventuallyAsync(() => time.NextDue is not null && harness.Engine.Status.State != SyncState.Synchronising, "the first cycle");
+
+        Assert.Equal(TimeSpan.FromMinutes(5), time.NextDue);
+        Assert.Equal(1, Assert.Single(await harness.Database.MarkersAsync()).Attempts);
+        Assert.Equal(0, harness.Count(HttpMethod.Get, "/api/v1/sync/changes"));
+        Assert.Equal(ServerErrorCodes.TooManyRequests, harness.Engine.Status.LastErrorCode);
     }
 
     [Fact]
