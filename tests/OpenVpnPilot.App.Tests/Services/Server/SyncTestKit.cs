@@ -440,7 +440,11 @@ internal sealed class SyncHarness : IAsyncDisposable
             await network.SignedInAsync();
         }
 
-        return new SyncHarness(database, server, network, time ?? TimeProvider.System);
+        SyncHarness harness = new(database, server, network, time ?? TimeProvider.System);
+
+        // As the settings service holds them once loaded: in the current layout.
+        await harness.SettingsBackend.ReplaceAsync(new PilotSettings { SchemaVersion = PilotSettings.CurrentSchemaVersion });
+        return harness;
     }
 
     public int Count(HttpMethod method, string path) =>
