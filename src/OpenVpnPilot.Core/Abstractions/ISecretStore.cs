@@ -48,20 +48,87 @@ public interface ISecretStore
 public sealed record StoredSecret(string? Username, string Password);
 
 /// <summary>
-/// Builds the reference under which a profile's credentials are stored.
+/// Builds the references under which credentials are stored: a profile's sign ins, and the refresh
+/// token of a server this machine is signed in to.
 /// </summary>
 /// <remarks>
 /// Centralised so the credential provider, the settings screen and the delete path all agree on the
-/// same key. The realm is part of the reference because one profile can be asked for more than one,
-/// for example a private key passphrase and a server login.
+/// same key. The realm is part of a profile's reference because one profile can be asked for more
+/// than one, for example a private key passphrase and a server login.
+///
+/// The two kinds share one store and must never be mistaken for each other. Everything that walks
+/// the store looking for a profile's sign ins (an export, "sign in again", counting them) goes
+/// through <see cref="TryParse"/> or <see cref="BelongsToProfile"/>, and both refuse a server
+/// reference, so a refresh token can never travel in a package or be counted as a profile's sign in.
 /// </remarks>
 public static class SecretReference
 {
+    private const string ProfilePrefix = "profile/";
+    private const string ServerPrefix = "server/";
+    private const string RefreshSuffix = "/refresh";
+
+    /// <summary>
+    /// How long a server key is: lower case hex of 16 bytes.
+    /// </summary>
+    private const int ServerKeyLength = 32;
+
     public static string ForProfile(Guid profileId, string realm)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(realm);
-        return $"profile/{profileId:N}/{realm}";
+        return $"{ProfilePrefix}{profileId:N}/{realm}";
     }
+
+    /// <summary>
+    /// The reference of the refresh token for one server.
+    /// </summary>
+    /// <param name="serverKey">The server's key, lower case hex of 16 bytes.</param>
+    /// <exception cref="ArgumentException">The key is not in that form.</exception>
+    public static string ForServerRefreshToken(string serverKey)
+    {
+        if (!IsServerKey(serverKey))
+        {
+            throw new ArgumentException("A server key is 32 lower case hexadecimal digits.", nameof(serverKey));
+        }
+
+        return ServerPrefix + serverKey + RefreshSuffix;
+    }
+
+    /// <summary>
+    /// Reads a server refresh token reference back into the server key it was built from.
+    /// </summary>
+    /// <returns>False for any other reference, including every profile reference.</returns>
+    public static bool TryParseServerRefreshToken(string reference, out string serverKey)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+
+        serverKey = string.Empty;
+
+        if (!reference.StartsWith(ServerPrefix, StringComparison.Ordinal)
+            || !reference.EndsWith(RefreshSuffix, StringComparison.Ordinal)
+            || reference.Length != ServerPrefix.Length + ServerKeyLength + RefreshSuffix.Length)
+        {
+            return false;
+        }
+
+        string key = reference.Substring(ServerPrefix.Length, ServerKeyLength);
+
+        if (!IsServerKey(key))
+        {
+            return false;
+        }
+
+        serverKey = key;
+        return true;
+    }
+
+    /// <summary>
+    /// True when the reference is a profile's sign in, of any profile and realm.
+    /// </summary>
+    /// <remarks>
+    /// What a person means by "stored sign ins": the refresh token of a server is a credential too,
+    /// but it is not one they typed for a profile, and counting it as one would be wrong.
+    /// </remarks>
+    public static bool IsProfileReference(string reference) => TryParse(reference, out _, out _);
 
     /// <summary>
     /// True when the reference belongs to the given profile, whatever the realm.
@@ -69,7 +136,7 @@ public static class SecretReference
     public static bool BelongsToProfile(string reference, Guid profileId)
     {
         ArgumentNullException.ThrowIfNull(reference);
-        return reference.StartsWith($"profile/{profileId:N}/", StringComparison.Ordinal);
+        return reference.StartsWith($"{ProfilePrefix}{profileId:N}/", StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -102,4 +169,8 @@ public static class SecretReference
         realm = parts[2];
         return true;
     }
+
+    private static bool IsServerKey(string? serverKey) =>
+        serverKey is { Length: ServerKeyLength }
+        && serverKey.All(character => char.IsAsciiDigit(character) || character is >= 'a' and <= 'f');
 }

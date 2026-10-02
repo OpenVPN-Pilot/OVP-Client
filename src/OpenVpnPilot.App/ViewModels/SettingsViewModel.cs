@@ -292,7 +292,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
             Hotkeys.Add(editor);
         }
 
-        StoredSecretCount = (await secrets.ListAsync(cancellationToken)).Count;
+        // Profile sign ins only: a server's refresh token shares the store but is not one of them.
+        StoredSecretCount = (await secrets.ListAsync(cancellationToken)).Count(SecretReference.IsProfileReference);
 
         // The registry is the truth for autostart, not the settings file, because the entry can be
         // removed from outside the application.
@@ -471,7 +472,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private async Task ForgetStoredCredentialsAsync()
     {
-        int removed = await secrets.ClearAsync();
+        // Everything goes, a server's refresh token included, but what is reported is the number of
+        // profile sign ins, the same number the screen showed before the button was pressed.
+        int removed = (await secrets.ListAsync()).Count(SecretReference.IsProfileReference);
+        await secrets.ClearAsync();
         StoredSecretCount = 0;
         StatusMessage = localizer.Translate("settings.credentialsCleared", removed);
     }
