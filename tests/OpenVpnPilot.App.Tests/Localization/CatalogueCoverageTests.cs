@@ -27,6 +27,13 @@ public sealed class CatalogueCoverageTests
     private static readonly string[] FileExtensions =
         [".json", ".csv", ".log", ".db", ".ovpn", ".ovppkg", ".zip", ".txt"];
 
+    /// <summary>
+    /// Files whose dotted literals are values of the server's protocol, not keys. The server's error
+    /// codes are shaped like keys, and <c>profile.duplicate</c> even names a real group, but they are
+    /// sent by the server and never looked up.
+    /// </summary>
+    private static readonly string[] ProtocolFiles = ["ServerErrorCodes.cs"];
+
     [Fact]
     public void EveryKeyTheSourcesUse_IsTranslated()
     {
@@ -71,7 +78,8 @@ public sealed class CatalogueCoverageTests
             .Where(path => path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
                 || path.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase))
             .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
+                && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .Where(path => !ProtocolFiles.Contains(Path.GetFileName(path), StringComparer.Ordinal));
 
     /// <summary>
     /// A quoted literal that names a group and a key, which is the only shape a key takes in C#.
