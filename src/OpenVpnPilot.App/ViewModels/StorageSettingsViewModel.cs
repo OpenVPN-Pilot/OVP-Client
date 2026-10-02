@@ -39,7 +39,12 @@ public sealed partial class StorageSettingsViewModel : ViewModelBase, IDisposabl
     private readonly ISyncEngine? engine;
     private readonly IServerSignIn? server;
 
+    // Cancelled when the page closes, which stops a synchronisation it asked for; the schedule
+    // carries on from wherever that one stopped.
+    private readonly CancellationTokenSource lifetime = new();
+
     private StorageMode? pendingSwitch;
+    private bool disposed;
 
     public StorageSettingsViewModel(
         ILocalizer localizer,
@@ -138,10 +143,21 @@ public sealed partial class StorageSettingsViewModel : ViewModelBase, IDisposabl
 
     public void Dispose()
     {
+        // Both the settings page that holds it and the container that created it dispose it.
+        if (disposed)
+        {
+            return;
+        }
+
+        disposed = true;
+
         if (status is not null)
         {
             status.Changed -= OnStatusChanged;
         }
+
+        lifetime.Cancel();
+        lifetime.Dispose();
     }
 
     /// <summary>
@@ -179,12 +195,19 @@ public sealed partial class StorageSettingsViewModel : ViewModelBase, IDisposabl
         Message = localizer["storage.syncing"];
         ServerStatusLog.SyncRequested(logger, "storage settings");
 
+        CancellationToken cancellationToken = lifetime.Token;
+
         try
         {
-            SyncCycleResult result = await Task.Run(() => engine!.SynchronizeAsync(CancellationToken.None));
+            SyncCycleResult result = await Task.Run(() => engine!.SynchronizeAsync(cancellationToken), cancellationToken);
             Message = result.Completed
                 ? localizer["storage.syncDone"]
                 : localizer.Translate("storage.syncIncomplete", ServerStatusText.State(localizer, result.State) ?? result.State.ToString());
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The page was closed; there is nobody left to tell.
+            return;
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
@@ -210,6 +233,7 @@ public sealed partial class StorageSettingsViewModel : ViewModelBase, IDisposabl
 
         try
         {
+            // Not cancelled with the page: a sign out cut short leaves the session open on the server.
             await Task.Run(() => server!.SignOutAsync(CancellationToken.None));
             Message = localizer["storage.signedOut"];
         }

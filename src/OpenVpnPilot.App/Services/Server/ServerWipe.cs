@@ -140,25 +140,26 @@ public sealed class ServerWipe : IServerWipe
 
         // Stopped first, because it holds the database and would otherwise keep writing into what is
         // about to be removed. The signal already keeps it from sending anything.
-        await StepAsync("synchronisation", () => engine.StopAsync(cancellationToken));
+        await StepAsync("synchronisation", token => engine.StopAsync(token), cancellationToken);
 
         int tunnelsUp = tunnels.Count;
-        await StepAsync("tunnels", () => tunnels.DisconnectAllAsync(cancellationToken));
-        await StepAsync("runtime configurations", () => Task.FromResult(materializer.RemoveStaleFiles()));
+        await StepAsync("tunnels", token => tunnels.DisconnectAllAsync(token), cancellationToken);
+        await StepAsync("runtime configurations", _ => Task.FromResult(materializer.RemoveStaleFiles()), cancellationToken);
 
         // Read before anything is removed: once the folder is gone, nothing says which keystore
         // entries were the server's.
-        IReadOnlyList<Guid> profileIds = await StepAsync("profile list", () => ReadProfileIdsAsync(cancellationToken)) ?? [];
+        IReadOnlyList<Guid> profileIds = await StepAsync("profile list", ReadProfileIdsAsync, cancellationToken) ?? [];
 
         int removedSecrets = await StepAsync(
             "keystore entries",
-            () => maintenance.DeleteSecretsAsync([.. profileIds], cancellationToken));
+            token => maintenance.DeleteSecretsAsync([.. profileIds], token),
+            cancellationToken);
 
-        bool refreshTokenRemoved = await StepAsync("refresh token", () => ForgetSessionAsync(serverKey, cancellationToken));
+        bool refreshTokenRemoved = await StepAsync("refresh token", token => ForgetSessionAsync(serverKey, token), cancellationToken);
 
-        bool folderRemoved = await StepAsync("cache folder", () => ServerCacheFolder.DeleteAsync(folder, logger, cancellationToken));
+        bool folderRemoved = await StepAsync("cache folder", token => ServerCacheFolder.DeleteAsync(folder, logger, token), cancellationToken);
 
-        await StepAsync("settings", () => ResetPortableSettingsAsync(cancellationToken));
+        await StepAsync("settings", token => ResetPortableSettingsAsync(token), cancellationToken);
 
         ServerWipeLog.Completed(
             logger,
@@ -213,11 +214,11 @@ public sealed class ServerWipe : IServerWipe
         }
     }
 
-    private async Task StepAsync(string step, Func<Task> work)
+    private async Task StepAsync(string step, Func<CancellationToken, Task> work, CancellationToken cancellationToken)
     {
         try
         {
-            await work();
+            await work(cancellationToken);
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
@@ -227,11 +228,11 @@ public sealed class ServerWipe : IServerWipe
         }
     }
 
-    private async Task<T?> StepAsync<T>(string step, Func<Task<T>> work)
+    private async Task<T?> StepAsync<T>(string step, Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken)
     {
         try
         {
-            return await work();
+            return await work(cancellationToken);
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {

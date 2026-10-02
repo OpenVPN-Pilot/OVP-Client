@@ -148,6 +148,10 @@ public sealed class ServerStatusSource : IServerStatusSource, IDisposable
     private readonly ILogger<ServerStatusSource> logger;
 
     private readonly Lock gate = new();
+
+    // Cancelled on disposal, so a probe under way stops with the application.
+    private readonly CancellationTokenSource lifetime = new();
+    private readonly CancellationToken stopping;
     private ServerReachability reachability = ServerReachability.Unknown;
     private bool sessionKnown;
     private int failuresInARow;
@@ -176,6 +180,8 @@ public sealed class ServerStatusSource : IServerStatusSource, IDisposable
         this.time = time;
         this.logger = logger;
 
+        stopping = lifetime.Token;
+
         engine.StatusChanged += OnChanged;
         session.Changed += OnSessionChanged;
     }
@@ -203,7 +209,7 @@ public sealed class ServerStatusSource : IServerStatusSource, IDisposable
             }
 
             sessionKnown = true;
-            timer = time.CreateTimer(_ => _ = ProbeAndRescheduleAsync(), null, TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+            timer = time.CreateTimer(_ => _ = ProbeAndRescheduleAsync(stopping), null, TimeSpan.Zero, Timeout.InfiniteTimeSpan);
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
@@ -316,11 +322,14 @@ public sealed class ServerStatusSource : IServerStatusSource, IDisposable
             timer = null;
         }
 
+        lifetime.Cancel();
+        lifetime.Dispose();
+
         engine.StatusChanged -= OnChanged;
         session.Changed -= OnSessionChanged;
     }
 
-    private async Task ProbeAndRescheduleAsync()
+    private async Task ProbeAndRescheduleAsync(CancellationToken cancellationToken)
     {
         if (wipe.IsRequested)
         {
@@ -329,7 +338,12 @@ public sealed class ServerStatusSource : IServerStatusSource, IDisposable
 
         try
         {
-            await ProbeAsync();
+            await ProbeAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Disposed while asking; there is nobody left to show the answer to, nor a next time.
+            return;
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {

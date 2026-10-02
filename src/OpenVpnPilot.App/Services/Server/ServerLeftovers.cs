@@ -113,14 +113,15 @@ public sealed class ServerLeftovers : IServerLeftovers
 
         // Read before anything is removed: once the folder is gone, nothing says which keystore
         // entries were the server's.
-        IReadOnlyList<Guid> profileIds = await StepAsync("profile list", () => ReadProfileIdsAsync(folder, cancellationToken)) ?? [];
+        IReadOnlyList<Guid> profileIds = await StepAsync("profile list", token => ReadProfileIdsAsync(folder, token), cancellationToken) ?? [];
 
         int removedSecrets = await StepAsync(
             "keystore entries",
-            () => maintenance.DeleteSecretsAsync([.. profileIds], cancellationToken));
+            token => maintenance.DeleteSecretsAsync([.. profileIds], token),
+            cancellationToken);
 
-        bool refreshTokenRemoved = await StepAsync("refresh token", () => DeleteRefreshTokenAsync(serverKey, cancellationToken));
-        bool folderRemoved = await StepAsync("cache folder", () => ServerCacheFolder.DeleteAsync(folder, logger, cancellationToken));
+        bool refreshTokenRemoved = await StepAsync("refresh token", token => DeleteRefreshTokenAsync(serverKey, token), cancellationToken);
+        bool folderRemoved = await StepAsync("cache folder", token => ServerCacheFolder.DeleteAsync(folder, logger, token), cancellationToken);
 
         ServerLeftoversReport report = new(profileIds.Count, removedSecrets, refreshTokenRemoved, folderRemoved);
 
@@ -133,7 +134,7 @@ public sealed class ServerLeftovers : IServerLeftovers
             report.RefreshTokenRemoved,
             report.FolderRemoved);
 
-        await StepAsync("notice", () => notice.ShowAsync(directive, cancellationToken));
+        await StepAsync("notice", token => notice.ShowAsync(directive, token), cancellationToken);
         return report;
     }
 
@@ -173,11 +174,11 @@ public sealed class ServerLeftovers : IServerLeftovers
         return await secrets.TryReadAsync(reference, cancellationToken) is null;
     }
 
-    private async Task StepAsync(string step, Func<Task> work)
+    private async Task StepAsync(string step, Func<CancellationToken, Task> work, CancellationToken cancellationToken)
     {
         try
         {
-            await work();
+            await work(cancellationToken);
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
@@ -187,11 +188,11 @@ public sealed class ServerLeftovers : IServerLeftovers
         }
     }
 
-    private async Task<T?> StepAsync<T>(string step, Func<Task<T>> work)
+    private async Task<T?> StepAsync<T>(string step, Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken)
     {
         try
         {
-            return await work();
+            return await work(cancellationToken);
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {

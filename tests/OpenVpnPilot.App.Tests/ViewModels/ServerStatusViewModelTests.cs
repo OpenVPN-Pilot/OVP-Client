@@ -160,6 +160,29 @@ public sealed class ServerStatusViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Storage_PageClosedWhileItsSyncRuns_CancelsThatSync()
+    {
+        WaitingEngine engine = new();
+        StorageSettingsViewModel page = new(
+            new StubLocalizer(),
+            ActiveStorage.Resolve(new TemporaryPaths(root), new StorageSelection(StorageMode.Server, "https://pilot.example.com")),
+            new CountedTunnels(),
+            new RecordingSwitcher(),
+            new ImmediateThread(),
+            NullLogger<StorageSettingsViewModel>.Instance,
+            new FixedStatus(Snapshot(SyncState.Synchronised, signedIn: true)),
+            engine);
+
+        Task running = page.SyncNowCommand.ExecuteAsync(null);
+        await engine.Started.Task;
+
+        page.Dispose();
+        await running;
+
+        Assert.True(engine.WasCancelled);
+    }
+
+    [Fact]
     public void Storage_SwitchWhileATunnelIsUp_IsRefusedBeforeAnythingIsAsked()
     {
         CountedTunnels tunnels = new() { Count = 1 };
@@ -230,6 +253,49 @@ public sealed class ServerStatusViewModelTests : IDisposable
         switcher,
         new ImmediateThread(),
         NullLogger<StorageSettingsViewModel>.Instance);
+
+    /// <summary>
+    /// A synchronisation that runs until it is cancelled.
+    /// </summary>
+    private sealed class WaitingEngine : ISyncEngine
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public bool WasCancelled { get; private set; }
+
+        public SyncStatus Status => SyncStatus.Initial;
+
+        public event EventHandler? StatusChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public void RequestSync()
+        {
+        }
+
+        public async Task<SyncCycleResult> SynchronizeAsync(CancellationToken cancellationToken)
+        {
+            Started.SetResult();
+
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                WasCancelled = true;
+                throw;
+            }
+
+            return new SyncCycleResult(true, SyncState.Synchronised, 0, 0, false);
+        }
+    }
 
     private sealed class FixedStatus(ServerStatusSnapshot snapshot) : IServerStatusSource
     {

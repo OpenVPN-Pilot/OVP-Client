@@ -227,6 +227,8 @@ public sealed partial class FirstSyncViewModel : ViewModelBase, IDisposable
     private async Task UseThisComputerAsync()
     {
         Step = FirstSyncStep.Leaving;
+
+        // Not cancelled with the window: a switch is written whole or not at all.
         StorageSwitchResult result = await switcher.SwitchToLocalAsync(CancellationToken.None);
 
         if (result.Outcome is StorageSwitchOutcome.Restarting)

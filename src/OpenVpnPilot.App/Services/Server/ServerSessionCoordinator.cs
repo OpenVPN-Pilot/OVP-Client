@@ -72,7 +72,12 @@ public sealed class ServerSessionCoordinator : IServerSessionCoordinator, IServe
     // finds the synchronisation half started by somebody else.
     private readonly SemaphoreSlim gate = new(1, 1);
 
+    // Cancelled on disposal, for the work this starts on its own rather than for a caller.
+    private readonly CancellationTokenSource lifetime = new();
+    private readonly CancellationToken stopping;
+
     private bool listening;
+    private bool disposed;
     private bool running;
 
     public ServerSessionCoordinator(
@@ -93,6 +98,7 @@ public sealed class ServerSessionCoordinator : IServerSessionCoordinator, IServe
         this.account = account;
         this.wipe = wipe;
         this.logger = logger;
+        stopping = lifetime.Token;
     }
 
     public CurrentUserResponse? User => connection.Session.User;
@@ -211,12 +217,22 @@ public sealed class ServerSessionCoordinator : IServerSessionCoordinator, IServe
 
     public void Dispose()
     {
+        // Registered under more than one service type, so the container disposes it more than once.
+        if (disposed)
+        {
+            return;
+        }
+
+        disposed = true;
+
         if (listening)
         {
             connection.Session.Changed -= OnSessionChanged;
             connection.Wipe.WipeRequested -= OnWipeRequested;
         }
 
+        lifetime.Cancel();
+        lifetime.Dispose();
         gate.Dispose();
     }
 
@@ -322,15 +338,19 @@ public sealed class ServerSessionCoordinator : IServerSessionCoordinator, IServe
         // role is right while offline too. Sign in and sign out are handled where they are made.
         if (change is { Change: ServerSessionChange.UserChanged, User: { } user })
         {
-            _ = RememberObservedAsync(user);
+            _ = RememberObservedAsync(user, stopping);
         }
     }
 
-    private async Task RememberObservedAsync(CurrentUserResponse user)
+    private async Task RememberObservedAsync(CurrentUserResponse user, CancellationToken cancellationToken)
     {
         try
         {
-            await account.RememberUserAsync(user, CancellationToken.None);
+            await account.RememberUserAsync(user, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The application is closing. The record is remembered again at the next refresh.
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {

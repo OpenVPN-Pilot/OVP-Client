@@ -190,7 +190,8 @@ public sealed class ServerProfileMaintenance : IServerProfileMaintenance
         {
             // The database half is undone when the transaction is disposed uncommitted, which also
             // holds when the commit itself was what failed.
-            await RemoveCopiesAsync(serverId, copied);
+            // Taken back even when the failure was the caller cancelling, which is when it matters.
+            await RemoveCopiesAsync(serverId, copied, CancellationToken.None);
             OutboxLog.RekeyFailed(logger, temporaryId, serverId, exception);
             throw;
         }
@@ -407,13 +408,16 @@ public sealed class ServerProfileMaintenance : IServerProfileMaintenance
         return result;
     }
 
-    private async Task RemoveCopiesAsync(Guid serverId, List<(string Reference, string Realm)> copied)
+    private async Task RemoveCopiesAsync(
+        Guid serverId,
+        List<(string Reference, string Realm)> copied,
+        CancellationToken cancellationToken)
     {
         foreach ((string reference, string realm) in copied)
         {
             try
             {
-                await secrets.DeleteAsync(reference, CancellationToken.None);
+                await secrets.DeleteAsync(reference, cancellationToken);
             }
             catch (Exception exception) when (exception is not OutOfMemoryException)
             {

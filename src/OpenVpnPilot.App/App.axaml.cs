@@ -25,7 +25,7 @@ using OpenVpnPilot.OpenVpn.Runtime;
 
 namespace OpenVpnPilot.App;
 
-public partial class App : Application
+public partial class App : Application, IDisposable
 {
     /// <summary>
     /// Set before the framework starts, so the running copy can be brought forward when a second
@@ -55,6 +55,9 @@ public partial class App : Application
     private static readonly TimeSpan StepTimeout = TimeSpan.FromSeconds(2);
 
     private IHost? host;
+
+    // Cancelled first when the application ends, so start up work still under way stops with it.
+    private readonly CancellationTokenSource lifetime = new();
     private WindowCoordinator? windows;
     private ApplicationMenuController? applicationMenu;
 
@@ -289,7 +292,9 @@ public partial class App : Application
             window.Show();
         }
 
-        Dispatcher.UIThread.Post(async () => await StartBackgroundWorkAsync());
+        // Taken now: the posted work may run after the teardown has disposed the source.
+        CancellationToken stopping = lifetime.Token;
+        Dispatcher.UIThread.Post(async () => await StartBackgroundWorkAsync(stopping));
 
         if (Startup.HasActions)
         {
@@ -422,12 +427,12 @@ public partial class App : Application
     /// <summary>
     /// Work that needs the interface to exist but must not delay it appearing.
     /// </summary>
-    private async Task StartBackgroundWorkAsync()
+    private async Task StartBackgroundWorkAsync(CancellationToken cancellationToken)
     {
         IServiceProvider services = host!.Services;
 
         // A session left open by a forced exit would otherwise be shown as still running.
-        int abandoned = await services.GetRequiredService<ISessionStore>().CloseAbandonedAsync();
+        int abandoned = await services.GetRequiredService<ISessionStore>().CloseAbandonedAsync(cancellationToken);
 
         if (abandoned > 0)
         {
@@ -435,7 +440,7 @@ public partial class App : Application
             AppLog.AbandonedSessionsClosed(logger, abandoned);
         }
 
-        await StartServerSessionAsync(services);
+        await StartServerSessionAsync(services, cancellationToken);
 
         // A shortcut that opens a window is not something a headless copy should own, and the
         // copy that a person is using may be the one that wants them.
@@ -448,7 +453,7 @@ public partial class App : Application
         hotkeys.ActionRequested += (_, action) => Dispatcher.UIThread.Post(async () =>
             await services.GetRequiredService<MainWindowViewModel>().ExecuteHotkeyActionAsync(action));
 
-        await hotkeys.AttachAsync();
+        await hotkeys.AttachAsync(cancellationToken);
     }
 
     /// <summary>
@@ -459,7 +464,7 @@ public partial class App : Application
     /// network. A copy that just ran the first synchronisation has started it already, and this
     /// does nothing more.
     /// </remarks>
-    private static async Task StartServerSessionAsync(IServiceProvider services)
+    private static async Task StartServerSessionAsync(IServiceProvider services, CancellationToken cancellationToken)
     {
         if (services.GetService<IServerSessionCoordinator>() is not { } server)
         {
@@ -468,7 +473,12 @@ public partial class App : Application
 
         try
         {
-            await Task.Run(() => server.StartAsync());
+            await Task.Run(() => server.StartAsync(cancellationToken), cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The application is ending before the session was picked up; the next start does it.
+            return;
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
@@ -521,6 +531,8 @@ public partial class App : Application
             return;
         }
 
+        lifetime.Cancel();
+
         IServiceProvider services = host.Services;
         ILogger<App> logger = services.GetRequiredService<ILogger<App>>();
         long started = Stopwatch.GetTimestamp();
@@ -565,6 +577,17 @@ public partial class App : Application
         host = null;
 
         RunStep(logger, "host", stopping.Dispose);
+        Dispose();
+    }
+
+    /// <summary>
+    /// Releases what the application itself owns, once the teardown has finished with it.
+    /// </summary>
+    public void Dispose()
+    {
+        lifetime.Cancel();
+        lifetime.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     /// <summary>

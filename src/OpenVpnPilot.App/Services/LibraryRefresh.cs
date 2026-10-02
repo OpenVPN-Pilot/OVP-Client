@@ -19,7 +19,15 @@ public sealed class LibraryRefresh : IDisposable
     private readonly HotkeyCoordinator hotkeys;
     private readonly IUserInterfaceThread userInterface;
     private readonly ILogger<LibraryRefresh> logger;
+
+    // Cancelled when the windows are torn down, so a reload under way does not outlive them.
+    private readonly CancellationTokenSource lifetime = new();
+
+    // Taken once, because a change can still be announced after the source was disposed; it is
+    // cancelled by then, which is all a reload needs to know.
+    private readonly CancellationToken stopping;
     private bool attached;
+    private bool disposed;
 
     public LibraryRefresh(
         ILibraryChangeNotifier notifier,
@@ -39,6 +47,7 @@ public sealed class LibraryRefresh : IDisposable
         this.hotkeys = hotkeys;
         this.userInterface = userInterface;
         this.logger = logger;
+        stopping = lifetime.Token;
     }
 
     public void Attach()
@@ -54,18 +63,34 @@ public sealed class LibraryRefresh : IDisposable
 
     public void Dispose()
     {
+        if (disposed)
+        {
+            return;
+        }
+
+        disposed = true;
+
         if (attached)
         {
             attached = false;
             notifier.Changed -= OnChanged;
         }
+
+        lifetime.Cancel();
+        lifetime.Dispose();
     }
 
     private async void OnChanged(object? sender, LibraryChangedEventArgs arguments)
     {
+        CancellationToken cancellationToken = stopping;
+
         try
         {
-            await userInterface.InvokeAsync(() => ReloadAsync(arguments.Changes));
+            await userInterface.InvokeAsync(() => ReloadAsync(arguments.Changes, cancellationToken), cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The windows are being torn down, so there is nothing left to show the change in.
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
@@ -75,16 +100,16 @@ public sealed class LibraryRefresh : IDisposable
         }
     }
 
-    private async Task ReloadAsync(LibraryChanges changes)
+    private async Task ReloadAsync(LibraryChanges changes, CancellationToken cancellationToken)
     {
         if (changes.HasFlag(LibraryChanges.Profiles))
         {
-            await viewModel.LoadAsync();
+            await viewModel.LoadAsync(cancellationToken);
         }
 
         if (changes.HasFlag(LibraryChanges.Hotkeys) && hotkeys.IsAttached)
         {
-            await hotkeys.ReloadAsync();
+            await hotkeys.ReloadAsync(cancellationToken);
         }
     }
 }

@@ -387,7 +387,8 @@ public sealed partial class FirstRunViewModel : ViewModelBase, IDisposable
             ServerAccountLog.FirstRunSwitchFailed(logger, address, result.Outcome);
         }
 
-        // Nothing changed, so the sign in that was made for the server is not left behind either.
+        // Nothing changed, so the sign in that was made for the server is not left behind either,
+        // whether or not the window is still open.
         await signedIn.SignIn.SignOutAsync(CancellationToken.None);
 
         Step = FirstRunStep.SignIn;
@@ -420,6 +421,7 @@ public sealed partial class FirstRunViewModel : ViewModelBase, IDisposable
         {
             try
             {
+                // Not tied to the window: what the server withdrew goes even when the window closes.
                 await leftovers.RemoveAsync(directive, key, CancellationToken.None);
             }
             catch (Exception exception) when (exception is not OutOfMemoryException)

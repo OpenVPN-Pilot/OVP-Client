@@ -87,7 +87,8 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
 - **A Storage page in the settings** ("Speicherort" in German) says where the profiles live and, for
   a server, its address, who is signed in with which role and provider in words rather than as the
   server writes them, the server's version, the last synchronisation and the changes waiting, with
-  "Sync now", "Sign out" or "Sign in" and the server's log. Switching to a server, to another server or back to this computer is offered there:
+  "Sync now", "Sign out" or "Sign in" and the server's log. Closing the page stops a
+  synchronisation it started, and the schedule carries on from there. Switching to a server, to another server or back to this computer is offered there:
   refused while a tunnel is up, confirmed first, and for a server it runs the same address and sign
   in steps as the first start before the application restarts into it. Another address is another
   server, with a copy of its own.
