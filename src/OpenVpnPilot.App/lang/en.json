@@ -66,6 +66,8 @@
       "unsupportedTooltip": "Uses script directives the interactive service refuses for unauthorised callers",
       "unsupportedTooltip@macos": "Uses script directives, which the helper refuses on macOS because OpenVPN runs as root there",
       "unsupportedNotice": "This profile uses script directives. The interactive service refuses those for callers that are not authorised.",
+      "uploadRefusedTooltip": "Not on the server: the server refused this profile",
+      "uploadRefusedNotice": "The server refused this profile ({0}), so it exists on this computer only. Change it so the server will take it, and it is offered to the server again when it is saved.",
       "unsupportedNotice@macos": "This profile uses script directives. On macOS OpenVPN runs with root rights, so the helper refuses every directive that would run a program, and this profile cannot be connected.",
       "edit": "Edit",
       "delete": "Delete",

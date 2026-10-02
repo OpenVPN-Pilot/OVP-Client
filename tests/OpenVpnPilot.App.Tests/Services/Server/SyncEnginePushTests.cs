@@ -202,8 +202,75 @@ public sealed class SyncEnginePushTests : IAsyncLifetime
         Assert.Equal(1, result.Dropped);
         Assert.Equal(1, harness.Engine.Status.DroppedChanges);
         Assert.Equal(ServerErrorCodes.ProfileNotSelfContained, harness.Engine.Status.LastErrorCode);
-        Assert.Equal(ProfileSource.Manual, (await harness.ProfileAsync(local.Id))!.Source);
+
+        Profile kept = (await harness.ProfileAsync(local.Id))!;
+        Assert.Equal(ProfileSource.Manual, kept.Source);
+        Assert.Equal(ServerErrorCodes.ProfileNotSelfContained, kept.UploadRefusedCode);
         Assert.Empty(await harness.Database.MarkersAsync());
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_OneItemOfABatchRefused_MarksThatProfileOnly()
+    {
+        Profile accepted = await harness.Database.AddProfileAsync("example-site-a", Configuration);
+        Profile refused = await harness.Database.AddProfileAsync("example-site-b", WithCredentialFile);
+        await harness.Outbox.RecordAsync(PendingChangeKind.ProfileCreate, accepted.Id);
+        await harness.Outbox.RecordAsync(PendingChangeKind.ProfileCreate, refused.Id);
+
+        harness.Server.On(HttpMethod.Post, "/api/v1/profiles/batch", request =>
+        {
+            ProfileBatchRequest batch = request.Json.Deserialize<ProfileBatchRequest>(ServerJson.Options)!;
+            ProfileResponse created = harness.Server.Hold(Guid.NewGuid(), batch.Items[0].Name, batch.Items[0].Configuration);
+
+            return Answers.Json(new ProfileBatchResponse(1, 0, 1,
+            [
+                new ProfileBatchItemResponse(0, ProfileBatchOutcomes.Created, created, null, null),
+                new ProfileBatchItemResponse(1, ProfileBatchOutcomes.Rejected, null, ServerErrorCodes.ProfileNotSelfContained, "Detail"),
+            ]));
+        });
+
+        SyncCycleResult result = await harness.Engine.SynchronizeAsync(CancellationToken.None);
+
+        Assert.Equal(1, result.Dropped);
+        Assert.Null(await harness.ProfileAsync(accepted.Id));
+        Assert.Equal(ServerErrorCodes.ProfileNotSelfContained, (await harness.ProfileAsync(refused.Id))!.UploadRefusedCode);
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_CreateForbidden_MarksTheProfileAndDropsAdministratorChanges()
+    {
+        Profile local = await harness.Database.AddProfileAsync("example-site", Configuration);
+        await harness.Outbox.RecordAsync(PendingChangeKind.ProfileCreate, local.Id);
+        await harness.Outbox.RecordAsync(PendingChangeKind.Favourites);
+
+        harness.Server.On(HttpMethod.Post, "/api/v1/profiles", _ => Answers.Problem(HttpStatusCode.Forbidden, ServerErrorCodes.Forbidden));
+        harness.Server.On(HttpMethod.Get, "/api/v1/auth/me", _ => Answers.Json(Answers.User(ServerRoles.User)));
+
+        SyncCycleResult result = await harness.Engine.SynchronizeAsync(CancellationToken.None);
+
+        Assert.True(result.Completed);
+        Assert.Equal(ProfileUploadKind.Rejected, result.Uploads[local.Id].Kind);
+        Assert.Equal(ServerErrorCodes.Forbidden, (await harness.ProfileAsync(local.Id))!.UploadRefusedCode);
+        Assert.Equal(1, harness.Count(HttpMethod.Put, "/api/v1/me/favourites"));
+        Assert.Empty(await harness.Database.MarkersAsync());
+    }
+
+    [Fact]
+    public async Task EditingARefusedProfile_ClearsTheMarkAndOffersItToTheServerAgain()
+    {
+        Profile local = await harness.Database.AddProfileAsync("example-site", Configuration);
+        await harness.ChangeAsync(async context =>
+            (await context.Profiles.SingleAsync(profile => profile.Id == local.Id)).UploadRefusedCode = ServerErrorCodes.ProfileNotSelfContained);
+
+        await Store().RenameProfileAsync(local.Id, "example-site-fixed");
+
+        Assert.Null((await harness.ProfileAsync(local.Id))!.UploadRefusedCode);
+        PendingChange marker = Assert.Single(await harness.Database.MarkersAsync());
+        Assert.Equal((PendingChangeKind.ProfileCreate, (Guid?)local.Id), (marker.Kind, marker.EntityId));
+
+        await harness.Engine.SynchronizeAsync(CancellationToken.None);
+
+        Assert.Equal("example-site-fixed", Assert.Single(harness.Server.Names.Values));
     }
 
     [Fact]

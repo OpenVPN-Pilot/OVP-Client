@@ -30,6 +30,13 @@
                      Foreground="{DynamicResource StatePending}" />
         </Border>
 
+        <Border CornerRadius="7" Padding="12,10"
+                Background="{DynamicResource StateFailedSoft}"
+                IsVisible="{Binding IsUploadRefused}">
+          <TextBlock Text="{Binding UploadRefusedNotice}" TextWrapping="Wrap" FontSize="12"
+                     Foreground="{DynamicResource StateFailed}" />
+        </Border>
+
         <StackPanel Spacing="14" IsVisible="{Binding CanChangeShared}">
         <StackPanel Spacing="5">
           <TextBlock Text="{loc:Translate editor.name}" Classes="muted" />

@@ -327,6 +327,10 @@
                                Foreground="{DynamicResource StatePending}"
                                ToolTip.Tip="{loc:Translate profile.unsupportedTooltip}"
                                IsVisible="{Binding HasUnsupportedOptions}" />
+                    <TextBlock Text="!" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"
+                               Foreground="{DynamicResource StateFailed}"
+                               ToolTip.Tip="{loc:Translate profile.uploadRefusedTooltip}"
+                               IsVisible="{Binding IsUploadRefused}" />
                     <Border Classes="pill" IsVisible="{Binding !IsIdle}"
                             Background="{Binding Status.State, Converter={x:Static conv:AppConverters.StatePillBackground}}">
                       <TextBlock Text="{Binding StatusText}"
@@ -602,6 +606,14 @@
               <TextBlock TextWrapping="Wrap" FontSize="12"
                          Foreground="{DynamicResource StateFailed}"
                          Text="{loc:Translate profile.compressionRefused}" />
+            </Border>
+
+            <Border CornerRadius="7" Padding="12,10"
+                    Background="{DynamicResource StateFailedSoft}"
+                    IsVisible="{Binding SelectedProfile.IsUploadRefused}">
+              <TextBlock TextWrapping="Wrap" FontSize="12"
+                         Foreground="{DynamicResource StateFailed}"
+                         Text="{Binding SelectedProfile.UploadRefusedNotice}" />
             </Border>
 
             <Border CornerRadius="7" Padding="12,10"

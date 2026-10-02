@@ -164,6 +164,7 @@ public sealed class ProfileStore : IProfileStore
                 ConnectCount = profile.ConnectCount,
                 Colour = profile.Colour,
                 Notes = profile.Notes,
+                UploadRefusedCode = profile.UploadRefusedCode,
             })
             .ToListAsync(cancellationToken);
     }
@@ -343,7 +344,7 @@ public sealed class ProfileStore : IProfileStore
 
         profile.Name = name.Trim();
         profile.UpdatedAt = timeProvider.GetUtcNow();
-        await StageUpdateAsync(context, profileId, cancellationToken);
+        await StageUpdateAsync(context, profile, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -364,7 +365,7 @@ public sealed class ProfileStore : IProfileStore
 
         profile.Notes = normalised;
         profile.UpdatedAt = timeProvider.GetUtcNow();
-        await StageUpdateAsync(context, profileId, cancellationToken);
+        await StageUpdateAsync(context, profile, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -404,7 +405,7 @@ public sealed class ProfileStore : IProfileStore
         ProfileConfigurationFacts.Apply(profile, configuration);
         profile.UpdatedAt = timeProvider.GetUtcNow();
 
-        await StageUpdateAsync(context, profileId, cancellationToken, configurationChanged: edited);
+        await StageUpdateAsync(context, profile, cancellationToken, configurationChanged: edited);
         await context.SaveChangesAsync(cancellationToken);
 
         return new ConfigurationUpdate(true, null);
@@ -425,7 +426,7 @@ public sealed class ProfileStore : IProfileStore
 
         profile.ProtectRoutes = protectRoutes;
         profile.UpdatedAt = timeProvider.GetUtcNow();
-        await StageUpdateAsync(context, profileId, cancellationToken);
+        await StageUpdateAsync(context, profile, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -461,7 +462,7 @@ public sealed class ProfileStore : IProfileStore
         if (profile is not null)
         {
             profile.UpdatedAt = timeProvider.GetUtcNow();
-            await StageUpdateAsync(context, profileId, cancellationToken);
+            await StageUpdateAsync(context, profile, cancellationToken);
         }
 
         context.ProfileTags.RemoveRange(existing);
@@ -515,15 +516,25 @@ public sealed class ProfileStore : IProfileStore
 
     private Task StageUpdateAsync(
         PilotDbContext context,
-        Guid profileId,
+        Profile profile,
         CancellationToken cancellationToken,
-        bool configurationChanged = false) =>
-        changeRecorder.StageAsync(
+        bool configurationChanged = false)
+    {
+        if (profile.UploadRefusedCode is not null)
+        {
+            // Changed after the server refused it, perhaps so that it will take it now. The server
+            // does not have it, so it is offered again as a new profile rather than as an update.
+            profile.UploadRefusedCode = null;
+            return changeRecorder.StageAsync(context, PendingChangeKind.ProfileCreate, profile.Id, cancellationToken: cancellationToken);
+        }
+
+        return changeRecorder.StageAsync(
             context,
             PendingChangeKind.ProfileUpdate,
-            profileId,
+            profile.Id,
             configurationChanged: configurationChanged,
             cancellationToken: cancellationToken);
+    }
 
     private sealed record TagLink(Guid ProfileId, string Name);
 }

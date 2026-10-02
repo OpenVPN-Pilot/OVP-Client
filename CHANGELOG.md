@@ -37,8 +37,10 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   and tries again after 5, 15, 30 and then every 60 seconds. Changes are sent as they are: a profile
   someone else changed meanwhile is overwritten, except for its configuration, which is sent only
   when it was edited here, so a rename does not undo an edit made on the server. A change the
-  server refuses for good is dropped and counted; one it cannot take now waits. Connection history,
-  the last connection and the number of connections never leave the machine.
+  server refuses for good is dropped and counted; one it cannot take now waits. A profile created
+  here that the server refuses is kept, marked in the list, the details and the editor as existing
+  on this computer only with the server's code, and offered again once it is changed. Connection
+  history, the last connection and the number of connections never leave the machine.
 - **Signing in to a server**, in whichever way the server asks: a user name alone, a user name and
   a password for the user file and the directory, or the Microsoft sign in in the system browser
   for Entra ID. A wrong password, an account outside the allowed group, an unreachable directory,

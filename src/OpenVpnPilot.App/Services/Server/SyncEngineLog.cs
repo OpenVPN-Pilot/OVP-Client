@@ -111,6 +111,12 @@ internal static partial class SyncEngineLog
     public static partial void UploadDuplicate(ILogger logger, Guid temporaryId, string? requestId);
 
     [LoggerMessage(
+        EventId = 3827,
+        Level = LogLevel.Warning,
+        Message = "The server refused profile {ProfileId} for good ({Refusal}); it is kept on this computer and marked as not uploaded.")]
+    public static partial void UploadRefused(ILogger logger, Guid profileId, string refusal);
+
+    [LoggerMessage(
         EventId = 3811,
         Level = LogLevel.Information,
         Message = "Profile {TemporaryId} is the server's profile {ServerId} and now carries its id.")]

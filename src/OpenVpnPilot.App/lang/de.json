@@ -66,6 +66,8 @@
       "unsupportedTooltip": "Verwendet Skriptdirektiven, die der interaktive Dienst für nicht autorisierte Aufrufer ablehnt",
       "unsupportedTooltip@macos": "Verwendet Skriptdirektiven, die der Helfer unter macOS ablehnt, weil OpenVPN dort mit Root-Rechten läuft",
       "unsupportedNotice": "Dieses Profil verwendet Skriptdirektiven. Der interaktive Dienst lehnt diese für nicht autorisierte Aufrufer ab.",
+      "uploadRefusedTooltip": "Nicht auf dem Server: Der Server hat dieses Profil abgelehnt",
+      "uploadRefusedNotice": "Der Server hat dieses Profil abgelehnt ({0}), daher gibt es es nur auf diesem Computer. Ändern Sie es so, dass der Server es annimmt; beim Speichern wird es dem Server erneut angeboten.",
       "unsupportedNotice@macos": "Dieses Profil verwendet Skriptdirektiven. Unter macOS läuft OpenVPN mit Root-Rechten, daher lehnt der Helfer jede Direktive ab, die ein Programm ausführen würde, und dieses Profil lässt sich nicht verbinden.",
       "edit": "Bearbeiten",
       "delete": "Löschen",

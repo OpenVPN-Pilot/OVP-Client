@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using OpenVpnPilot.Core.Server;
@@ -107,6 +108,8 @@ internal sealed partial class OutboxPusher
                 ProfileUploadKind.Rejected,
                 Code: result.Code,
                 Detail: result.Problem?.Detail);
+
+            await MarkRefusedAsync(upload.Marker.EntityId!.Value, RefusalOf(result.Code, result.Status), cycle, cancellationToken);
         }
 
         return await FailedAsync(upload.Marker, result, cycle, cancellationToken);
@@ -139,6 +142,7 @@ internal sealed partial class OutboxPusher
 
                 default:
                     cycle.Uploads[upload.Marker.EntityId!.Value] = new ProfileUploadOutcome(ProfileUploadKind.Rejected, Code: item.Code, Detail: item.Detail);
+                    await MarkRefusedAsync(upload.Marker.EntityId!.Value, RefusalOf(item.Code, result.Status), cycle, cancellationToken);
                     await outbox.DropAsync(upload.Marker.Id, cancellationToken);
                     cycle.Dropped++;
                     cycle.Note(result);
@@ -291,6 +295,31 @@ internal sealed partial class OutboxPusher
 
         return profile is null ? null : ProfileSnapshot.Of(profile);
     }
+
+    /// <summary>
+    /// Marks a profile created here that the server will not take, so it is kept and says so
+    /// instead of passing for one the server has.
+    /// </summary>
+    private async Task MarkRefusedAsync(Guid profileId, string refusal, SyncCycle cycle, CancellationToken cancellationToken)
+    {
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        int marked = await context.Profiles
+            .Where(profile => profile.Id == profileId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(profile => profile.UploadRefusedCode, refusal), cancellationToken);
+
+        if (marked > 0)
+        {
+            cycle.Changes |= LibraryChanges.Profiles;
+            SyncEngineLog.UploadRefused(logger, profileId, refusal);
+        }
+    }
+
+    /// <summary>
+    /// What the mark says: the server's code, or its status when it named none.
+    /// </summary>
+    private static string RefusalOf(string? code, int? status) =>
+        code ?? status?.ToString(CultureInfo.InvariantCulture) ?? "refused";
 
     /// <returns>Null when the marker is gone, superseded by a deletion meanwhile.</returns>
     private async Task<bool?> ReadConfigurationChangedAsync(long markerId, CancellationToken cancellationToken)

@@ -25,6 +25,7 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
         Endpoint = FormatEndpoint(profile);
         RequiresCredentials = profile.RequiresCredentials;
         HasUnsupportedOptions = profile.HasUnsupportedOptions;
+        UploadRefusedCode = profile.UploadRefusedCode;
         LastConnectedAt = profile.LastConnectedAt;
         ConnectCount = profile.ConnectCount;
         Notes = profile.Notes;
@@ -56,6 +57,19 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     /// are not authorised.
     /// </summary>
     public bool HasUnsupportedOptions { get; }
+
+    /// <summary>
+    /// The server's code when it refused to take this profile, created here; null otherwise.
+    /// </summary>
+    public string? UploadRefusedCode { get; }
+
+    /// <summary>
+    /// True for a profile on a server's copy that exists on this computer only, because the server
+    /// refused it.
+    /// </summary>
+    public bool IsUploadRefused => UploadRefusedCode is not null;
+
+    public string UploadRefusedNotice => localizer.Translate("profile.uploadRefusedNotice", UploadRefusedCode ?? string.Empty);
 
     public DateTimeOffset? LastConnectedAt { get; private set; }
 

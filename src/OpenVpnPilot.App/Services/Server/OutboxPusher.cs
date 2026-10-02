@@ -381,6 +381,7 @@ internal sealed partial class OutboxPusher
                 if (marker.Kind == PendingChangeKind.ProfileCreate)
                 {
                     cycle.Uploads[marker.EntityId!.Value] = new ProfileUploadOutcome(ProfileUploadKind.Rejected, Code: result.Code);
+                    await MarkRefusedAsync(marker.EntityId!.Value, RefusalOf(result.Code, result.Status), cycle, cancellationToken);
                 }
 
                 await outbox.DropAsync(marker.Id, cancellationToken);

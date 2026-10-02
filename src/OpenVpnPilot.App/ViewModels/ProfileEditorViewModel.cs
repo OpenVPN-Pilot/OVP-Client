@@ -88,6 +88,8 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
         SelectedSlot = profile.FavouriteSlot ?? 0;
         IsFavourite = profile.IsFavourite;
         IsConnected = !profile.IsIdle;
+        IsUploadRefused = profile.IsUploadRefused;
+        UploadRefusedNotice = profile.UploadRefusedNotice;
 
         RouteProtectionChoices =
         [
@@ -170,6 +172,14 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     /// True while the tunnel is up, which a changed configuration does not affect until it reconnects.
     /// </summary>
     public bool IsConnected { get; }
+
+    /// <summary>
+    /// True when the server refused this profile, created here, and it exists on this computer only.
+    /// Saving a change offers it to the server again.
+    /// </summary>
+    public bool IsUploadRefused { get; }
+
+    public string UploadRefusedNotice { get; }
 
     [ObservableProperty]
     public partial string Name { get; set; }

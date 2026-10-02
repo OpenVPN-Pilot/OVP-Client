@@ -78,6 +78,7 @@ public sealed class PilotDbContext : DbContext
             entity.Property(profile => profile.Protocol).HasMaxLength(10);
             entity.Property(profile => profile.ContentHash).HasMaxLength(64);
             entity.Property(profile => profile.Colour).HasMaxLength(9);
+            entity.Property(profile => profile.UploadRefusedCode).HasMaxLength(100);
 
             entity.HasOne(profile => profile.CredentialSet)
                 .WithMany(set => set.Profiles)
