@@ -425,6 +425,26 @@
         "ScriptDirective@macos": "{0} runs a program. OpenVPN runs as root on macOS, so the helper refuses the configuration and it cannot be connected."
       }
     },
+    "shared": {
+      "connectedRemovedOne": "{0} was deleted on the server. Its tunnel was ended and the profile removed.",
+      "connectedRemovedMany": "{0} profiles were deleted on the server. Their tunnels were ended and the profiles removed.",
+      "readOnly": "This profile comes from the server and only an administrator can change it. The favourite and the shortcut slot are yours.",
+      "replaceTitle": "Shared sign in",
+      "replaceHint": "Replaces the sign in everybody connecting to this profile uses. The server must be reachable.",
+      "realm": "For",
+      "replace": "Replace for everybody",
+      "replaced": "The shared sign in for {0} was replaced.",
+      "replaceOffline": "The server cannot be reached. The shared sign in can only be replaced while it can.",
+      "replaceRefused": "The server did not replace it: {0}",
+      "replaceMissing": "Enter the password to share.",
+      "import": {
+        "created": "On the server",
+        "duplicate": "Already on the server",
+        "rejected": "Refused by the server",
+        "waiting": "Sent when the server can be reached",
+        "summary": "{0} created on the server, {1} already there, {2} refused, {3} waiting to be sent."
+      }
+    },
     "tags": {
       "applied": "{0} added to {1} profile(s).",
       "alreadyThere": "Everything dropped already carries {0}.",

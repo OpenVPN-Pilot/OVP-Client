@@ -56,6 +56,9 @@ public sealed partial class SyncEngine : ISyncEngine, IDisposable
         IOutbox outbox,
         IServerProfileMaintenance maintenance,
         ISecretStore secrets,
+        IHeldVaultSecrets heldSecrets,
+        IRemovedProfileTunnels tunnels,
+        IServerNotices notices,
         IPortableSettings settings,
         ILibraryChangeNotifier notifier,
         INetworkAvailability network,
@@ -67,6 +70,9 @@ public sealed partial class SyncEngine : ISyncEngine, IDisposable
         ArgumentNullException.ThrowIfNull(outbox);
         ArgumentNullException.ThrowIfNull(maintenance);
         ArgumentNullException.ThrowIfNull(secrets);
+        ArgumentNullException.ThrowIfNull(heldSecrets);
+        ArgumentNullException.ThrowIfNull(tunnels);
+        ArgumentNullException.ThrowIfNull(notices);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(notifier);
         ArgumentNullException.ThrowIfNull(network);
@@ -83,8 +89,8 @@ public sealed partial class SyncEngine : ISyncEngine, IDisposable
         this.logger = logger;
 
         personal = new PersonalDataSync(connection.Api, contextFactory, outbox, settings, logger);
-        pusher = new OutboxPusher(connection.Api, contextFactory, outbox, maintenance, secrets, settings, personal, logger);
-        puller = new ChangeFeedPuller(connection.Api, contextFactory, secrets, maintenance, time, logger);
+        pusher = new OutboxPusher(connection.Api, contextFactory, outbox, maintenance, secrets, heldSecrets, settings, personal, logger);
+        puller = new ChangeFeedPuller(connection.Api, contextFactory, secrets, maintenance, tunnels, notices, time, logger);
     }
 
     public SyncStatus Status

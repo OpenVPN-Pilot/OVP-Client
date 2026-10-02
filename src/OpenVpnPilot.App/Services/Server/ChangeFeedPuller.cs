@@ -40,6 +40,8 @@ internal sealed partial class ChangeFeedPuller
     private readonly IDbContextFactory<PilotDbContext> contextFactory;
     private readonly ISecretStore secrets;
     private readonly IServerProfileMaintenance maintenance;
+    private readonly IRemovedProfileTunnels tunnels;
+    private readonly IServerNotices notices;
     private readonly TimeProvider time;
     private readonly ILogger logger;
 
@@ -48,6 +50,8 @@ internal sealed partial class ChangeFeedPuller
         IDbContextFactory<PilotDbContext> contextFactory,
         ISecretStore secrets,
         IServerProfileMaintenance maintenance,
+        IRemovedProfileTunnels tunnels,
+        IServerNotices notices,
         TimeProvider time,
         ILogger logger)
     {
@@ -55,6 +59,8 @@ internal sealed partial class ChangeFeedPuller
         this.contextFactory = contextFactory;
         this.secrets = secrets;
         this.maintenance = maintenance;
+        this.tunnels = tunnels;
+        this.notices = notices;
         this.time = time;
         this.logger = logger;
     }
@@ -181,6 +187,10 @@ internal sealed partial class ChangeFeedPuller
         CancellationToken cancellationToken)
     {
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Before the transaction, because ending a tunnel takes a moment and writes its history.
+        IReadOnlyList<(Guid Id, string Name)> ended = await EndTunnelsOfRemovedAsync(context, changes, cancellationToken);
+
         await using IDbContextTransaction transaction = await context.Database.BeginTransactionAsync(cancellationToken);
 
         // Read again inside the transaction: a change recorded since the fetch is seen here.
@@ -217,6 +227,74 @@ internal sealed partial class ChangeFeedPuller
         {
             cycle.Changes |= LibraryChanges.Profiles;
         }
+
+        if (ended.Count > 0)
+        {
+            notices.Raise(new ServerNotice(ServerNoticeKind.ConnectedProfilesRemoved, [.. ended.Select(profile => profile.Name)], time.GetUtcNow()));
+        }
+    }
+
+    /// <summary>
+    /// Ends the tunnels of the profiles this answer removes, and says which they were.
+    /// </summary>
+    private async Task<IReadOnlyList<(Guid Id, string Name)>> EndTunnelsOfRemovedAsync(
+        PilotDbContext context,
+        SyncChangesResponse changes,
+        CancellationToken cancellationToken)
+    {
+        HashSet<Guid> gone = await RemovedByAsync(context, changes, cancellationToken);
+
+        if (gone.Count == 0)
+        {
+            return [];
+        }
+
+        IReadOnlyList<Guid> ended = await tunnels.DisconnectAsync(gone, cancellationToken);
+
+        if (ended.Count == 0)
+        {
+            return [];
+        }
+
+        Dictionary<Guid, string> names = await context.Profiles
+            .AsNoTracking()
+            .Where(profile => ended.Contains(profile.Id))
+            .ToDictionaryAsync(profile => profile.Id, profile => profile.Name, cancellationToken);
+
+        List<(Guid Id, string Name)> result = [.. ended.Select(id => (id, names.GetValueOrDefault(id, string.Empty)))];
+
+        foreach ((Guid id, string _) in result)
+        {
+            ServerLibraryLog.TunnelEndedForRemoval(logger, id);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// The profiles this copy holds that the answer removes: those it deleted, and on a complete
+    /// answer every server profile it does not carry.
+    /// </summary>
+    private static async Task<HashSet<Guid>> RemovedByAsync(
+        PilotDbContext context,
+        SyncChangesResponse changes,
+        CancellationToken cancellationToken)
+    {
+        HashSet<Guid> gone = [.. changes.DeletedProfiles ?? []];
+
+        if (changes.Full)
+        {
+            HashSet<Guid> present = [.. (changes.Profiles ?? []).Select(profile => profile.Id)];
+
+            List<Guid> held = await context.Profiles
+                .Where(profile => profile.Source == ProfileSource.Server)
+                .Select(profile => profile.Id)
+                .ToListAsync(cancellationToken);
+
+            gone.UnionWith(held.Where(id => !present.Contains(id)));
+        }
+
+        return gone;
     }
 
     private async Task<bool> ApplyProfilesAsync(
@@ -341,19 +419,7 @@ internal sealed partial class ChangeFeedPuller
         PendingSet pending,
         CancellationToken cancellationToken)
     {
-        HashSet<Guid> gone = [.. changes.DeletedProfiles ?? []];
-
-        if (changes.Full)
-        {
-            HashSet<Guid> present = [.. (changes.Profiles ?? []).Select(profile => profile.Id)];
-
-            List<Guid> missing = await context.Profiles
-                .Where(profile => profile.Source == ProfileSource.Server)
-                .Select(profile => profile.Id)
-                .ToListAsync(cancellationToken);
-
-            gone.UnionWith(missing.Where(id => !present.Contains(id)));
-        }
+        HashSet<Guid> gone = await RemovedByAsync(context, changes, cancellationToken);
 
         List<Profile> doomed = await context.Profiles
             .Where(profile => gone.Contains(profile.Id))

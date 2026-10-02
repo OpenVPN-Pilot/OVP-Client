@@ -130,6 +130,13 @@ internal static class AppHost
             provider => provider.GetRequiredService<ProfileNameCache>());
         builder.Services.AddSingleton<ICredentialProvider, StoredCredentialProvider>();
 
+        // What was typed into the prompt and worked is shared with a server's vault. On the local
+        // library the ledger keeps nothing and the recorder records nothing.
+        builder.Services.AddSingleton<TypedCredentials>();
+        builder.Services.AddSingleton<ITypedCredentialLedger>(provider => provider.GetRequiredService<TypedCredentials>());
+        builder.Services.AddSingleton<IHeldVaultSecrets>(provider => provider.GetRequiredService<TypedCredentials>());
+        builder.Services.AddSingleton<VaultShareRecorder>();
+
         builder.Services.AddSingleton<SessionRecorder>();
         builder.Services.AddSingleton<NotificationService>();
         builder.Services.AddSingleton<ReconnectSupervisor>();
@@ -181,10 +188,13 @@ internal static class AppHost
     {
         services.AddSingleton<ILibraryChangeNotifier, LibraryChangeNotifier>();
         services.AddSingleton<LibraryRefresh>();
+        services.AddSingleton<IServerNotices, ServerNotices>();
 
         if (storage.IsServerMode)
         {
             services.AddSingleton<INetworkAvailability, SystemNetworkAvailability>();
+            services.AddSingleton<IRemovedProfileTunnels, ConnectionManagerRemovedTunnels>();
+            services.AddSingleton<IServerCredentialsReset, ServerCredentialsReset>();
             services.AddSingleton<ISyncEngine, SyncEngine>();
         }
     }

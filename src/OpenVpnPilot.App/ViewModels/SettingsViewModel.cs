@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.Core.Server;
@@ -43,6 +44,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// </summary>
     private readonly IServerSignIn? server;
 
+    /// <summary>
+    /// What else forgetting every sign in means for a server's copy. Null on the local library.
+    /// </summary>
+    private readonly IServerCredentialsReset? credentialsReset;
+
     private PilotSettings draft;
 
     public SettingsViewModel(
@@ -57,7 +63,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         DiagnosticsBundle diagnostics,
         UpdateCoordinator updates,
         IDockPresence? dock = null,
-        IServerSignIn? server = null)
+        IServerSignIn? server = null,
+        IServerCredentialsReset? credentialsReset = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(localizer);
@@ -82,6 +89,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         this.updates = updates;
         this.dock = dock;
         this.server = server;
+        this.credentialsReset = credentialsReset;
 
         draft = settings.Current.Clone();
 
@@ -491,6 +499,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
         // profile sign ins, the same number the screen showed before the button was pressed.
         int removed = (await secrets.ListAsync()).Count(SecretReference.IsProfileReference);
         await secrets.ClearAsync();
+
+        // The shared sign ins went with the rest, and only a complete synchronisation brings them back.
+        if (credentialsReset is not null)
+        {
+            await credentialsReset.ResetAsync();
+        }
         StoredSecretCount = 0;
         StatusMessage = localizer.Translate("settings.credentialsCleared", removed);
     }
