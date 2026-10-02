@@ -116,6 +116,41 @@ public sealed class ServerStatusViewModelTests : IDisposable
         Assert.Equal(SyncState.Offline, snapshot.State);
     }
 
+    [Theory]
+    [InlineData(SyncState.Synchronised, true)]
+    [InlineData(SyncState.ChangesWaiting, true)]
+    [InlineData(SyncState.Synchronised, false)]
+    public void CertificateRefusedByTheProbe_IsRedWithTheCertificateBannerRatherThanOffline(SyncState sync, bool signedIn)
+    {
+        FixedStatus source = new(Snapshot(sync, signedIn) with
+        {
+            Reachability = new ServerReachability(false, null, false, null) { CertificateUntrusted = true },
+        });
+
+        using ServerStatusViewModel model = new(new StubLocalizer(), new FakeSettingsService(), new ImmediateThread(), new ManualTime(Now), source);
+
+        Assert.Equal(SyncState.CertificateUntrusted, source.Current.State);
+        Assert.True(model.IsProblem);
+        Assert.Equal("banner.certificateTitle", model.BannerTitle);
+        Assert.Contains("statusBar.certificateUntrusted", model.Text, StringComparison.Ordinal);
+        Assert.False(model.NeedsSignIn);
+    }
+
+    [Fact]
+    public void CertificateTrustedAgain_TheProbeNoLongerOverridesTheSynchronisation()
+    {
+        FixedStatus source = new(Snapshot(SyncState.Synchronised, signedIn: true) with
+        {
+            Reachability = new ServerReachability(true, TimeSpan.FromMilliseconds(23), false, null),
+        });
+
+        using ServerStatusViewModel model = new(new StubLocalizer(), new FakeSettingsService(), new ImmediateThread(), new ManualTime(Now), source);
+
+        Assert.Equal(SyncState.Synchronised, source.Current.State);
+        Assert.Equal(ServerStatusTone.Good, model.Tone);
+        Assert.False(model.HasBanner);
+    }
+
     [Fact]
     public void Storage_SwitchWhileATunnelIsUp_IsRefusedBeforeAnythingIsAsked()
     {

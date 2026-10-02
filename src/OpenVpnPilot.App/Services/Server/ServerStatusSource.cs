@@ -53,6 +53,15 @@ public interface IServerStatusSource
 public sealed record ServerReachability(bool? Reachable, TimeSpan? Latency, bool Degraded, ServerInfoResponse? Info)
 {
     public static ServerReachability Unknown { get; } = new(null, null, false, null);
+
+    /// <summary>
+    /// True when the last attempt was refused over the server's certificate or the TLS agreement.
+    /// </summary>
+    /// <remarks>
+    /// Not reachable either, but not offline: nothing about the network will put it right, so it is
+    /// shown as the configuration problem it is.
+    /// </remarks>
+    public bool CertificateUntrusted { get; init; }
 }
 
 /// <summary>
@@ -82,6 +91,12 @@ public sealed record ServerStatusSnapshot(
     {
         get
         {
+            // Before anything else: neither signing in nor waiting for the network gets past it.
+            if (Reachability.CertificateUntrusted)
+            {
+                return SyncState.CertificateUntrusted;
+            }
+
             if (SessionKnown && !SignedIn && Sync.State is not (SyncState.ClientOutdated or SyncState.CertificateUntrusted))
             {
                 return SyncState.SignInRequired;
@@ -233,12 +248,18 @@ public sealed class ServerStatusSource : IServerStatusSource, IDisposable
         }
         else if (info.Outcome is ServerOutcome.Offline or ServerOutcome.TlsRefused)
         {
-            next = reachability with { Reachable = false, Latency = null, Degraded = false };
+            next = reachability with
+            {
+                Reachable = false,
+                Latency = null,
+                Degraded = false,
+                CertificateUntrusted = info.Outcome == ServerOutcome.TlsRefused,
+            };
         }
         else
         {
             // Answered, though not with what was asked for: reachable, but nothing to measure.
-            next = reachability with { Reachable = true, Latency = null };
+            next = reachability with { Reachable = true, Latency = null, CertificateUntrusted = false };
         }
 
         bool changed;

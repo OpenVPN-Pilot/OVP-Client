@@ -39,6 +39,37 @@ public sealed class ServerStatusSourceTests
         Assert.Equal(ServerStatusSource.Backoff[1], source.NextDelay);
     }
 
+    [Fact]
+    public async Task Probe_CertificateNotTrusted_SaysSoAndAsksLessOften()
+    {
+        using TestConnection server = new(_ => throw new HttpRequestException(HttpRequestError.SecureConnectionError, "untrusted root"));
+        using ServerStatusSource source = Source(server);
+
+        Assert.False(await source.ProbeAsync());
+
+        Assert.False(source.Current.Reachability.Reachable);
+        Assert.True(source.Current.Reachability.CertificateUntrusted);
+        Assert.Equal(SyncState.CertificateUntrusted, source.Current.State);
+        Assert.Equal(ServerStatusSource.Backoff[0], source.NextDelay);
+    }
+
+    [Fact]
+    public async Task Probe_AnsweredAfterTheCertificateWasRefused_ForgetsTheRefusal()
+    {
+        bool trusted = false;
+        using TestConnection server = new(_ => trusted
+            ? ServerAnswers.Json(ServerAnswers.Info())
+            : throw new HttpRequestException(HttpRequestError.SecureConnectionError, "untrusted root"));
+        using ServerStatusSource source = Source(server);
+
+        await source.ProbeAsync();
+        trusted = true;
+        await source.ProbeAsync();
+
+        Assert.False(source.Current.Reachability.CertificateUntrusted);
+        Assert.True(source.Current.Reachability.Reachable);
+    }
+
     private static ServerStatusSource Source(TestConnection server) => new(
         server.Connection.Api,
         server.Connection.Session,

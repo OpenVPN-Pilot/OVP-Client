@@ -93,7 +93,8 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   amber while offline, degraded or with changes waiting and red when something blocks, beside a line
   such as `pilot.example.com · 23 ms · synced 2 min ago · 3 changes waiting`. The round trip is
   measured every 30 seconds, less often while the server cannot be reached, and a server whose
-  readiness check fails shows as degraded. The tooltip has the details and a click offers "Sync
+  readiness check fails shows as degraded. A certificate that is not trusted shows red as such as
+  soon as the round trip meets it, never as being offline. The tooltip has the details and a click offers "Sync
   now", the server's log, signing in again and the storage settings. On this computer's own library
   the bar shows a grey "Local" instead. The tray menu, and the application menu on macOS, carry the
   same line and "Sync now".
