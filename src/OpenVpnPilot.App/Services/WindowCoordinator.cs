@@ -577,7 +577,7 @@ public sealed class WindowCoordinator
         model.ScreenRequested += (_, screen) => Open(screen);
         model.ProfileReloadRequested += async (_, _) => await viewModel.LoadAsync();
         window.Opened += async (_, _) => await model.LoadAsync();
-        window.Closed += (_, _) => model.Storage?.Dispose();
+        window.Closed += (_, _) => model.Dispose();
 
         return window;
     }

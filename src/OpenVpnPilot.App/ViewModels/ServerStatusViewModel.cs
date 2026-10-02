@@ -22,10 +22,17 @@ namespace OpenVpnPilot.App.ViewModels;
 /// the server refuses and a certificate this computer does not trust. Being offline is not one,
 /// because the application keeps working from the copy; it is the amber dot.
 /// </para>
+/// <para>
+/// Something the server did on its own, such as deleting a profile whose tunnel was up, is a notice:
+/// a line beside the state for <see cref="NoticeDuration"/>, long enough to be read and gone before
+/// it turns into clutter.
+/// </para>
 /// </remarks>
 public sealed partial class ServerStatusViewModel : ViewModelBase, IDisposable
 {
     public static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(30);
+
+    public static readonly TimeSpan NoticeDuration = TimeSpan.FromSeconds(30);
 
     private readonly ILocalizer localizer;
     private readonly ISettingsService settings;
@@ -33,13 +40,19 @@ public sealed partial class ServerStatusViewModel : ViewModelBase, IDisposable
     private readonly TimeProvider time;
     private readonly IServerStatusSource? source;
     private readonly ITimer? ticker;
+    private readonly IServerNotices? notices;
+
+    // Touched only on the user interface thread.
+    private ServerNotice? shownNotice;
+    private ITimer? noticeTimer;
 
     public ServerStatusViewModel(
         ILocalizer localizer,
         ISettingsService settings,
         IUserInterfaceThread ui,
         TimeProvider time,
-        IServerStatusSource? source = null)
+        IServerStatusSource? source = null,
+        IServerNotices? notices = null)
     {
         ArgumentNullException.ThrowIfNull(localizer);
         ArgumentNullException.ThrowIfNull(settings);
@@ -51,6 +64,7 @@ public sealed partial class ServerStatusViewModel : ViewModelBase, IDisposable
         this.ui = ui;
         this.time = time;
         this.source = source;
+        this.notices = notices;
 
         localizer.LanguageChanged += OnChanged;
 
@@ -58,6 +72,11 @@ public sealed partial class ServerStatusViewModel : ViewModelBase, IDisposable
         {
             source.Changed += OnChanged;
             ticker = time.CreateTimer(_ => OnChanged(this, EventArgs.Empty), null, RefreshInterval, RefreshInterval);
+        }
+
+        if (notices is not null)
+        {
+            notices.Raised += OnNoticeRaised;
         }
 
         Refresh();
@@ -82,6 +101,15 @@ public sealed partial class ServerStatusViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     public partial string Details { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The latest notice in words while it is shown, otherwise empty.
+    /// </summary>
+    [ObservableProperty]
+    public partial string Notice { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial bool HasNotice { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsGood), nameof(IsBusy), nameof(IsWarning), nameof(IsProblem))]
@@ -131,7 +159,13 @@ public sealed partial class ServerStatusViewModel : ViewModelBase, IDisposable
             source.Changed -= OnChanged;
         }
 
+        if (notices is not null)
+        {
+            notices.Raised -= OnNoticeRaised;
+        }
+
         ticker?.Dispose();
+        noticeTimer?.Dispose();
     }
 
     /// <summary>
@@ -139,6 +173,9 @@ public sealed partial class ServerStatusViewModel : ViewModelBase, IDisposable
     /// </summary>
     public void Refresh()
     {
+        Notice = shownNotice is null ? string.Empty : ServerNoticeText.Describe(localizer, shownNotice);
+        HasNotice = Notice.Length > 0;
+
         if (source is null)
         {
             Text = localizer["statusBar.local"];
@@ -193,6 +230,43 @@ public sealed partial class ServerStatusViewModel : ViewModelBase, IDisposable
         {
             PageRequested?.Invoke(this, url);
         }
+    }
+
+    private void OnNoticeRaised(object? sender, ServerNotice notice) =>
+        _ = ui.InvokeAsync(() =>
+        {
+            ShowNotice(notice);
+            return Task.CompletedTask;
+        });
+
+    private void ShowNotice(ServerNotice notice)
+    {
+        shownNotice = notice;
+        noticeTimer?.Dispose();
+        noticeTimer = time.CreateTimer(
+            _ => _ = ui.InvokeAsync(() =>
+            {
+                ClearNotice(notice);
+                return Task.CompletedTask;
+            }),
+            null,
+            NoticeDuration,
+            Timeout.InfiniteTimeSpan);
+        Refresh();
+    }
+
+    // Only the notice this timer was armed for, so a newer one keeps its full time.
+    private void ClearNotice(ServerNotice notice)
+    {
+        if (!ReferenceEquals(shownNotice, notice))
+        {
+            return;
+        }
+
+        shownNotice = null;
+        noticeTimer?.Dispose();
+        noticeTimer = null;
+        Refresh();
     }
 
     private void OnChanged(object? sender, EventArgs e) =>
