@@ -80,10 +80,25 @@ ovp stop
 
 `ovp start [--headless]` opens it without connecting anything, `ovp stop` ends it and its tunnels,
 and `ovp status` reports what is connected, one line per tunnel. Exit codes are 0 for done, 1 for a
-command that was not understood, 4 when nothing was listening, and 6 when the store could not be
-read.
+command that was not understood, 4 when nothing was listening, 6 when the store could not be read,
+and 7 when a command that changes the store was refused because the profiles are a server's.
 
 The application understands the same options directly, for a shortcut or a scheduled task that
 starts it: `--headless`, `--background`, `--connect`, `--disconnect`, `--disconnect-all` and
 `--quit`. Only one copy runs per user, so a second launch hands its options to the copy that already
 runs and exits.
+
+## With a server
+
+When the application works with an OpenVPN Pilot Server, the profiles on the machine are a copy of
+that server's, kept in step by the application. `ovp` reads the same copy the window shows, so
+`list`, `connect`, `export`, `pack`, `status` and completion behave exactly as they do with the
+profiles kept on the computer.
+
+What would change the copy is refused, with exit code 7 and a sentence saying why: `import --commit`,
+`unpack --commit`, `favourite` and `remove`. The application records every change it makes so the
+change reaches the server; a change written by `ovp` would be recorded nowhere, would never reach the
+server and would be overwritten by the next synchronisation. Make the change in the application
+instead. A dry run, `import` or `unpack` without `--commit`, still reports what it would do.
+
+`ovp` never talks to the server itself.

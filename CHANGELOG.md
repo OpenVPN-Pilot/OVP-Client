@@ -22,6 +22,10 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   application and `ovp` open the one the settings name, and neither mode ever touches the other's
   file. A settings file naming a server whose address is not a plain `https://` address opens the
   local library and says why in the log.
+- **`ovp` exit code 7**: a command that would change the copy of a server's profiles,
+  `import --commit`, `unpack --commit`, `favourite` or `remove`, is refused with it while the
+  application works with a server. A change written there would never reach the server and would be
+  overwritten by the next synchronisation. Everything that reads works in both modes.
 
 ## [1.9.0] - 2026-09-17
 
