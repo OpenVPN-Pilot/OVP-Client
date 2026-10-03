@@ -3,8 +3,10 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
+using OpenVpnPilot.Core.Server;
 using OpenVpnPilot.OpenVpn.Configuration;
 
 namespace OpenVpnPilot.App.ViewModels;
@@ -32,6 +34,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     private readonly ILocalizer localizer;
     private readonly Guid profileId;
     private readonly bool startsInPlainText;
+    private readonly ISharedSignInReplacement? sharedSignIns;
 
     private readonly Dictionary<string, string?> formBlocks = new(StringComparer.Ordinal);
 
@@ -52,11 +55,21 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     /// </summary>
     private bool populating;
 
+    /// <param name="canChangeShared">
+    /// False for a person who is not an administrator of the server the profile comes from: only
+    /// the favourite and the slot, which are theirs, are offered and saved.
+    /// </param>
+    /// <param name="sharedSignIns">
+    /// Replaces the sign in a server shares for the profile; null where there is no server or the
+    /// person may not.
+    /// </param>
     public ProfileEditorViewModel(
         IProfileStore store,
         ILocalizer localizer,
         ProfileItemViewModel profile,
-        bool startsInPlainText = false)
+        bool startsInPlainText = false,
+        bool canChangeShared = true,
+        ISharedSignInReplacement? sharedSignIns = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(localizer);
@@ -65,6 +78,8 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
         this.store = store;
         this.localizer = localizer;
         this.startsInPlainText = startsInPlainText;
+        this.sharedSignIns = canChangeShared ? sharedSignIns : null;
+        CanChangeShared = canChangeShared;
 
         profileId = profile.Id;
         Name = profile.Name;
@@ -73,6 +88,8 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
         SelectedSlot = profile.FavouriteSlot ?? 0;
         IsFavourite = profile.IsFavourite;
         IsConnected = !profile.IsIdle;
+        IsUploadRefused = profile.IsUploadRefused;
+        UploadRefusedNotice = profile.UploadRefusedNotice;
 
         RouteProtectionChoices =
         [
@@ -96,6 +113,31 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     /// Raised when the user asked for the profile to be removed.
     /// </summary>
     public event EventHandler<Guid>? DeleteRequested;
+
+    /// <summary>
+    /// True when everything about the profile may be changed; false when only the favourite and
+    /// the slot may, because the profile is the server's and the person is not its administrator.
+    /// </summary>
+    public bool CanChangeShared { get; }
+
+    public bool IsReadOnly => !CanChangeShared;
+
+    /// <summary>
+    /// True when the sign in the server shares for this profile can be replaced from here.
+    /// </summary>
+    public bool CanReplaceSharedSignIn => sharedSignIns is not null;
+
+    [ObservableProperty]
+    public partial string SharedRealm { get; set; } = "Auth";
+
+    [ObservableProperty]
+    public partial string SharedUsername { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string SharedPassword { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string SharedSignInStatus { get; set; } = string.Empty;
 
     public ObservableCollection<RouteProtectionChoice> RouteProtectionChoices { get; }
 
@@ -130,6 +172,14 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     /// True while the tunnel is up, which a changed configuration does not affect until it reconnects.
     /// </summary>
     public bool IsConnected { get; }
+
+    /// <summary>
+    /// True when the server refused this profile, created here, and it exists on this computer only.
+    /// Saving a change offers it to the server again.
+    /// </summary>
+    public bool IsUploadRefused { get; }
+
+    public string UploadRefusedNotice { get; }
 
     [ObservableProperty]
     public partial string Name { get; set; }
@@ -255,7 +305,7 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
         }
 
         ReadForm(storedConfiguration);
-        IsPlainText = startsInPlainText;
+        IsPlainText = startsInPlainText && CanChangeShared;
         IsLoaded = true;
 
         Revalidate();
@@ -330,6 +380,16 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
             return;
         }
 
+        if (!CanChangeShared)
+        {
+            // Only what belongs to the person, and nothing that would be refused as an edit of the
+            // server's profile.
+            await store.SetFavouriteAsync(profileId, IsFavourite || SelectedSlot > 0);
+            await store.SetFavouriteSlotAsync(profileId, SelectedSlot == 0 ? null : SelectedSlot);
+            Closed?.Invoke(this, true);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(Name))
         {
             StatusMessage = localizer["editor.nameRequired"];
@@ -387,14 +447,59 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     private void Cancel() => Closed?.Invoke(this, false);
 
     [RelayCommand]
-    private void RequestDelete() => IsConfirmingDelete = true;
+    private void RequestDelete() => IsConfirmingDelete = CanChangeShared;
 
     [RelayCommand]
     private void CancelDelete() => IsConfirmingDelete = false;
 
+    /// <summary>
+    /// Replaces what everybody connecting to this profile signs in with, on the server and here.
+    /// </summary>
+    [RelayCommand]
+    private async Task ReplaceSharedSignInAsync(CancellationToken cancellationToken = default)
+    {
+        if (sharedSignIns is null)
+        {
+            return;
+        }
+
+        string realm = SharedRealm.Trim();
+
+        if (realm.Length == 0 || SharedPassword.Length == 0)
+        {
+            SharedSignInStatus = localizer["shared.replaceMissing"];
+            return;
+        }
+
+        ServerResult result = await sharedSignIns.ReplaceAsync(
+            profileId,
+            realm,
+            SharedUsername.Trim(),
+            SharedPassword,
+            cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            // The password has done its job and has no reason to stay on screen.
+            SharedPassword = string.Empty;
+            SharedSignInStatus = localizer.Translate("shared.replaced", realm);
+        }
+        else
+        {
+            SharedSignInStatus = result.Outcome is ServerOutcome.Offline or ServerOutcome.NotSignedIn
+                ? localizer["shared.replaceOffline"]
+                : localizer.Translate("shared.replaceRefused", ServerMessages.SignInFailure(localizer, result));
+        }
+    }
+
     [RelayCommand]
     private async Task ConfirmDeleteAsync()
     {
+        if (!CanChangeShared)
+        {
+            return;
+        }
+
         await store.DeleteProfileAsync(profileId);
         DeleteRequested?.Invoke(this, profileId);
         Closed?.Invoke(this, true);
@@ -505,6 +610,14 @@ public sealed partial class ProfileEditorViewModel : ViewModelBase
     private void Revalidate()
     {
         Issues.Clear();
+
+        // A configuration the person cannot change is not theirs to be told about.
+        if (!CanChangeShared)
+        {
+            OnPropertyChanged(nameof(HasIssues));
+            OnPropertyChanged(nameof(HasErrors));
+            return;
+        }
 
         if (!IsPlainText)
         {

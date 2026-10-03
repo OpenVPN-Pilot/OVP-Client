@@ -59,8 +59,9 @@ This repository is public. Keep it free of context about who uses it or why it w
 ## Documentation
 
 - A short README that says what this is and points at the rest, and one page per subject under
-  `docs/`: `windows.md`, `macos.md`, `usage.md`, `cli.md`, `development.md`. A subject gets a page
-  when it is a subject, not because there is more to say about one that already has one.
+  `docs/`: `windows.md`, `macos.md`, `usage.md`, `settings.md`, `server.md`, `server-signing-in.md`,
+  `server-sync.md`, `cli.md`, `development.md`, `testing.md`. A subject gets a page when it is a
+  subject, not because there is more to say about one that already has one.
 - Document behaviour there and in code, not in a growing pile of design notes. `docs/` is not a
   place for design documents, meeting notes or anything dated.
 
@@ -418,6 +419,42 @@ the Mac: reading it as one cost an afternoon.
 not exist even once notifications are working, so its absence means nothing and it is not worth
 reading.
 
+### The Dock keeps what it has been shown, so it is never shown anything
+
+The activation policy is the whole of the Dock icon and the menu bar: a regular application has both,
+an accessory one has neither and can still show windows, a status item and the keyboard. Switching
+between them at runtime works in both directions, measured on macOS 26 with the Dock's recent
+applications turned off: a tile a window created disappears again when the policy goes back to
+accessory.
+
+That is not enough, because a tile is not the only thing a Dock entry can be. macOS enters a regular
+application in the Dock's list of recent applications, and that entry outlives the window, the
+quitting and the process. Nothing the application does removes it, and it is what a person sees as an
+icon that has wedged itself into the Dock. Measured three ways: started with `--headless`, so that no
+window was ever shown, a regular application was entered; an accessory application promoted to
+regular for a window was entered; an accessory application that never becomes regular was not entered
+at all.
+
+Being in the Dock is therefore a setting, `General.ShowInDock`, on to begin with and offered in the
+settings screen and in the menu bar entry. It decides whether a window promotes the application to
+regular; launching never does, whatever it says. That takes two things and either alone is not
+enough, because the bundle decides what the process starts as and Avalonia sets the policy again
+while it starts: the bundle declares `LSUIElement`, and the application builder passes
+`MacOSPlatformOptions { ShowInDock = false }`. `DockPresenceTests` holds the two together.
+
+What the setting costs when it is off, and what it does not:
+
+- **There is no menu bar of its own**, so the panel about the application is offered by the menu bar
+  entry as well as by that menu. A menu's key equivalents are answered whether or not the menu is
+  shown, measured: command and comma opens the settings from `ApplicationMenuController`'s entry,
+  command and Q quits from the platform's own, and command A, C and V edit a text field.
+- **A window does not bring the application forward.** Showing and activating a window is enough on
+  Windows; on macOS which application is in front is a decision of its own, and one that is not in
+  the Dock is never made the front one by the system. `IApplicationActivation` is that step, and
+  without it a window opened from the menu bar appeared behind what was in front and took no
+  keystrokes. `activateIgnoringOtherApps:` does the job for an accessory application on macOS 26,
+  measured against a probe that compared it with `activate` and `activate(from:)`.
+
 ### A Unix socket path is short
 
 `sockaddr_un` holds 104 characters on macOS. The per user temporary directory alone is longer than
@@ -529,3 +566,37 @@ to the running process. These are test results, not assumptions.
   process dies with `0xE0434352`, and on the shutdown screen the Windows fault dialog is the only
   trace left. Every step of the teardown is therefore bounded and reported, and unhandled
   exceptions are written to `logs\failure.log`.
+
+---
+
+## Verified server mode facts
+
+Measured against OpenVPN Pilot Server 1.0.0 in Docker, with this client's own pipeline, outbox and
+synchronisation, through `tests/OpenVpnPilot.Server.IntegrationTests`. These are test results, not
+assumptions. Do not re-derive them, and correct this section if a measurement ever contradicts it.
+
+- **A stopped server is offline, not an error.** With the API container stopped the client gets a
+  refused connection, every cycle ends `Offline`, and the copy keeps working: a rename and a favourite
+  made meanwhile are in the database. Once the container is started again the next cycle pushes both,
+  a second machine sees the rename, and both outboxes end empty.
+- **A disabled account reaches its client on the very next call.** After an administrator calls
+  `POST /api/v1/users/{id}/disable`, the next request of that account's client is answered 401 with
+  `X-Pilot-Directive: wipe`, although its access token has not expired. From then on the client sends nothing at all.
+- **The vault keeps the first sign in.** A second machine adding an entry for the same profile and
+  realm is answered 409 `vault.entry_exists`, and reading `GET /profiles/{id}/vault` gives it the first
+  machine's entry, which it stores instead of its own.
+- **An expired cursor is answered 410 `sync.cursor_expired`, and `since=0` still works.** Provoked by
+  raising `sync_states.pruned_through` above the client's cursor, as the server's maintenance does once
+  tombstones are 90 days old. The client asks again from zero and completes.
+- **The user file takes plain passwords.** A password that is not an Argon2id hash signs in, and the
+  server warns about it at every start. Only the test stack relies on this.
+
+The container disposes a singleton once for every registration it was resolved through. A service
+registered as itself and handed out again under its interfaces by factory, as
+`ServerSessionCoordinator` is, is therefore disposed more than once when the application ends, and so
+is a view model that its owner disposes as well. Measured as an `ObjectDisposedException` from a
+second `CancellationTokenSource.Cancel`; every `Dispose` in server mode is therefore idempotent.
+
+What has not been measured, and is therefore not written here: the Microsoft sign in through the
+system browser on macOS, the single instance guard across the restart that `--after-restart`
+bridges, and the re-key of an offline profile anywhere but in the tests on a SQLite file.

@@ -34,6 +34,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Which commands are refused in server mode is decided apart from running them, and tested so. -->
+    <InternalsVisibleTo Include="OpenVpnPilot.Cli.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>

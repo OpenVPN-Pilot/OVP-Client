@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
+using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
 
@@ -15,6 +16,12 @@ namespace OpenVpnPilot.App.Services;
 /// person opening the menu named after this application expects to find. The menu here carries the
 /// application's own about entry and its settings under the shortcut every Mac application uses for
 /// them.
+///
+/// The menu bar is only shown while the application is in the Dock, which is a setting. What the
+/// menu is also for is its keyboard shortcuts, and those are answered either way: the platform
+/// answers command and comma from this entry exactly as it answers command and Q from the one it
+/// adds itself, shown or not. The panel about the application is offered by the menu bar entry as
+/// well, which is where it can be reached when there is no menu.
 ///
 /// Two things about the framework decide how. The platform reads the application's menu once, before
 /// the application has finished starting, and never looks at the property again: a menu handed over
@@ -37,15 +44,31 @@ public sealed class ApplicationMenuController : IDisposable
         Gesture = new KeyGesture(Key.OemComma, KeyModifiers.Meta),
     };
 
+    /// <summary>
+    /// The line that says how the server stands, in Server mode; never clicked.
+    /// </summary>
+    private readonly NativeMenuItem serverState = new() { IsEnabled = false };
+
+    private readonly NativeMenuItem syncNow = new();
+
+    private readonly IServerStatusSource? serverStatus;
+    private readonly TimeProvider time;
+
     private bool disposed;
 
-    public ApplicationMenuController(IApplicationMenu platform, ILocalizer localizer)
+    public ApplicationMenuController(
+        IApplicationMenu platform,
+        ILocalizer localizer,
+        IServerStatusSource? serverStatus = null,
+        TimeProvider? time = null)
     {
         ArgumentNullException.ThrowIfNull(platform);
         ArgumentNullException.ThrowIfNull(localizer);
 
         this.platform = platform;
         this.localizer = localizer;
+        this.serverStatus = serverStatus;
+        this.time = time ?? TimeProvider.System;
     }
 
     /// <summary>
@@ -78,15 +101,37 @@ public sealed class ApplicationMenuController : IDisposable
         menu.Items.Insert(1, new NativeMenuItemSeparator());
         menu.Items.Insert(2, settings);
 
+        if (serverStatus is not null)
+        {
+            syncNow.Click += (_, _) => ActionRequested?.Invoke(this, TrayIconController.SyncNowAction);
+
+            menu.Items.Insert(3, new NativeMenuItemSeparator());
+            menu.Items.Insert(4, serverState);
+            menu.Items.Insert(5, syncNow);
+
+            serverStatus.Changed += OnServerStatusChanged;
+        }
+
         localizer.LanguageChanged += OnLanguageChanged;
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(Reword);
 
+    private void OnServerStatusChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(Reword);
+
     private void Reword()
     {
         about.Header = localizer["app.menuAbout"];
         settings.Header = localizer["app.menuSettings"];
+
+        if (serverStatus is not null)
+        {
+            ServerStatusSnapshot snapshot = serverStatus.Current;
+
+            serverState.Header = ServerStatusText.Compact(localizer, snapshot, time.GetUtcNow());
+            syncNow.Header = localizer["tray.syncNow"];
+            syncNow.IsEnabled = snapshot.SignedIn && snapshot.State != SyncState.Synchronising;
+        }
     }
 
     public void Dispose()
@@ -98,5 +143,10 @@ public sealed class ApplicationMenuController : IDisposable
 
         disposed = true;
         localizer.LanguageChanged -= OnLanguageChanged;
+
+        if (serverStatus is not null)
+        {
+            serverStatus.Changed -= OnServerStatusChanged;
+        }
     }
 }

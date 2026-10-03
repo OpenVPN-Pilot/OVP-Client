@@ -452,6 +452,19 @@ write_information_plist() {
     <string>${MINIMUM_MACOS}</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
+    <!--
+        An accessory application: one that lives in the menu bar, with no Dock icon and no menu bar
+        of its own, and it stays one whether a window is open or not. A regular application is
+        entered in the Dock's list of recent applications, and that entry outlives the window, the
+        quitting and the process; nothing the application does removes it again. Measured on
+        macOS 26, including a copy started with the window hidden, which never showed one and was
+        entered all the same.
+
+        This is half of it. Avalonia asks for a regular application while it starts, so the
+        application builder passes MacOSPlatformOptions with ShowInDock off as well.
+    -->
+    <key>LSUIElement</key>
+    <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>

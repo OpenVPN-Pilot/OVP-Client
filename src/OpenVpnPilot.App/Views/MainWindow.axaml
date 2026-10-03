@@ -124,6 +124,38 @@
       </Grid>
     </Border>
 
+    <!--
+      The server, for the states that block: a sign in is needed, the client is too old, the clock is
+      refused or the certificate is not trusted. Offline is not one of them; that is the status bar's.
+    -->
+    <ContentControl Name="ServerBannerHost">
+      <ContentControl.ContentTemplate>
+        <DataTemplate x:DataType="vm:ServerStatusViewModel">
+          <Border Padding="18,12"
+                  Background="{DynamicResource StateFailedSoft}"
+                  BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1"
+                  IsVisible="{Binding HasBanner}">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+              <StackPanel Grid.Column="0" Spacing="5">
+                <TextBlock Text="{Binding BannerTitle}" FontSize="13" FontWeight="SemiBold"
+                           TextWrapping="Wrap" Foreground="{DynamicResource StateFailed}" />
+                <TextBlock Text="{Binding BannerText}" FontSize="12" TextWrapping="Wrap"
+                           Foreground="{DynamicResource StateFailed}" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button Content="{loc:Translate banner.signIn}" Classes="primary"
+                        IsVisible="{Binding NeedsSignIn}" Command="{Binding SignInCommand}" />
+                <Button Content="{loc:Translate banner.getUpdate}"
+                        IsVisible="{Binding BannerOffersUpdate}" Command="{Binding OpenUpdatePageCommand}" />
+                <Button Content="{loc:Translate banner.storageSettings}" Classes="quiet"
+                        Command="{Binding OpenStorageSettingsCommand}" />
+              </StackPanel>
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ContentControl.ContentTemplate>
+    </ContentControl>
+
     </StackPanel>
 
     <!--
@@ -295,6 +327,10 @@
                                Foreground="{DynamicResource StatePending}"
                                ToolTip.Tip="{loc:Translate profile.unsupportedTooltip}"
                                IsVisible="{Binding HasUnsupportedOptions}" />
+                    <TextBlock Text="!" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"
+                               Foreground="{DynamicResource StateFailed}"
+                               ToolTip.Tip="{loc:Translate profile.uploadRefusedTooltip}"
+                               IsVisible="{Binding IsUploadRefused}" />
                     <Border Classes="pill" IsVisible="{Binding !IsIdle}"
                             Background="{Binding Status.State, Converter={x:Static conv:AppConverters.StatePillBackground}}">
                       <TextBlock Text="{Binding StatusText}"
@@ -316,6 +352,7 @@
                      TextWrapping="Wrap" TextAlignment="Center" />
           <Button Content="{loc:Translate header.import}" Classes="primary"
                   HorizontalAlignment="Center" Margin="0,6,0,0"
+                  IsVisible="{Binding CanChangeShared}"
                   Command="{Binding OpenImportCommand}" />
         </StackPanel>
 
@@ -346,6 +383,7 @@
                       VerticalAlignment="Top"
                       Content="{loc:Translate select.delete}"
                       IsEnabled="{Binding HasTicked}"
+                      IsVisible="{Binding CanChangeShared}"
                       Command="{Binding AskToDeleteTickedCommand}" />
               <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
                 <Button Content="{loc:Translate select.connect}" Classes="primary"
@@ -430,7 +468,7 @@
                       Command="{Binding SignInAgainCommand}"
                       CommandParameter="{Binding SelectedProfile}" />
               <Button Content="{loc:Translate profile.delete}" Classes="danger"
-                      IsVisible="{Binding !IsConfirmingProfileDelete}"
+                      IsVisible="{Binding OffersProfileDelete}"
                       Command="{Binding AskToDeleteSelectedCommand}" />
             </WrapPanel>
 
@@ -571,6 +609,14 @@
             </Border>
 
             <Border CornerRadius="7" Padding="12,10"
+                    Background="{DynamicResource StateFailedSoft}"
+                    IsVisible="{Binding SelectedProfile.IsUploadRefused}">
+              <TextBlock TextWrapping="Wrap" FontSize="12"
+                         Foreground="{DynamicResource StateFailed}"
+                         Text="{Binding SelectedProfile.UploadRefusedNotice}" />
+            </Border>
+
+            <Border CornerRadius="7" Padding="12,10"
                     Background="{DynamicResource StatePendingSoft}"
                     IsVisible="{Binding SelectedProfile.HasUnsupportedOptions}">
               <TextBlock TextWrapping="Wrap" FontSize="12"
@@ -595,10 +641,74 @@
     <Border Grid.Row="3" Background="{DynamicResource SurfaceSidebar}"
             BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
             Padding="18,8">
-      <Grid ColumnDefinitions="*,Auto">
-        <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Classes="muted"
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <!--
+          Where the profiles come from: a grey "Local", or the server with a dot coloured by its state
+          and one compact line. The whole picture is in the tooltip, the actions in the flyout.
+        -->
+        <ContentControl Grid.Column="0" Name="ServerStatusHost" Margin="0,0,18,0" VerticalAlignment="Center">
+          <ContentControl.ContentTemplate>
+            <DataTemplate x:DataType="vm:ServerStatusViewModel">
+              <StackPanel Orientation="Horizontal">
+                <Button Classes="quiet" Padding="6,2" Margin="-6,-4,0,-4"
+                        IsVisible="{Binding IsLocal}"
+                        ToolTip.Tip="{Binding Details}"
+                        Command="{Binding OpenStorageSettingsCommand}">
+                  <TextBlock Text="{Binding Text}" Classes="muted" />
+                </Button>
+                <Button Classes="quiet" Padding="6,2" Margin="-6,-4,0,-4"
+                        IsVisible="{Binding IsServerMode}"
+                        ToolTip.Tip="{Binding Details}">
+                  <StackPanel Orientation="Horizontal" Spacing="7">
+                    <StackPanel.Styles>
+                      <Style Selector="Border.serverDot">
+                        <Setter Property="Background" Value="{DynamicResource TextTertiary}" />
+                      </Style>
+                      <Style Selector="Border.serverDot.good">
+                        <Setter Property="Background" Value="{DynamicResource StateConnected}" />
+                      </Style>
+                      <Style Selector="Border.serverDot.busy">
+                        <Setter Property="Background" Value="{DynamicResource Accent}" />
+                      </Style>
+                      <Style Selector="Border.serverDot.warning">
+                        <Setter Property="Background" Value="{DynamicResource StatePending}" />
+                      </Style>
+                      <Style Selector="Border.serverDot.problem">
+                        <Setter Property="Background" Value="{DynamicResource StateFailed}" />
+                      </Style>
+                    </StackPanel.Styles>
+                    <Border Width="7" Height="7" CornerRadius="4" VerticalAlignment="Center"
+                            Classes="serverDot"
+                            Classes.good="{Binding IsGood}"
+                            Classes.busy="{Binding IsBusy}"
+                            Classes.warning="{Binding IsWarning}"
+                            Classes.problem="{Binding IsProblem}" />
+                    <TextBlock Text="{Binding Text}" Classes="muted" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" MaxWidth="520" />
+                    <TextBlock Text="{Binding Notice}" VerticalAlignment="Center"
+                               Foreground="{DynamicResource StatePending}"
+                               TextTrimming="CharacterEllipsis" MaxWidth="520"
+                               IsVisible="{Binding HasNotice}"
+                               ToolTip.Tip="{Binding Notice}" />
+                  </StackPanel>
+                  <Button.Flyout>
+                    <MenuFlyout Placement="TopEdgeAlignedLeft">
+                      <MenuItem Header="{loc:Translate statusBar.syncNow}" Command="{Binding SyncNowCommand}" />
+                      <MenuItem Header="{loc:Translate statusBar.signInAgain}" Command="{Binding SignInCommand}"
+                                IsVisible="{Binding NeedsSignIn}" />
+                      <MenuItem Header="{loc:Translate statusBar.showServerLog}" Command="{Binding ShowServerLogCommand}" />
+                      <MenuItem Header="{loc:Translate statusBar.storageSettings}" Command="{Binding OpenStorageSettingsCommand}" />
+                    </MenuFlyout>
+                  </Button.Flyout>
+                </Button>
+              </StackPanel>
+            </DataTemplate>
+          </ContentControl.ContentTemplate>
+        </ContentControl>
+
+        <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" Classes="muted"
                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"
                     IsVisible="{Binding HasActiveConnections}">
           <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
             <TextBlock Text="{loc:Translate profile.received}" Classes="overline"

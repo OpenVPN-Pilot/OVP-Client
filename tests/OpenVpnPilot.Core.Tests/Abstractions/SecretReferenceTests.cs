@@ -14,6 +14,8 @@ public sealed class SecretReferenceTests
 {
     private static readonly Guid ProfileId = Guid.Parse("11111111-2222-3333-4444-555555555555");
 
+    private const string ServerKey = "0123456789abcdef0123456789abcdef";
+
     [Fact]
     public void AReferenceRoundTrips()
     {
@@ -51,6 +53,53 @@ public sealed class SecretReferenceTests
         Assert.False(SecretReference.TryParse(reference, out Guid profileId, out string realm));
         Assert.Equal(Guid.Empty, profileId);
         Assert.Equal(string.Empty, realm);
+    }
+
+    [Fact]
+    public void ForServerRefreshToken_RoundTripsThroughItsParser()
+    {
+        string reference = SecretReference.ForServerRefreshToken(ServerKey);
+
+        Assert.Equal($"server/{ServerKey}/refresh", reference);
+        Assert.True(SecretReference.TryParseServerRefreshToken(reference, out string serverKey));
+        Assert.Equal(ServerKey, serverKey);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("0123456789ABCDEF0123456789ABCDEF")]
+    [InlineData("0123456789abcdef")]
+    [InlineData("0123456789abcdef0123456789abcdef0")]
+    [InlineData("0123456789abcdef/123456789abcdef")]
+    public void ForServerRefreshToken_AKeyOfAnotherShape_IsRefused(string serverKey)
+    {
+        Assert.Throws<ArgumentException>(() => SecretReference.ForServerRefreshToken(serverKey));
+    }
+
+    [Theory]
+    [InlineData("server/0123456789abcdef0123456789abcdef/other")]
+    [InlineData("server/0123456789ABCDEF0123456789ABCDEF/refresh")]
+    [InlineData("server//refresh")]
+    [InlineData("profile/0123456789abcdef0123456789abcdef/refresh")]
+    public void TryParseServerRefreshToken_AnotherReference_IsRefused(string reference)
+    {
+        Assert.False(SecretReference.TryParseServerRefreshToken(reference, out string serverKey));
+        Assert.Equal(string.Empty, serverKey);
+    }
+
+    /// <summary>
+    /// The paths that walk the store for a profile's sign ins (export, "sign in again", counting)
+    /// rely on this: a refresh token must never be taken for one of them.
+    /// </summary>
+    [Fact]
+    public void AServerReference_IsNeverReadAsAProfileReference()
+    {
+        string reference = SecretReference.ForServerRefreshToken(ServerKey);
+
+        Assert.False(SecretReference.TryParse(reference, out _, out _));
+        Assert.False(SecretReference.IsProfileReference(reference));
+        Assert.False(SecretReference.BelongsToProfile(reference, Guid.Parse(ServerKey)));
+        Assert.True(SecretReference.IsProfileReference(SecretReference.ForProfile(ProfileId, "Auth")));
     }
 
     [Fact]

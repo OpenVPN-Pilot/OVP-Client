@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
@@ -104,19 +105,36 @@ public sealed record ConfigurationUpdate(bool Saved, string? DuplicateOf);
 /// When a profile was last changed moves only when something about the profile itself changes, and
 /// only when it actually changes. Saving the editor without touching a field, or marking a
 /// favourite, is not a change to the profile.
+///
+/// Every change the server shares is reported to the change recorder inside the same save, so a
+/// change and the note that it still has to be sent are written together or not at all. Recording
+/// a connection is not reported: usage stays on this machine.
 /// </remarks>
 public sealed class ProfileStore : IProfileStore
 {
     private readonly IDbContextFactory<PilotDbContext> contextFactory;
     private readonly TimeProvider timeProvider;
+    private readonly IChangeRecorder changeRecorder;
+    private readonly IServerProfileMaintenance? serverProfiles;
 
-    public ProfileStore(IDbContextFactory<PilotDbContext> contextFactory, TimeProvider timeProvider)
+    /// <param name="serverProfiles">
+    /// Given on a server's copy only, where deleting a profile takes its stored sign ins with it.
+    /// A local profile's stay, as they always have.
+    /// </param>
+    public ProfileStore(
+        IDbContextFactory<PilotDbContext> contextFactory,
+        TimeProvider timeProvider,
+        IChangeRecorder changeRecorder,
+        IServerProfileMaintenance? serverProfiles = null)
     {
         ArgumentNullException.ThrowIfNull(contextFactory);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(changeRecorder);
 
         this.contextFactory = contextFactory;
         this.timeProvider = timeProvider;
+        this.changeRecorder = changeRecorder;
+        this.serverProfiles = serverProfiles;
     }
 
     public async Task<IReadOnlyList<Profile>> GetProfilesAsync(CancellationToken cancellationToken = default)
@@ -146,6 +164,7 @@ public sealed class ProfileStore : IProfileStore
                 ConnectCount = profile.ConnectCount,
                 Colour = profile.Colour,
                 Notes = profile.Notes,
+                UploadRefusedCode = profile.UploadRefusedCode,
             })
             .ToListAsync(cancellationToken);
     }
@@ -220,12 +239,19 @@ public sealed class ProfileStore : IProfileStore
             return;
         }
 
+        bool changed = profile.IsFavourite != isFavourite || (!isFavourite && profile.FavouriteSlot is not null);
+
         profile.IsFavourite = isFavourite;
 
         // A slot only makes sense while the profile is a favourite.
         if (!isFavourite)
         {
             profile.FavouriteSlot = null;
+        }
+
+        if (changed)
+        {
+            await changeRecorder.StageAsync(context, PendingChangeKind.Favourites, cancellationToken: cancellationToken);
         }
 
         await context.SaveChangesAsync(cancellationToken);
@@ -252,6 +278,8 @@ public sealed class ProfileStore : IProfileStore
             return;
         }
 
+        bool changed = profile.FavouriteSlot != slot || (slot is not null && !profile.IsFavourite);
+
         if (slot is { } number)
         {
             // The slot is unique, so whoever held it gives it up in the same transaction.
@@ -267,6 +295,11 @@ public sealed class ProfileStore : IProfileStore
         }
 
         profile.FavouriteSlot = slot;
+
+        if (changed)
+        {
+            await changeRecorder.StageAsync(context, PendingChangeKind.Favourites, cancellationToken: cancellationToken);
+        }
 
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -311,6 +344,7 @@ public sealed class ProfileStore : IProfileStore
 
         profile.Name = name.Trim();
         profile.UpdatedAt = timeProvider.GetUtcNow();
+        await StageUpdateAsync(context, profile, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -331,6 +365,7 @@ public sealed class ProfileStore : IProfileStore
 
         profile.Notes = normalised;
         profile.UpdatedAt = timeProvider.GetUtcNow();
+        await StageUpdateAsync(context, profile, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -362,11 +397,15 @@ public sealed class ProfileStore : IProfileStore
             return new ConfigurationUpdate(false, null);
         }
 
+        // The text, not the hash: a pulled profile carries the hash the server computed its own way.
+        bool edited = !string.Equals(profile.Configuration, configuration, StringComparison.Ordinal);
+
         // Read the way an import reads it, so an edited profile looks in the list exactly as the
         // same file imported fresh would.
         ProfileConfigurationFacts.Apply(profile, configuration);
         profile.UpdatedAt = timeProvider.GetUtcNow();
 
+        await StageUpdateAsync(context, profile, cancellationToken, configurationChanged: edited);
         await context.SaveChangesAsync(cancellationToken);
 
         return new ConfigurationUpdate(true, null);
@@ -387,6 +426,7 @@ public sealed class ProfileStore : IProfileStore
 
         profile.ProtectRoutes = protectRoutes;
         profile.UpdatedAt = timeProvider.GetUtcNow();
+        await StageUpdateAsync(context, profile, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -422,6 +462,7 @@ public sealed class ProfileStore : IProfileStore
         if (profile is not null)
         {
             profile.UpdatedAt = timeProvider.GetUtcNow();
+            await StageUpdateAsync(context, profile, cancellationToken);
         }
 
         context.ProfileTags.RemoveRange(existing);
@@ -440,24 +481,82 @@ public sealed class ProfileStore : IProfileStore
         }
 
         await context.SaveChangesAsync(cancellationToken);
-
-        // A tag nobody uses is noise in the sidebar, so it goes when its last profile lets it go.
-        await context.Tags
-            .Where(tag => !tag.Profiles.Any())
-            .ExecuteDeleteAsync(cancellationToken);
+        await RemoveUnusedTagsAsync(context, cancellationToken);
     }
 
     public async Task DeleteProfileAsync(Guid profileId, CancellationToken cancellationToken = default)
     {
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
-        await context.Profiles
-            .Where(profile => profile.Id == profileId)
-            .ExecuteDeleteAsync(cancellationToken);
+        Profile? profile = await context.Profiles.FindAsync([profileId], cancellationToken);
 
-        await context.Tags
+        if (profile is not null)
+        {
+            // Removed through the change tracker rather than in one statement, so the marker for the
+            // server is written by the same save. Sessions and tag links go with it through the
+            // cascade the schema declares.
+            context.Profiles.Remove(profile);
+            await changeRecorder.StageAsync(context, PendingChangeKind.ProfileDelete, profileId, cancellationToken: cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
+
+            if (serverProfiles is not null)
+            {
+                await serverProfiles.DeleteSecretsAsync([profileId], cancellationToken);
+            }
+        }
+
+        await RemoveUnusedTagsAsync(context, cancellationToken);
+    }
+
+    /// <summary>
+    /// Removes the tags no profile carries any more, and tells the server so.
+    /// </summary>
+    /// <remarks>
+    /// A tag nobody uses is noise in the sidebar, so it goes when its last profile lets it go. The
+    /// server keeps a tag until it is deleted there, and its next complete answer would bring the tag
+    /// back, so on a server's copy the deletion is sent like any other change.
+    /// </remarks>
+    private async Task RemoveUnusedTagsAsync(PilotDbContext context, CancellationToken cancellationToken)
+    {
+        List<Tag> unused = await context.Tags
             .Where(tag => !tag.Profiles.Any())
-            .ExecuteDeleteAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
+
+        if (unused.Count == 0)
+        {
+            return;
+        }
+
+        context.Tags.RemoveRange(unused);
+
+        foreach (Tag tag in unused)
+        {
+            await changeRecorder.StageAsync(context, PendingChangeKind.TagDelete, tag.Id, cancellationToken: cancellationToken);
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    private Task StageUpdateAsync(
+        PilotDbContext context,
+        Profile profile,
+        CancellationToken cancellationToken,
+        bool configurationChanged = false)
+    {
+        if (profile.UploadRefusedCode is not null)
+        {
+            // Changed after the server refused it, perhaps so that it will take it now. The server
+            // does not have it, so it is offered again as a new profile rather than as an update.
+            profile.UploadRefusedCode = null;
+            return changeRecorder.StageAsync(context, PendingChangeKind.ProfileCreate, profile.Id, cancellationToken: cancellationToken);
+        }
+
+        return changeRecorder.StageAsync(
+            context,
+            PendingChangeKind.ProfileUpdate,
+            profile.Id,
+            configurationChanged: configurationChanged,
+            cancellationToken: cancellationToken);
     }
 
     private sealed record TagLink(Guid ProfileId, string Name);

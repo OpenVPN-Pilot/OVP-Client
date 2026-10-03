@@ -1,0 +1,19 @@
+# The people the integration tests sign in as. Plain passwords, which the server accepts with a
+# warning at every start: this file belongs to a throwaway server on this machine and nothing else.
+# The tests disable carol to see the wipe directive and enable her again afterwards.
+
+users:
+  - username: alice
+    displayName: Alice Example
+    role: admin
+    password: "Alice-Test-Pass-2026"
+
+  - username: bob
+    displayName: Bob Example
+    role: user
+    password: "Bob-Test-Pass-2026"
+
+  - username: carol
+    displayName: Carol Example
+    role: user
+    password: "Carol-Test-Pass-2026"

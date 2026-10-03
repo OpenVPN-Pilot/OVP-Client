@@ -1,5 +1,9 @@
 using System.IO.Compression;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.Data.Import;
@@ -40,11 +44,38 @@ public interface IProfileImportService
     /// <summary>
     /// Stores the accepted candidates, optionally tagging them.
     /// </summary>
-    /// <returns>How many profiles were created.</returns>
-    public Task<int> CommitAsync(
+    /// <remarks>
+    /// On a server's copy each stored profile is also an upload: it is recorded for the server in
+    /// the same transaction, then a synchronisation sends it at once, in batches, and what the
+    /// server made of each is in the answer. Whatever could not be sent now stays here and goes
+    /// when the server can be reached; one the server refused is removed again.
+    /// </remarks>
+    public Task<ImportCommitResult> CommitAsync(
         IReadOnlyList<ImportCandidate> candidates,
         IReadOnlyList<string> tagNames,
         CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// What committing an import did.
+/// </summary>
+/// <param name="Created">Profiles stored here.</param>
+/// <param name="Uploads">
+/// On a server's copy, what became of each stored candidate, by its source path; empty on this
+/// computer's own library.
+/// </param>
+public sealed record ImportCommitResult(int Created, IReadOnlyDictionary<string, ImportUploadOutcome> Uploads)
+{
+    public bool WentToServer => Uploads.Count > 0;
+}
+
+/// <summary>
+/// What became of one imported profile on its way to the server.
+/// </summary>
+/// <param name="Upload">The server's answer, or null when it could not be sent yet.</param>
+public sealed record ImportUploadOutcome(ProfileUploadOutcome? Upload)
+{
+    public bool IsWaiting => Upload is null;
 }
 
 /// <summary>
@@ -91,19 +122,40 @@ public sealed class ProfileImportService : IProfileImportService
     private readonly IDbContextFactory<PilotDbContext> contextFactory;
     private readonly OvpnConfigInliner inliner;
     private readonly TimeProvider timeProvider;
+    private readonly IServerProfileMaintenance? serverProfiles;
+    private readonly ISyncEngine? engine;
+    private readonly IOutbox? outbox;
+    private readonly ILogger<ProfileImportService> logger;
 
+    /// <param name="engine">
+    /// The synchronisation of a server's copy, which sends what is imported; null on this
+    /// computer's own library, where an import stays here.
+    /// </param>
     public ProfileImportService(
         IDbContextFactory<PilotDbContext> contextFactory,
         OvpnConfigInliner inliner,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ISyncEngine? engine = null,
+        IOutbox? outbox = null,
+        IServerProfileMaintenance? serverProfiles = null,
+        ILogger<ProfileImportService>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(contextFactory);
         ArgumentNullException.ThrowIfNull(inliner);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
+        if (engine is not null && (outbox is null || serverProfiles is null))
+        {
+            throw new ArgumentException("A server's copy needs the outbox and the profile maintenance as well.", nameof(engine));
+        }
+
         this.contextFactory = contextFactory;
         this.inliner = inliner;
         this.timeProvider = timeProvider;
+        this.engine = engine;
+        this.outbox = outbox;
+        this.serverProfiles = serverProfiles;
+        this.logger = logger ?? NullLogger<ProfileImportService>.Instance;
     }
 
     public Task<ImportSelection> ExpandAsync(
@@ -163,7 +215,7 @@ public sealed class ProfileImportService : IProfileImportService
         return await importer.PrepareAsync(filePaths, cancellationToken);
     }
 
-    public async Task<int> CommitAsync(
+    public async Task<ImportCommitResult> CommitAsync(
         IReadOnlyList<ImportCandidate> candidates,
         IReadOnlyList<string> tagNames,
         CancellationToken cancellationToken = default)
@@ -171,17 +223,82 @@ public sealed class ProfileImportService : IProfileImportService
         ArgumentNullException.ThrowIfNull(candidates);
         ArgumentNullException.ThrowIfNull(tagNames);
 
-        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
-        ProfileImporter importer = new(context, inliner, timeProvider);
+        IReadOnlyList<Profile> created;
 
-        IReadOnlyList<Profile> created = await importer.CommitAsync(candidates, cancellationToken);
-
-        if (created.Count > 0 && tagNames.Count > 0)
+        await using (PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken))
         {
-            await ApplyTagsAsync(context, created, tagNames, cancellationToken);
+            // One transaction, so a profile and the note that it still has to be uploaded are
+            // written together or not at all.
+            await using IDbContextTransaction transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            ProfileImporter importer = new(context, inliner, timeProvider);
+
+            created = await importer.CommitAsync(candidates, cancellationToken);
+
+            if (created.Count > 0 && tagNames.Count > 0)
+            {
+                await ApplyTagsAsync(context, created, tagNames, cancellationToken);
+            }
+
+            if (outbox is not null && engine is not null)
+            {
+                foreach (Profile profile in created)
+                {
+                    await outbox.StageAsync(context, PendingChangeKind.ProfileCreate, profile.Id, cancellationToken: cancellationToken);
+                }
+
+                await context.SaveChangesAsync(cancellationToken);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
         }
 
-        return created.Count;
+        if (engine is null || created.Count == 0)
+        {
+            return new ImportCommitResult(created.Count, new Dictionary<string, ImportUploadOutcome>());
+        }
+
+        return await UploadAsync(created, cancellationToken);
+    }
+
+    /// <summary>
+    /// Sends what was just stored, and removes again what the server refused.
+    /// </summary>
+    private async Task<ImportCommitResult> UploadAsync(IReadOnlyList<Profile> created, CancellationToken cancellationToken)
+    {
+        SyncCycleResult cycle = await engine!.SynchronizeAsync(cancellationToken);
+
+        Dictionary<string, ImportUploadOutcome> outcomes = new(StringComparer.Ordinal);
+        List<Guid> refused = [];
+
+        foreach (Profile profile in created)
+        {
+            ProfileUploadOutcome? upload = cycle.Uploads.GetValueOrDefault(profile.Id);
+            outcomes[profile.SourcePath ?? profile.Id.ToString()] = new ImportUploadOutcome(upload);
+
+            if (upload?.Kind == ProfileUploadKind.Rejected)
+            {
+                refused.Add(profile.Id);
+            }
+        }
+
+        if (refused.Count > 0)
+        {
+            // The person sees why in the review list; a copy the server will never take would only
+            // stay here as a profile nobody else has.
+            await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+            await context.PendingChanges.Where(change => change.EntityId != null && refused.Contains(change.EntityId.Value)).ExecuteDeleteAsync(cancellationToken);
+            await context.Profiles.Where(profile => refused.Contains(profile.Id)).ExecuteDeleteAsync(cancellationToken);
+            await context.Tags.Where(tag => !tag.Profiles.Any()).ExecuteDeleteAsync(cancellationToken);
+            await serverProfiles!.DeleteSecretsAsync(refused, cancellationToken);
+        }
+
+        int uploaded = outcomes.Values.Count(outcome => outcome.Upload?.Kind == ProfileUploadKind.Created);
+        int duplicates = outcomes.Values.Count(outcome => outcome.Upload?.Kind == ProfileUploadKind.Duplicate);
+        int waiting = outcomes.Values.Count(outcome => outcome.IsWaiting);
+
+        ServerLibraryLog.Imported(logger, created.Count, uploaded, duplicates, refused.Count, waiting);
+
+        return new ImportCommitResult(created.Count - refused.Count, outcomes);
     }
 
     private static async Task ApplyTagsAsync(

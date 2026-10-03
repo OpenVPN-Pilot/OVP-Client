@@ -5,9 +5,12 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenVpnPilot.App.Localization;
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.App.Services.Server;
+using OpenVpnPilot.App.Services.Storage;
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
+using OpenVpnPilot.Core.Server;
 using OpenVpnPilot.Core.Settings;
 using OpenVpnPilot.Core.Storage;
 using OpenVpnPilot.Data;
@@ -51,7 +54,36 @@ internal static class AppHost
     {
         UserApplicationPaths paths = new();
 
+        // Before anything is composed, because every store is composed against the one file this
+        // decides. Switching the mode restarts the process, so it is decided exactly once.
+        ActiveStorage storage = ActiveStorage.Resolve(paths, StorageModeReader.Read(paths.SettingsPath));
+
+        return Compose(paths, storage, App.Startup.Headless).Build();
+    }
+
+    /// <summary>
+    /// Registers the application against the given locations and store, ready to be built.
+    /// </summary>
+    /// <remarks>
+    /// The parameters exist so that the whole composition can be built and checked in a test,
+    /// against a temporary folder and in either mode, without touching anyone's own data. Server
+    /// mode composes a graph the local library never does, so a starting copy is not enough to know
+    /// that both are complete.
+    /// </remarks>
+    /// <param name="providerOptions">How strictly the container checks itself when it is built,
+    /// or null for the host's own choice.</param>
+    internal static HostApplicationBuilder Compose(
+        IApplicationPaths paths,
+        ActiveStorage storage,
+        bool headless,
+        ServiceProviderOptions? providerOptions = null)
+    {
         HostApplicationBuilder builder = Host.CreateApplicationBuilder();
+
+        if (providerOptions is not null)
+        {
+            builder.ConfigureContainer(new DefaultServiceProviderFactory(providerOptions));
+        }
 
         // Built before the logger, because the logger writes into it. Both are handed to the
         // container afterwards so that everything else reaches them the ordinary way.
@@ -66,12 +98,24 @@ internal static class AppHost
         builder.Services.AddSingleton<OpenVpnLogRelay>();
 
         builder.Services.AddSingleton<IApplicationPaths>(paths);
+        builder.Services.AddSingleton<IActiveStorage>(storage);
         builder.Services.AddSingleton(TimeProvider.System);
 
         builder.Services.AddDbContextFactory<PilotDbContext>(options =>
-            options.UseSqlite($"Data Source={paths.DatabasePath}"));
+            options.UseSqlite($"Data Source={storage.DatabasePath}"));
 
-        builder.Services.AddSingleton<IProfileStore, ProfileStore>();
+        builder.Services.AddSingleton<IStorageModeContext>(storage);
+        builder.Services.AddSingleton<IOutbox, Outbox>();
+        builder.Services.AddSingleton<IChangeRecorder, ChangeRecorder>();
+        builder.Services.AddSingleton<IServerProfileMaintenance, ServerProfileMaintenance>();
+        builder.Services.AddSingleton<IUserInterfaceThread, AvaloniaUserInterfaceThread>();
+        RegisterSynchronisation(builder.Services, storage);
+
+        builder.Services.AddSingleton<IProfileStore>(provider => new ProfileStore(
+            provider.GetRequiredService<IDbContextFactory<PilotDbContext>>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<IChangeRecorder>(),
+            storage.IsServerMode ? provider.GetRequiredService<IServerProfileMaintenance>() : null));
         builder.Services.AddSingleton<ISessionStore, SessionStore>();
         builder.Services.AddSingleton<IHotkeyStore, HotkeyStore>();
         builder.Services.AddSingleton<IProfileImportService, ProfileImportService>();
@@ -82,6 +126,7 @@ internal static class AppHost
 
         RegisterSettings(builder.Services, paths);
         RegisterLocalization(builder.Services, paths);
+        RegisterServer(builder.Services, storage, headless);
 
         if (OperatingSystem.IsWindows())
         {
@@ -103,6 +148,8 @@ internal static class AppHost
         builder.Services.AddSingleton<IManagementChannelFactory, TcpManagementChannelFactory>();
         builder.Services.AddSingleton<IPortAllocator, LoopbackPortAllocator>();
         builder.Services.AddSingleton<ConnectionManager>();
+        builder.Services.AddSingleton<IActiveTunnels, ConnectionManagerTunnels>();
+        builder.Services.AddSingleton<IStorageModeSwitcher, StorageModeSwitcher>();
 
         // The name cache sits between the view model and the credential prompt. Pointing the
         // prompt straight at the view model would close a dependency cycle through the connection
@@ -111,6 +158,13 @@ internal static class AppHost
         builder.Services.AddSingleton<IProfileNameLookup>(
             provider => provider.GetRequiredService<ProfileNameCache>());
         builder.Services.AddSingleton<ICredentialProvider, StoredCredentialProvider>();
+
+        // What was typed into the prompt and worked is shared with a server's vault. On the local
+        // library the ledger keeps nothing and the recorder records nothing.
+        builder.Services.AddSingleton<TypedCredentials>();
+        builder.Services.AddSingleton<ITypedCredentialLedger>(provider => provider.GetRequiredService<TypedCredentials>());
+        builder.Services.AddSingleton<IHeldVaultSecrets>(provider => provider.GetRequiredService<TypedCredentials>());
+        builder.Services.AddSingleton<VaultShareRecorder>();
 
         builder.Services.AddSingleton<SessionRecorder>();
         builder.Services.AddSingleton<NotificationService>();
@@ -122,6 +176,8 @@ internal static class AppHost
         builder.Services.AddSingleton<MainWindowViewModel>();
         builder.Services.AddSingleton<QuickSwitcherViewModel>();
         builder.Services.AddSingleton<TrayIconController>();
+        builder.Services.AddSingleton<ServerStatusViewModel>();
+        builder.Services.AddTransient<StorageSettingsViewModel>();
 
         // One window at a time, but a fresh view model each time it opens, so a screen that was
         // closed without saving does not reopen with the abandoned edits still in it.
@@ -131,20 +187,117 @@ internal static class AppHost
         builder.Services.AddTransient<ImportViewModel>();
         builder.Services.AddTransient<ExportViewModel>();
 
-        return builder.Build();
+        return builder;
     }
 
-    private static void RegisterSettings(IServiceCollection services, UserApplicationPaths paths)
+    private static void RegisterSettings(IServiceCollection services, IApplicationPaths paths)
     {
         services.AddSingleton<JsonSettingsService>(provider => new JsonSettingsService(
             paths.SettingsPath,
             provider.GetRequiredService<ILogger<JsonSettingsService>>()));
 
-        services.AddSingleton<ISettingsService>(
-            provider => provider.GetRequiredService<JsonSettingsService>());
+        // Everything saves through the recording service, so a change to what follows the person
+        // to a server is noted for it. On the local library the recorder notes nothing.
+        services.AddSingleton(provider => new RecordingSettingsService(
+            provider.GetRequiredService<JsonSettingsService>(),
+            provider.GetRequiredService<IChangeRecorder>(),
+            provider.GetRequiredService<IUserInterfaceThread>()));
+
+        services.AddSingleton<ISettingsService>(provider => provider.GetRequiredService<RecordingSettingsService>());
+        services.AddSingleton<IPortableSettings>(provider => provider.GetRequiredService<RecordingSettingsService>());
     }
 
-    private static void RegisterLocalization(IServiceCollection services, UserApplicationPaths paths)
+    /// <summary>
+    /// The synchronisation, which exists only while the application runs against a server.
+    /// </summary>
+    /// <remarks>
+    /// It is registered here and never resolved on the local library, so the local mode does not
+    /// need a server connection to start. The connection itself is registered by the sign in side,
+    /// and whoever signs in starts the engine; nothing starts it from here.
+    /// </remarks>
+    private static void RegisterSynchronisation(IServiceCollection services, ActiveStorage storage)
+    {
+        services.AddSingleton<ILibraryChangeNotifier, LibraryChangeNotifier>();
+        services.AddSingleton<LibraryRefresh>();
+        services.AddSingleton<IServerNotices, ServerNotices>();
+
+        if (storage.IsServerMode)
+        {
+            services.AddSingleton<INetworkAvailability, SystemNetworkAvailability>();
+            services.AddSingleton<IRemovedProfileTunnels, ConnectionManagerRemovedTunnels>();
+            services.AddSingleton<IServerCredentialsReset, ServerCredentialsReset>();
+            services.AddSingleton<ServerLibraryPermissions>();
+            services.AddSingleton<ILibraryPermissions>(provider => provider.GetRequiredService<ServerLibraryPermissions>());
+            services.AddSingleton<ISharedSignInReplacement, SharedSignInReplacement>();
+            services.AddSingleton<ISyncEngine, SyncEngine>();
+        }
+        else
+        {
+            services.AddSingleton<ILibraryPermissions, LocalLibraryPermissions>();
+        }
+    }
+
+    /// <summary>
+    /// What talks to a server, and in Server mode the connection to the one this copy works with.
+    /// </summary>
+    /// <remarks>
+    /// The factories exist in both modes, because a server is checked and signed in to from the local
+    /// library before switching to it: the first start does, and so does choosing a server later.
+    /// They contact nothing until they are used. The connection itself, the session, the
+    /// coordinator and the wipe exist only in Server mode, where there is exactly one server for the
+    /// life of the process; the local library composes nothing that could reach a server by itself.
+    /// </remarks>
+    private static void RegisterServer(IServiceCollection services, ActiveStorage storage, bool headless)
+    {
+        services.AddSingleton<IClientVersionProvider>(_ => new AssemblyClientVersionProvider(typeof(AppHost).Assembly));
+        services.AddSingleton<IInstallationIdProvider, SettingsInstallationId>();
+        services.AddSingleton<IServerHttpClientFactory>(provider => new ServerHttpClientFactory(
+            provider.GetRequiredService<IClientVersionProvider>(),
+            provider.GetRequiredService<IInstallationIdProvider>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<ILoggerFactory>()));
+        services.AddSingleton<IServerConnectionFactory, ServerConnectionFactory>();
+        services.AddSingleton<IEntraSignIn, MsalEntraSignIn>();
+
+        // A sign in from this computer's library, or to another server, can be answered with the wipe
+        // directive too; what is kept of that server then goes, without switching anything.
+        services.AddSingleton<IServerLeftoversNotice>(provider => new WindowServerLeftoversNotice(
+            provider.GetRequiredService<ILocalizer>(),
+            showsWindows: !App.Startup.Headless,
+            provider.GetService<IApplicationActivation>()));
+        services.AddSingleton<IServerLeftovers, ServerLeftovers>();
+
+        if (storage is not { IsServerMode: true, ServerAddress: { } address, ServerKey: { } key })
+        {
+            return;
+        }
+
+        services.AddSingleton(provider =>
+            provider.GetRequiredService<IServerConnectionFactory>().Create(new Uri(address), key));
+        services.AddSingleton(provider => provider.GetRequiredService<IServerConnection>().Session);
+        services.AddSingleton(provider => provider.GetRequiredService<IServerConnection>().Api);
+        services.AddSingleton(provider => provider.GetRequiredService<IServerConnection>().Wipe);
+
+        services.AddSingleton<IServerAccountState, ServerAccountState>();
+        services.AddSingleton<IServerWipe, ServerWipe>();
+        services.AddSingleton<IAccountRevokedNotice>(provider => new WindowAccountRevokedNotice(
+            provider.GetRequiredService<ILocalizer>(),
+            showsWindows: !headless,
+            provider.GetService<IApplicationActivation>()));
+
+        // One coordinator, which is also the sign in everything in this mode uses, so that every
+        // sign in passes its rule for a different person.
+        services.AddSingleton<ServerSessionCoordinator>();
+        services.AddSingleton<IServerSessionCoordinator>(provider => provider.GetRequiredService<ServerSessionCoordinator>());
+        services.AddSingleton<IServerSignIn>(provider => provider.GetRequiredService<ServerSessionCoordinator>());
+        services.AddSingleton<IServerSignOut>(provider => provider.GetRequiredService<ServerSessionCoordinator>());
+
+        // What the status bar, the banners, the tray and the storage settings show about the server.
+        services.AddSingleton<ServerStatusSource>();
+        services.AddSingleton<IServerStatusSource>(provider => provider.GetRequiredService<ServerStatusSource>());
+    }
+
+    private static void RegisterLocalization(IServiceCollection services, IApplicationPaths paths)
     {
         // Wording that names a part of one system, a key or a component, is chosen by platform.
         string? platform = OperatingSystem.IsMacOS() ? "macos" : null;
@@ -162,7 +315,7 @@ internal static class AppHost
     }
 
     [SupportedOSPlatform("windows")]
-    private static void RegisterWindowsServices(IServiceCollection services, UserApplicationPaths paths)
+    private static void RegisterWindowsServices(IServiceCollection services, IApplicationPaths paths)
     {
         services.AddSingleton<InteractiveServicePipeClient>();
         services.AddSingleton<IOpenVpnLauncher, WindowsOpenVpnLauncher>();
@@ -172,6 +325,7 @@ internal static class AppHost
         services.AddSingleton<IAutoStartManager, RegistryAutoStartManager>();
         services.AddSingleton<IGlobalHotkeyService, WindowsGlobalHotkeyService>();
         services.AddSingleton<IWindowCloseOrigin, WindowsCloseOrigin>();
+        services.AddSingleton<IApplicationRestart, WindowsApplicationRestart>();
 
         // The icon and the notifications are one entry in the notification area, so they are one
         // object registered under both interfaces rather than two that would each add an icon.
@@ -191,7 +345,7 @@ internal static class AppHost
     /// status item the way a balloon is attached to a notification area icon.
     /// </remarks>
     [SupportedOSPlatform("macos")]
-    private static void RegisterMacServices(IServiceCollection services, UserApplicationPaths paths)
+    private static void RegisterMacServices(IServiceCollection services, IApplicationPaths paths)
     {
         services.AddSingleton<HelperSession>();
         services.AddSingleton<IOpenVpnLauncher, MacOpenVpnLauncher>();
@@ -204,6 +358,8 @@ internal static class AppHost
         services.AddSingleton<IGlobalHotkeyService, MacGlobalHotkeyService>();
         services.AddSingleton<ISystemTrayIcon, MacStatusItem>();
         services.AddSingleton<IDockPresence, MacDockPresence>();
+        services.AddSingleton<IApplicationActivation, MacApplicationActivation>();
+        services.AddSingleton<IApplicationRestart, MacApplicationRestart>();
 
         // Without this the application menu was never filled and kept the framework's entry about
         // itself, although everything that fills it existed.
@@ -226,7 +382,7 @@ internal static class AppHost
     /// </remarks>
     private static void ConfigureLogging(
         HostApplicationBuilder builder,
-        UserApplicationPaths paths,
+        IApplicationPaths paths,
         LogHub hub,
         LoggingLevelSwitch levelSwitch)
     {

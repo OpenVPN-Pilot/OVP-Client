@@ -29,14 +29,24 @@ public sealed class WindowCoordinator
     private readonly Dictionary<AppScreen, Window> open = [];
 
     /// <summary>
+    /// Who asked the main window to close, on a platform where another program can.
+    /// </summary>
+    private readonly IWindowCloseOrigin? closeOrigin;
+
+    /// <summary>
     /// The platform's list of running applications, on a platform that keeps one apart from windows.
     /// </summary>
     private readonly IDockPresence? dock;
 
     /// <summary>
-    /// Who asked the main window to close, on a platform where another program can.
+    /// What brings the application to the front, on a platform where a window does not.
     /// </summary>
-    private readonly IWindowCloseOrigin? closeOrigin;
+    private readonly IApplicationActivation? activation;
+
+    /// <summary>
+    /// The platform's own panel about the application, where there is one.
+    /// </summary>
+    private readonly IApplicationMenu? applicationMenu;
     private readonly List<string> pendingImports = [];
     private bool importQueued;
 
@@ -56,8 +66,10 @@ public sealed class WindowCoordinator
         // Read once, because the window is also closed while the application is tearing down and
         // the container that answers this is one of the things being disposed.
         settings = services.GetRequiredService<ISettingsService>();
-        dock = services.GetService<IDockPresence>();
         closeOrigin = services.GetService<IWindowCloseOrigin>();
+        dock = services.GetService<IDockPresence>();
+        activation = services.GetService<IApplicationActivation>();
+        applicationMenu = services.GetService<IApplicationMenu>();
 
         this.mainWindow = mainWindow;
         this.viewModel = viewModel;
@@ -129,13 +141,18 @@ public sealed class WindowCoordinator
             }
         };
 
+        // The setting that decides it is one a person can change while this runs, from here or from
+        // the menu bar entry, and the Dock is expected to answer at once rather than on the next start.
+        settings.Changed += (_, _) => UpdateDockPresence();
+
         // Once at the start as well, for a copy that starts with its window hidden and so never
         // reports the window changing.
         UpdateDockPresence();
     }
 
     /// <summary>
-    /// Lists the application among the running ones while a window of its own is open.
+    /// Lists the application among the running ones while a window of its own is open, where the
+    /// settings ask for it.
     /// </summary>
     /// <remarks>
     /// The palettes do not count. They are there for a moment, over whatever else is in front, and an
@@ -158,7 +175,7 @@ public sealed class WindowCoordinator
                 || open.Any(entry => entry.Key is not (AppScreen.QuickSwitcher or AppScreen.QuickDisconnect)
                     && entry.Value.IsVisible);
 
-            dock.SetListed(anyWindow);
+            dock.SetListed(settings.Current.General.ShowInDock && anyWindow);
         });
     }
 
@@ -229,12 +246,21 @@ public sealed class WindowCoordinator
     /// <summary>
     /// Brings a window forward from wherever it was, including from the tray.
     /// </summary>
-    public static void Reveal(Window window)
+    /// <remarks>
+    /// Activating the window is not enough everywhere. An application that lives in the menu bar and
+    /// is not in the Dock is not made the front application by showing a window of its own, so on
+    /// macOS the window appeared behind whatever was in front and did not take the keyboard. The
+    /// application is brought forward first, and the window then activates within it.
+    /// </remarks>
+    public void Reveal(Window window)
     {
         ArgumentNullException.ThrowIfNull(window);
 
         window.Show();
         window.WindowState = WindowState.Normal;
+
+        activation?.BringToFront();
+
         window.Activate();
     }
 
@@ -261,8 +287,24 @@ public sealed class WindowCoordinator
                 viewModel.DisconnectAllCommand.Execute(null);
                 break;
 
+            case TrayIconController.AboutAction:
+                applicationMenu?.ShowAbout();
+                break;
+
+            case TrayIconController.ShowInDockAction:
+                // Not waited for: the settings service raises its change event as part of saving,
+                // and the Dock, the menu entry and the settings screen all follow from that. A menu
+                // entry that blocked on a file write would be a menu entry that hangs.
+                _ = settings.UpdateAsync(current =>
+                    current.General.ShowInDock = !current.General.ShowInDock);
+                break;
+
             case TrayIconController.QuitAction:
                 lifetime.Shutdown();
+                break;
+
+            case TrayIconController.SyncNowAction:
+                services.GetService<Server.IServerStatusSource>()?.RequestSync();
                 break;
 
             default:
@@ -324,11 +366,44 @@ public sealed class WindowCoordinator
         }
     }
 
+    /// <summary>
+    /// Opens the log window, or brings it forward, showing only the lines of one source.
+    /// </summary>
+    /// <param name="source">The source to show, or null for every line.</param>
+    public void OpenLog(LogSource? source)
+    {
+        Open(AppScreen.Log);
+
+        if (open.TryGetValue(AppScreen.Log, out Window? window) && window.DataContext is LogViewModel model)
+        {
+            model.ShowSource(source);
+        }
+    }
+
     public void Open(AppScreen screen)
     {
         if (screen == AppScreen.MainWindow)
         {
             Reveal(mainWindow);
+            return;
+        }
+
+        if (screen == AppScreen.ServerLog)
+        {
+            OpenLog(LogSource.Server);
+            return;
+        }
+
+        if (screen == AppScreen.StorageSettings)
+        {
+            Open(AppScreen.Settings);
+
+            if (open.TryGetValue(AppScreen.Settings, out Window? settingsWindow)
+                && settingsWindow.DataContext is SettingsViewModel settingsModel)
+            {
+                settingsModel.ShowPage(SettingsPage.Storage);
+            }
+
             return;
         }
 
@@ -374,8 +449,65 @@ public sealed class WindowCoordinator
         AppScreen.Import => CreateImport(),
         AppScreen.Export => CreateExport(),
         AppScreen.ProfileEditor => CreateProfileEditor(),
+        AppScreen.ServerSwitch => CreateServerSwitch(),
+        AppScreen.ServerSignIn => CreateServerSignIn(),
         _ => null,
     };
+
+    /// <summary>
+    /// The address and sign in steps of the first start, for switching to a server from the settings.
+    /// </summary>
+    /// <remarks>
+    /// Signing in succeeds before anything is written, and the switch then restarts the application,
+    /// so a window given up on leaves everything as it was.
+    /// </remarks>
+    private FirstRunWindow CreateServerSwitch()
+    {
+        FirstRunViewModel model = ActivatorUtilities.CreateInstance<FirstRunViewModel>(services);
+        Core.Storage.IActiveStorage storage = services.GetRequiredService<Core.Storage.IActiveStorage>();
+
+        model.BeginServerSwitch(settings.Current.Storage.ServerUrl ?? storage.ServerAddress, storage.ServerAddress);
+
+        FirstRunWindow window = new() { DataContext = model };
+
+        model.Cancelled += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            if (window.IsVisible)
+            {
+                window.Close();
+            }
+        });
+
+        window.Closed += (_, _) => model.Dispose();
+
+        return window;
+    }
+
+    /// <summary>
+    /// Signing in again to the server the application works with. Not offered on the local library.
+    /// </summary>
+    private ServerSignInWindow? CreateServerSignIn()
+    {
+        if (services.GetService<Core.Server.IServerSignIn>() is not { } signIn
+            || services.GetService<Core.Server.IServerApi>() is not { } api)
+        {
+            return null;
+        }
+
+        ServerSignInViewModel model = new(
+            services.GetRequiredService<Core.Localization.ILocalizer>(),
+            signIn,
+            services.GetRequiredService<Server.IEntraSignIn>(),
+            api);
+
+        ServerSignInWindow window = new() { DataContext = model };
+
+        model.Closed += (_, _) => window.Close();
+        window.Opened += async (_, _) => await model.LoadAsync();
+        window.Closed += (_, _) => model.Dispose();
+
+        return window;
+    }
 
     private QuickSwitcherWindow CreateQuickSwitcher(QuickSwitcherMode mode)
     {
@@ -445,6 +577,7 @@ public sealed class WindowCoordinator
         model.ScreenRequested += (_, screen) => Open(screen);
         model.ProfileReloadRequested += async (_, _) => await viewModel.LoadAsync();
         window.Opened += async (_, _) => await model.LoadAsync();
+        window.Closed += (_, _) => model.Dispose();
 
         return window;
     }
@@ -472,8 +605,23 @@ public sealed class WindowCoordinator
         return window;
     }
 
-    private ImportWindow CreateImport()
+    /// <summary>
+    /// Whether the person may change what a server shares; always true on the local library.
+    /// </summary>
+    /// <remarks>
+    /// Asked here as well as by the buttons, because a dropped file, the settings screen and a
+    /// command from another process all open the import too.
+    /// </remarks>
+    private bool CanChangeShared =>
+        services.GetService<Server.ILibraryPermissions>()?.CanChangeShared != false;
+
+    private ImportWindow? CreateImport()
     {
+        if (!CanChangeShared)
+        {
+            return null;
+        }
+
         ImportViewModel model = services.GetRequiredService<ImportViewModel>();
         ImportWindow window = new() { DataContext = model };
 
@@ -514,7 +662,9 @@ public sealed class WindowCoordinator
             services.GetRequiredService<IProfileStore>(),
             services.GetRequiredService<Core.Localization.ILocalizer>(),
             profile,
-            startsInPlainText: settings.Current.General.ProfileEditor == ProfileEditorView.PlainText);
+            startsInPlainText: settings.Current.General.ProfileEditor == ProfileEditorView.PlainText,
+            canChangeShared: CanChangeShared,
+            sharedSignIns: services.GetService<Server.ISharedSignInReplacement>());
 
         ProfileEditorWindow window = new() { DataContext = model };
 

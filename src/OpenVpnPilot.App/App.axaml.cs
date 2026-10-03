@@ -11,17 +11,21 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenVpnPilot.App.Localization;
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.App.Services.Server;
+using OpenVpnPilot.App.Services.Storage;
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.App.Views;
 using OpenVpnPilot.Core.Abstractions;
+using OpenVpnPilot.Core.Server;
 using OpenVpnPilot.Core.Settings;
+using OpenVpnPilot.Core.Storage;
 using OpenVpnPilot.Data;
 using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.OpenVpn.Runtime;
 
 namespace OpenVpnPilot.App;
 
-public partial class App : Application
+public partial class App : Application, IDisposable
 {
     /// <summary>
     /// Set before the framework starts, so the running copy can be brought forward when a second
@@ -51,6 +55,9 @@ public partial class App : Application
     private static readonly TimeSpan StepTimeout = TimeSpan.FromSeconds(2);
 
     private IHost? host;
+
+    // Cancelled first when the application ends, so start up work still under way stops with it.
+    private readonly CancellationTokenSource lifetime = new();
     private WindowCoordinator? windows;
     private ApplicationMenuController? applicationMenu;
 
@@ -91,6 +98,11 @@ public partial class App : Application
         windows = new WindowCoordinator(host.Services, window, viewModel, desktop);
         windows.Attach();
 
+        // The server's place in the status bar and its banners, or the "Local" label.
+        ServerStatusViewModel serverStatus = host.Services.GetRequiredService<ServerStatusViewModel>();
+        serverStatus.ScreenRequested += (_, screen) => windows.Open(screen);
+        window.AttachServerStatus(serverStatus);
+
         // Before anything that takes time: a file opened from the Finder that started this process
         // arrives as an activation right after launch, and one raised before a handler exists is lost.
         AttachActivation(window);
@@ -98,29 +110,12 @@ public partial class App : Application
 
         desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-        // The main window is handed to the lifetime only when it is meant to appear. The lifetime
-        // shows whatever it is given once startup returns, so assigning it here and deciding later
-        // not to show it is not a choice that gets respected: a copy asked to start with no window
-        // still got one.
-
-        StartServices(desktop, window, viewModel, settings);
-
-        if (InstanceGuard is not null)
-        {
-            InstanceGuard.ActivationRequested += (_, _) =>
-                Dispatcher.UIThread.Post(() => WindowCoordinator.Reveal(window));
-
-            // The companion command drives the tunnels this copy owns rather than starting its own.
-            RemoteCommandHandler remote = host.Services.GetRequiredService<RemoteCommandHandler>();
-            remote.ShutdownRequested += (_, _) => desktop.Shutdown();
-
-            // A configuration opened from the shell while a copy is already running arrives here,
-            // because the second process hands its arguments over and exits.
-            remote.ImportRequested += (_, path) =>
-                Dispatcher.UIThread.Post(() => windows!.QueueImport([path]));
-
-            InstanceGuard.CommandHandler = remote.HandleAsync;
-        }
+        // Switching between the local library and a server ends this copy once the next one has been
+        // started. The tunnels are already down, because switching is refused while one is up, and
+        // the wipe ends them itself before it leaves. Attached before anything can switch, the first
+        // start included.
+        host.Services.GetRequiredService<IStorageModeSwitcher>().ShutdownRequested += (_, _) =>
+            Dispatcher.UIThread.Post(() => desktop.Shutdown());
 
         // Closing the application must not leave tunnels running unattended, and Exit is the only
         // event that reports every way out. Measured against Avalonia 12.1: ending the Windows
@@ -130,7 +125,101 @@ public partial class App : Application
         // the first moment at which nothing is left that could ask for a service this disposes.
         desktop.Exit += (_, _) => Teardown();
 
+        // The main window is handed to the lifetime only when it is meant to appear. The lifetime
+        // shows whatever it is given once startup returns, so assigning it here and deciding later
+        // not to show it is not a choice that gets respected: a copy asked to start with no window
+        // still got one.
+        void Proceed()
+        {
+            StartServices(desktop, window, viewModel, settings);
+            AttachInstanceGuard(desktop, window);
+        }
+
+        if (!ShowSetupFirst(Proceed))
+        {
+            Proceed();
+        }
+
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private void AttachInstanceGuard(IClassicDesktopStyleApplicationLifetime desktop, MainWindow window)
+    {
+        if (InstanceGuard is null)
+        {
+            return;
+        }
+
+        InstanceGuard.ActivationRequested += (_, _) =>
+            Dispatcher.UIThread.Post(() => windows!.Reveal(window));
+
+        // The companion command drives the tunnels this copy owns rather than starting its own.
+        RemoteCommandHandler remote = host!.Services.GetRequiredService<RemoteCommandHandler>();
+        remote.ShutdownRequested += (_, _) => desktop.Shutdown();
+
+        // A configuration opened from the shell while a copy is already running arrives here,
+        // because the second process hands its arguments over and exits.
+        remote.ImportRequested += (_, path) =>
+            Dispatcher.UIThread.Post(() => windows!.QueueImport([path]));
+
+        InstanceGuard.CommandHandler = remote.HandleAsync;
+    }
+
+    /// <summary>
+    /// Shows what has to happen before the main window, if anything does, and goes on afterwards.
+    /// </summary>
+    /// <remarks>
+    /// On a true first start the person is asked where the profiles should live. In the copy a server
+    /// setup restarted into, the sign in made before the restart is confirmed and the first
+    /// synchronisation runs. Either way the main window comes after, so the first list a person sees
+    /// is the one they chose. Choosing the server ends this copy through the switcher, so
+    /// <paramref name="proceed"/> is then never called.
+    /// </remarks>
+    /// <returns>True when a window was shown that calls <paramref name="proceed"/> when it is done.</returns>
+    private bool ShowSetupFirst(Action proceed)
+    {
+        IServiceProvider services = host!.Services;
+        IActiveStorage storage = services.GetRequiredService<IActiveStorage>();
+        bool? fileExisted = services.GetRequiredService<JsonSettingsService>().FileExistedAtLoad;
+
+        Window setup;
+        Action release;
+
+        if (FirstRun.ShouldAsk(fileExisted, storage, Startup.Headless))
+        {
+            FirstRunViewModel model = ActivatorUtilities.CreateInstance<FirstRunViewModel>(services);
+            setup = new FirstRunWindow { DataContext = model };
+            model.Finished += (_, _) => Dispatcher.UIThread.Post(() => Leave(setup, proceed));
+            release = model.Dispose;
+        }
+        else if (storage.IsServerMode && Startup.FirstSynchronisation && !Startup.Headless)
+        {
+            FirstSyncViewModel model = ActivatorUtilities.CreateInstance<FirstSyncViewModel>(services);
+            setup = new FirstSyncWindow { DataContext = model };
+            model.Finished += (_, _) => Dispatcher.UIThread.Post(() => Leave(setup, proceed));
+            release = model.Dispose;
+        }
+        else
+        {
+            return false;
+        }
+
+        // Released however the window ends, the application shutting down for a restart included.
+        setup.Closed += (_, _) => release();
+        setup.Show();
+        services.GetService<IApplicationActivation>()?.BringToFront();
+        setup.Activate();
+        return true;
+    }
+
+    private static void Leave(Window setup, Action proceed)
+    {
+        if (setup.IsVisible)
+        {
+            setup.Close();
+        }
+
+        proceed();
     }
 
     private void StartServices(
@@ -150,9 +239,14 @@ public partial class App : Application
         Version? version = typeof(App).Assembly.GetName().Version;
 
         AppLog.Started(logger, version, Environment.OSVersion.VersionString);
+        ReportStorage(services.GetRequiredService<IActiveStorage>(), logger);
 
         services.GetRequiredService<SessionRecorder>().Attach();
+        services.GetRequiredService<VaultShareRecorder>().Attach();
         services.GetRequiredService<PingMonitor>().Start();
+
+        // What the synchronisation writes reaches the list and the shortcuts through this.
+        services.GetRequiredService<LibraryRefresh>().Attach();
 
         // A headless copy has no notification area entry, and a balloon has nothing to hang off.
         if (!Startup.Headless)
@@ -162,7 +256,7 @@ public partial class App : Application
             services.GetRequiredService<NotificationService>().ProfileActivated += (_, profileId) =>
                 Dispatcher.UIThread.Post(() =>
                 {
-                    WindowCoordinator.Reveal(window);
+                    windows!.Reveal(window);
                     viewModel.SelectProfile(profileId);
                 });
         }
@@ -177,7 +271,7 @@ public partial class App : Application
         {
             TrayIconController tray = services.GetRequiredService<TrayIconController>();
             tray.Attach();
-            tray.ShowWindowRequested += (_, _) => WindowCoordinator.Reveal(window);
+            tray.ShowWindowRequested += (_, _) => windows!.Reveal(window);
             tray.MenuActionRequested += (_, action) => windows!.HandleTrayAction(action, desktop);
         }
 
@@ -198,7 +292,9 @@ public partial class App : Application
             window.Show();
         }
 
-        Dispatcher.UIThread.Post(async () => await StartBackgroundWorkAsync());
+        // Taken now: the posted work may run after the teardown has disposed the source.
+        CancellationToken stopping = lifetime.Token;
+        Dispatcher.UIThread.Post(async () => await StartBackgroundWorkAsync(stopping));
 
         if (Startup.HasActions)
         {
@@ -206,6 +302,25 @@ public partial class App : Application
         }
     }
 
+    /// <summary>
+    /// Records which store this run works on, which every later line of the log depends on.
+    /// </summary>
+    private static void ReportStorage(IActiveStorage storage, ILogger logger)
+    {
+        if (storage.Problem != ServerAddressProblem.None)
+        {
+            StorageLog.ServerAddressUnusable(logger, storage.Problem);
+        }
+
+        if (storage is { Mode: StorageMode.Server, ServerAddress: { } address, ServerKey: { } key })
+        {
+            StorageLog.ServerStoreOpened(logger, address, key);
+        }
+        else
+        {
+            StorageLog.LocalStoreOpened(logger, storage.DatabasePath);
+        }
+    }
     /// <summary>
     /// Handles what the platform asks of a running application other than through its windows.
     /// </summary>
@@ -240,7 +355,7 @@ public partial class App : Application
                     break;
 
                 case { Kind: ActivationKind.Reopen }:
-                    Dispatcher.UIThread.Post(() => WindowCoordinator.Reveal(window));
+                    Dispatcher.UIThread.Post(() => windows!.Reveal(window));
                     break;
 
                 default:
@@ -312,18 +427,20 @@ public partial class App : Application
     /// <summary>
     /// Work that needs the interface to exist but must not delay it appearing.
     /// </summary>
-    private async Task StartBackgroundWorkAsync()
+    private async Task StartBackgroundWorkAsync(CancellationToken cancellationToken)
     {
         IServiceProvider services = host!.Services;
 
         // A session left open by a forced exit would otherwise be shown as still running.
-        int abandoned = await services.GetRequiredService<ISessionStore>().CloseAbandonedAsync();
+        int abandoned = await services.GetRequiredService<ISessionStore>().CloseAbandonedAsync(cancellationToken);
 
         if (abandoned > 0)
         {
             ILogger<App> logger = services.GetRequiredService<ILogger<App>>();
             AppLog.AbandonedSessionsClosed(logger, abandoned);
         }
+
+        await StartServerSessionAsync(services, cancellationToken);
 
         // A shortcut that opens a window is not something a headless copy should own, and the
         // copy that a person is using may be the one that wants them.
@@ -336,7 +453,43 @@ public partial class App : Application
         hotkeys.ActionRequested += (_, action) => Dispatcher.UIThread.Post(async () =>
             await services.GetRequiredService<MainWindowViewModel>().ExecuteHotkeyActionAsync(action));
 
-        await hotkeys.AttachAsync();
+        await hotkeys.AttachAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Picks up the session with the server, in Server mode, and starts the synchronisation.
+    /// </summary>
+    /// <remarks>
+    /// The list is already on screen from the copy in the database; nothing here waits for the
+    /// network. A copy that just ran the first synchronisation has started it already, and this
+    /// does nothing more.
+    /// </remarks>
+    private static async Task StartServerSessionAsync(IServiceProvider services, CancellationToken cancellationToken)
+    {
+        if (services.GetService<IServerSessionCoordinator>() is not { } server)
+        {
+            return;
+        }
+
+        try
+        {
+            await Task.Run(() => server.StartAsync(cancellationToken), cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The application is ending before the session was picked up; the next start does it.
+            return;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            // The application works from the copy without a session, and says so where the state of
+            // the server is shown. What went wrong is the log's.
+            string key = services.GetRequiredService<IActiveStorage>().ServerKey ?? string.Empty;
+            ServerAccountLog.StartFailed(services.GetRequiredService<ILogger<App>>(), key, exception);
+        }
+
+        // Only now does a missing session mean that somebody has to sign in.
+        services.GetService<IServerStatusSource>()?.Begin();
     }
 
     /// <summary>
@@ -378,9 +531,23 @@ public partial class App : Application
             return;
         }
 
+        lifetime.Cancel();
+
         IServiceProvider services = host.Services;
         ILogger<App> logger = services.GetRequiredService<ILogger<App>>();
         long started = Stopwatch.GetTimestamp();
+
+        // First, so nothing is sent to the server while everything else is taken down. The session
+        // stays stored for the next start.
+        if (services.GetService<IServerSessionCoordinator>() is { } server)
+        {
+            RunStep(logger, started, "server", () => server.StopAsync());
+        }
+
+        if (services.GetService<ServerStatusSource>() is { } serverStatus)
+        {
+            RunStep(logger, "server status", serverStatus.Dispose);
+        }
 
         RunStep(logger, started, "sessions", async () =>
         {
@@ -388,6 +555,8 @@ public partial class App : Application
             await recorder.CloseOpenSessionsAsync(SessionEndReason.ApplicationClosed);
             await recorder.DisposeAsync();
         });
+
+        RunStep(logger, started, "vault sharing", async () => await services.GetRequiredService<VaultShareRecorder>().DisposeAsync());
 
         RunStep(logger, started, "connections", () => services.GetRequiredService<ConnectionManager>().DisconnectAllAsync());
         RunStep(logger, "hotkeys", () => services.GetRequiredService<HotkeyCoordinator>().Dispose());
@@ -408,6 +577,17 @@ public partial class App : Application
         host = null;
 
         RunStep(logger, "host", stopping.Dispose);
+        Dispose();
+    }
+
+    /// <summary>
+    /// Releases what the application itself owns, once the teardown has finished with it.
+    /// </summary>
+    public void Dispose()
+    {
+        lifetime.Cancel();
+        lifetime.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     /// <summary>

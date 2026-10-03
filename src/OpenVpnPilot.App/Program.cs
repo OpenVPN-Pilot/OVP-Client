@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Avalonia;
@@ -38,6 +39,14 @@ internal sealed class Program
         {
             WriteConsole(StartupOptions.Usage);
             return 0;
+        }
+
+        if (options.AfterRestartOf is { } predecessor)
+        {
+            // The copy being replaced still holds the claim while it shuts down. If it outlasts the
+            // wait, the claim below fails and this copy hands over to it, as any second start does.
+            using Process current = Process.GetCurrentProcess();
+            PredecessorExit.WaitFor(predecessor, current.ProcessName, PredecessorExit.Timeout);
         }
 
         SingleInstanceGuard guard = new();
@@ -162,6 +171,13 @@ internal sealed class Program
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
+
+            // Never in the Dock on macOS: this application lives in the menu bar, and a window of
+            // its own does not change that. Avalonia would otherwise ask for a regular application
+            // while it starts, and a moment of that is enough to be entered in the Dock's list of
+            // recent applications, which leaves a tile there that outlives the process. Ignored on
+            // every other platform.
+            .With(new MacOSPlatformOptions { ShowInDock = false })
 #if DEBUG
             .WithDeveloperTools()
 #endif

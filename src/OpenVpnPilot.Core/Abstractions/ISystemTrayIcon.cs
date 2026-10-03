@@ -52,7 +52,16 @@ public interface ISystemTrayIcon : IDisposable
 /// <param name="Label">The text shown, already localized.</param>
 /// <param name="IsEnabled">False draws the entry greyed out rather than hiding it.</param>
 /// <param name="IsSeparator">True draws a dividing line and ignores the other fields.</param>
-public sealed record TrayMenuEntry(string Id, string Label, bool IsEnabled = true, bool IsSeparator = false)
+/// <param name="IsChecked">
+/// True draws the entry ticked, for one that stands for a setting that is on rather than for an
+/// action. Invoking it is still reported the same way; what it means is the caller's.
+/// </param>
+public sealed record TrayMenuEntry(
+    string Id,
+    string Label,
+    bool IsEnabled = true,
+    bool IsSeparator = false,
+    bool IsChecked = false)
 {
     public static TrayMenuEntry Separator { get; } =
         new(string.Empty, string.Empty, IsEnabled: false, IsSeparator: true);

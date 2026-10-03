@@ -294,7 +294,9 @@ public sealed class WindowsTrayIcon : ISystemTrayIcon, INotificationPresenter
                     continue;
                 }
 
-                uint flags = NativeMethods.MfString | (entry.IsEnabled ? 0u : NativeMethods.MfGrayed);
+                uint flags = NativeMethods.MfString
+                    | (entry.IsEnabled ? 0u : NativeMethods.MfGrayed)
+                    | (entry.IsChecked ? NativeMethods.MfChecked : 0u);
 
                 // Command identifiers are one based, because zero means nothing was chosen.
                 NativeMethods.AppendMenu(handle, flags, index + 1, entry.Label);

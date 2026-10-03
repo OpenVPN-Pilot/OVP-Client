@@ -1,3 +1,5 @@
+using OpenVpnPilot.Core.Storage;
+
 namespace OpenVpnPilot.Core.Settings;
 
 /// <summary>
@@ -39,9 +41,19 @@ public sealed class PilotSettings
     public AdvancedSettings Advanced { get; set; } = new();
 
     /// <summary>
-    /// Produces an independent copy, so a screen can edit settings without the change taking effect
-    /// until it is saved.
+    /// Where the profiles live: on this machine, or on a server this machine keeps a copy of.
     /// </summary>
+    /// <remarks>
+    /// Named <c>storage</c> in the file. An older build wrote a section called <c>library</c> for a
+    /// shared folder that no longer exists, and files that still carry it must not be read as this.
+    /// </remarks>
+    public StorageSettings Storage { get; set; } = new();
+
+    /// <summary>
+    /// What identifies this installation to a server.
+    /// </summary>
+    public InstallationSettings Installation { get; set; } = new();
+
     /// <summary>
     /// Brings a file written by an older build up to the current layout.
     /// </summary>
@@ -84,6 +96,10 @@ public sealed class PilotSettings
         return true;
     }
 
+    /// <summary>
+    /// Produces an independent copy, so a screen can edit settings without the change taking effect
+    /// until it is saved.
+    /// </summary>
     public PilotSettings Clone() => new()
     {
         SchemaVersion = SchemaVersion,
@@ -93,7 +109,53 @@ public sealed class PilotSettings
         Notifications = Notifications.Clone(),
         Credentials = Credentials.Clone(),
         Advanced = Advanced.Clone(),
+        Storage = Storage.Clone(),
+        Installation = Installation.Clone(),
     };
+}
+
+/// <summary>
+/// Which store the application works on.
+/// </summary>
+/// <remarks>
+/// Read once, before anything is composed, because the database a process opens is decided before
+/// any service exists. Changing it therefore takes a restart, which is what switching does.
+/// </remarks>
+public sealed class StorageSettings
+{
+    /// <summary>
+    /// Local, which is what every installation was before servers existed, or Server.
+    /// </summary>
+    public StorageMode Mode { get; set; } = StorageMode.Local;
+
+    /// <summary>
+    /// The server's address, such as <c>https://pilot.example.com</c>.
+    /// </summary>
+    /// <remarks>
+    /// Kept when switching back to Local, so switching to the server again offers the same one.
+    /// </remarks>
+    public string? ServerUrl { get; set; }
+
+    public StorageSettings Clone() => (StorageSettings)MemberwiseClone();
+}
+
+/// <summary>
+/// The identity of this installation.
+/// </summary>
+public sealed class InstallationSettings
+{
+    /// <summary>
+    /// Generated once, the first time the settings are loaded, and never again.
+    /// </summary>
+    /// <remarks>
+    /// A server binds its tokens to this value, so a token copied to another machine is worthless
+    /// there. That only holds while the value stays where it was made: it is therefore never carried
+    /// by an export and never taken from an import. Null only in a file that has not been loaded by
+    /// a build that knows about it.
+    /// </remarks>
+    public Guid? Id { get; set; }
+
+    public InstallationSettings Clone() => (InstallationSettings)MemberwiseClone();
 }
 
 public sealed class GeneralSettings
@@ -117,6 +179,19 @@ public sealed class GeneralSettings
     /// Closing the window hides it instead of ending the application, so tunnels keep running.
     /// </summary>
     public bool CloseToTray { get; set; } = true;
+
+    /// <summary>
+    /// Listed in the Dock while a window of its own is open, on a platform that keeps such a list
+    /// apart from its windows.
+    /// </summary>
+    /// <remarks>
+    /// On for the application that behaves like any other, off for the one that is only ever in the
+    /// menu bar. It is a choice rather than a decision made here because it cannot be had both ways:
+    /// macOS enters an application that has been in the Dock in its list of recent applications, and
+    /// that entry outlives the window, the quitting and the process. Ignored where the list of
+    /// running applications follows the windows, which is Windows.
+    /// </remarks>
+    public bool ShowInDock { get; set; } = true;
 
     /// <summary>
     /// Which display the quick menus open on. Null uses the one the pointer is on.
@@ -344,8 +419,9 @@ public sealed class AdvancedSettings
     /// <remarks>
     /// On, and switchable. Checking contacts GitHub, which is a third party, so what is contacted is
     /// named in the settings screen and in the README rather than being left for someone to discover
-    /// in a packet capture. Turning it off stops every request; nothing else here talks to a network
-    /// the user did not ask for.
+    /// in a packet capture. Turning it off stops every request. The only other thing here that talks
+    /// to a network is the server the person chose to keep the profiles on, in Server mode, and
+    /// nothing else.
     /// </remarks>
     public bool CheckForUpdates { get; set; } = true;
 

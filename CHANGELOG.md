@@ -8,6 +8,184 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 Development happens on `dev`. `master` carries releases, and every entry under Unreleased moves into a
 version heading when one is tagged. A release tag is `v<version>`, for example `v1.2.0`.
 
+## [Unreleased]
+
+## [2.0.0] - 2026-10-03
+
+### Added
+
+- **The settings file names where the profiles live and which installation this is.** `storage`
+  holds the mode, `Local` or `Server`, and the server's address; `installation` holds an identity
+  generated once, the first time this version reads the file, and never again. An existing
+  installation stays `Local`. Both are this machine's own: an exported package carries neither, and
+  importing one keeps the values that were here.
+- **The copy of a server's profiles is a database of its own**, in `servers/<key>/pilot.db` beside
+  the local `pilot.db`, one folder per server, the key derived from the server's address. The
+  application and `ovp` open the one the settings name, and neither mode ever touches the other's
+  file. A settings file naming a server whose address is not a plain `https://` address opens the
+  local library and says why in the log.
+- **`ovp` exit code 7**: a command that would change the copy of a server's profiles,
+  `import --commit`, `unpack --commit`, `favourite` or `remove`, is refused with it while the
+  application works with a server. A change written there would never reach the server and would be
+  overwritten by the next synchronisation. Everything that reads works in both modes.
+- **`--after-restart <pid>`**, which the application passes to itself when it restarts: the new copy
+  waits up to thirty seconds for that process to end before it takes the single instance claim.
+  Switching between this computer's profiles and a server is such a restart. It is refused while a
+  tunnel is up, and it deletes nothing: going back finds the other side exactly as it was left.
+- **Synchronisation with a server.** The copy pushes its own changes first, then pulls the server's:
+  profiles, tags and shared sign ins from the change feed, then the person's favourites, shortcuts
+  and settings. It runs at start, every two minutes, two seconds after a local change, when the
+  network comes back and on request, and while the server cannot be reached it works from the copy
+  and tries again after 5, 15, 30 and then every 60 seconds. Changes are sent as they are: a profile
+  someone else changed meanwhile is overwritten, except for its configuration, which is sent only
+  when it was edited here, so a rename does not undo an edit made on the server. A change the
+  server refuses for good is dropped and counted; one it cannot take now waits. A profile created
+  here that the server refuses is kept, marked in the list, the details and the editor as existing
+  on this computer only with the server's code, and offered again once it is changed. Connection
+  history, the last connection and the number of connections never leave the machine.
+- **Signing in to a server**, in whichever way the server asks: a user name alone, a user name and
+  a password for the user file and the directory, or the Microsoft sign in in the system browser
+  for Entra ID. A wrong password, an account outside the allowed group, an unreachable directory,
+  too many attempts (with how long to wait), a wrong clock (with both times), a client that is too
+  old and a certificate this computer does not trust each have a sentence of their own, with the
+  request id beneath it for the server's operator. A certificate that is not trusted is never
+  offered as something to get past.
+- **The session with the server is kept between starts** and picked up without waiting for the
+  network, so the role is known while offline. Signing in as somebody other than the person this
+  copy last knew first discards the previous person's waiting changes, the profiles they created
+  that never reached the server with their stored sign ins, their favourites and shortcuts, and
+  then synchronises everything again; the same person simply continues. Signing out ends every
+  tunnel and empties the copy: profiles, their stored sign ins, history, shortcuts and the changes
+  not yet sent, so nothing of the server can be connected at this computer without signing in
+  again. When the keystore refuses a renewed session token, the session goes on
+  for this run and the used token is removed, so the next start asks for a sign in rather than
+  presenting a token the server has already seen.
+- **When a server withdraws the account**, everything that came from it is removed: every tunnel
+  ends, the stored sign ins of its profiles and the session go from the keystore, its copy goes
+  from the disk, the settings that followed it return to their defaults, and the application says
+  in plain words that the account no longer has access and starts again on this computer's own
+  profiles, which are untouched. The server is not asked again. A settings file that cannot be
+  written, or a message that cannot be shown, does not keep the application from ending; each is
+  logged with the request id of the answer that withdrew the account.
+- **The first start asks where the profiles should live**: on this computer, on a server, or
+  decide later, which keeps them on this computer. Only a true first start asks; an installation
+  that updates keeps its profiles where they are. Choosing a server checks its address (`https://`
+  only, and plain `http://` is refused with the reason), shows its name, version and way of signing
+  in or the precise problem, and signs in. Only then does the application restart into the server,
+  passing itself `--first-sync`, and the new copy runs the first synchronisation with its progress
+  on screen before the main window appears. A failure offers going back and using this computer
+  instead.
+- **"Forget this server's stored credentials"** takes the place of "Forget all stored credentials"
+  in Server mode. It signs out of the server first, which empties the copy as signing out does, so
+  the session ends on the server rather than lingering until it expires, and removes the sign ins of
+  that server's profiles only: those of this computer's own library and of other servers stay.
+- **The log window can show the server on its own.** Calls to the server, signing in, the
+  synchronisation, waiting changes and switching the store are marked `server` in the log and in
+  the files, and "Server only" in the source filter shows just them; "This application only" still
+  includes them. "Show server log" opens the window with that filter.
+- **The diagnostics bundle says where the profiles live** in a new `storage.txt`: the mode, the
+  client version, and for a server its host, its version and API version as it answers then, the
+  last pull and push, the cursor, the last error code with its request id, the signed in role and
+  how many changes wait with the problem codes they met. This file never holds a name, a token, a sign in or the
+  address as it was written.
+- **A Storage page in the settings** ("Speicherort" in German) says where the profiles live and, for
+  a server, its address, who is signed in with which role and provider in words rather than as the
+  server writes them, the server's version, the last synchronisation and the changes waiting, with
+  "Sync now", "Sign out" or "Sign in" and the server's log. Closing the page stops a
+  synchronisation it started, and the schedule carries on from there. Switching to a server, to another server or back to this computer is offered there:
+  refused while a tunnel is up, confirmed first, and for a server it runs the same address and sign
+  in steps as the first start before the application restarts into it. Another address is another
+  server, with a copy of its own.
+- **The status bar shows the server**: a dot green when synchronised, blue while synchronising,
+  amber while offline, degraded or with changes waiting and red when something blocks, beside a line
+  such as `pilot.example.com · 23 ms · synced 2 min ago · 3 changes waiting`. The round trip is
+  measured every 30 seconds, less often while the server cannot be reached, and a server whose
+  readiness check fails shows as degraded. A certificate that is not trusted shows red as such as
+  soon as the round trip meets it, never as being offline. The tooltip has the details and a click offers "Sync
+  now", the server's log, signing in again and the storage settings. On this computer's own library
+  the bar shows a grey "Local" instead. The tray menu, and the application menu on macOS, carry the
+  same line and "Sync now".
+- **Banners for what blocks the synchronisation**: a sign in that is needed, a client too old for
+  the server (with the way to the update), a clock the server refuses (with both times) and a
+  certificate this computer does not trust. Being offline is not one: the application keeps working
+  from the copy.
+- **A server that withdraws the account while it is being signed in to from the settings or the
+  first start** has what this computer still kept of it removed, its copy, the stored sign ins of
+  its profiles and its session, and the person is told. The application stays where it was.
+- **What a server's people may change follows their role.** Somebody who is not an administrator
+  sees a server's profiles in the editor as they are, with only the favourite and the shortcut slot
+  to change, and is offered neither importing, deleting nor tagging. An administrator edits as on
+  this computer, and can replace the sign in the server shares for a profile from the editor while
+  the server can be reached. Deleting a server's profile removes its stored sign ins too. A tag that
+  loses its last profile is deleted on the server as well, as it is here.
+- **Importing into a server's copy uploads at once**, in batches of up to 500, and the review list
+  then says for every profile whether the server created it, already had it or refused it, with the
+  server's reason. A profile the server refused is not kept. While the server cannot be reached the
+  imported profiles are kept here and sent when it can. Applying a package works the same way, and
+  the sign ins it carries are offered to the server's vault.
+- **A sign in that was typed and worked is shared with the server**, so nobody else has to type it:
+  once the tunnel is up, it is offered to the server's vault, which keeps the first one it is given;
+  when somebody was quicker, theirs is taken here instead. Nothing is shared for a sign in read from
+  the keystore, for one that failed, or for an attempt that asked for a one time code. When
+  "remember" was not ticked, the sign in is kept in memory only until it has been sent, and never
+  written to this computer. A profile created while the server could not be reached shares its sign
+  ins in the same synchronisation that uploads it, under the id the server gave it.
+- **A profile deleted on the server while its tunnel is up** has its tunnel ended first, then it is
+  removed, and the status bar says which one it was. A complete synchronisation keeps a stored sign
+  in that is still waiting to be shared; everything else follows the server.
+
+### Changed
+
+- **The update check is no longer described as the only network access.** The settings, the README
+  and the usage page now say that a server the profiles are kept on is contacted too, and nothing
+  else. The usage page has a section on working with a server.
+
+### Fixed
+
+- **A settings file that is briefly locked is no longer replaced by the defaults.** When another
+  program held `settings.json` open at start, the defaults stood in for it, were mistaken for a file
+  from an older build and written back over it with a new installation identity, which lost every
+  setting the moment the lock was gone. Opening the file is now tried again for half a second; if it
+  stays out of reach the defaults apply for that run only, nothing is written to the file until the
+  next start, and no identity is created. A file that does not parse and cannot be moved aside is
+  left in place for the same reason. Working with a server, such a run asks the server nothing that
+  needs the identity, and the status bar and a banner say that the settings could not be read.
+
+## [1.9.0] - 2026-09-17
+
+### Added
+
+- **Show in the Dock while a window is open**, in the general settings and in the menu bar entry's
+  own menu, for macOS. It is on, which is the application as it was; off leaves it in the menu bar
+  and nowhere else. The choice exists because being in the Dock costs something that cannot be taken
+  back: macOS enters an application that has been in the Dock in its list of recent applications, and
+  that entry outlives the window, the quitting and the process.
+
+### Fixed
+
+- **The application no longer puts itself in the Dock by launching, on macOS.** It was a regular
+  application from the moment it started, so a copy started hidden or at login was entered in the
+  Dock's list of recent applications although it never showed a window, and the tile that left behind
+  outlived the process. It now starts as an accessory application, and a window is the only thing
+  that puts it in the Dock.
+- The line under the selected tab in the settings was drawn through the letters that reach below the
+  baseline. It has room under the text now.
+- **The completion script the command writes is readable by the shell it is for.** It carried
+  carriage returns, because the script is a literal in a source file and a source file carries
+  whatever it was checked out with. A carriage return is not whitespace to a Unix shell: zsh read
+  the one after `case "${words[2]}" in` as part of the word and refused the whole script, on every
+  new shell, so completion silently never worked. Reinstall it with `ovp completion zsh --install`.
+
+### Changed
+
+- **About OpenVPN Pilot** is in the menu bar entry's menu as well as in the menu named after the
+  application, because there is no such menu while the application is kept out of the Dock. The
+  shortcuts are unaffected either way: macOS answers a menu's key equivalents whether the menu is
+  shown or not.
+- The profile editor setting reads as a choice rather than as a sentence broken in two. **View when
+  opened** is followed by **Form** and **Plain configuration**, where **Opens with** was followed by
+  **The form** and **The plain configuration**.
+
 ## [1.8.0] - 2026-09-16
 
 ### Changed

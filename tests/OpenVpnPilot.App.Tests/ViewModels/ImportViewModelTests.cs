@@ -40,7 +40,7 @@ public sealed class ImportViewModelTests
         public Task<IReadOnlyList<ImportCandidate>> PrepareAsync(IEnumerable<string> filePaths, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("A package is not prepared.");
 
-        public Task<int> CommitAsync(IReadOnlyList<ImportCandidate> candidates, IReadOnlyList<string> tagNames, CancellationToken cancellationToken = default) =>
+        public Task<ImportCommitResult> CommitAsync(IReadOnlyList<ImportCandidate> candidates, IReadOnlyList<string> tagNames, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Nothing is committed here.");
     }
 

@@ -15,6 +15,15 @@ namespace OpenVpnPilot.Platform.MacOS.Shell;
 /// well, because the menu bar of an application that became regular while inactive is not the one
 /// shown until it is activated.
 ///
+/// The bundle declares LSUIElement, so the process starts as an accessory one and the first thing
+/// that puts it in the Dock is a window of its own. Starting regular and dropping out afterwards
+/// leaves the Dock with an entry that outlives the process, which is in the Info.plist next to the
+/// key.
+///
+/// What the policy is, is read rather than remembered. A remembered value and the policy the
+/// application actually has drift apart as soon as anything else sets it, and the one that is
+/// wrong is then the one nothing corrects.
+///
 /// Must be called on the main thread, which is the user interface thread on macOS.
 /// </remarks>
 [SupportedOSPlatform("macos")]
@@ -24,24 +33,22 @@ public sealed class MacDockPresence : IDockPresence
     private const nint Regular = 0;
     private const nint Accessory = 1;
 
-    private bool? listed;
-
     public void SetListed(bool listed)
     {
-        if (this.listed == listed)
-        {
-            return;
-        }
-
-        this.listed = listed;
-
         ObjectiveC.WithPool(() =>
         {
             nint application = ObjectiveC.Send(
                 ObjectiveC.objc_getClass("NSApplication"),
                 ObjectiveC.Selector("sharedApplication"));
 
-            ObjectiveC.Send(application, ObjectiveC.Selector("setActivationPolicy:"), listed ? Regular : Accessory);
+            nint wanted = listed ? Regular : Accessory;
+
+            if (ObjectiveC.Send(application, ObjectiveC.Selector("activationPolicy")) == wanted)
+            {
+                return 0;
+            }
+
+            ObjectiveC.Send(application, ObjectiveC.Selector("setActivationPolicy:"), wanted);
 
             if (listed)
             {

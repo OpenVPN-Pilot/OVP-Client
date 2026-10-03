@@ -2,8 +2,10 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenVpnPilot.App.Services;
+using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
+using OpenVpnPilot.Core.Server;
 using OpenVpnPilot.Core.Settings;
 using OpenVpnPilot.Core.Updates;
 
@@ -18,7 +20,7 @@ namespace OpenVpnPilot.App.ViewModels;
 /// OpenVPN is. The form edits a clone, so closing without saving leaves the running application
 /// exactly as it was.
 /// </remarks>
-public sealed partial class SettingsViewModel : ViewModelBase
+public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
 {
     private readonly ISettingsService settings;
     private readonly ILocalizer localizer;
@@ -30,6 +32,29 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private readonly ISessionStore sessions;
     private readonly DiagnosticsBundle diagnostics;
     private readonly UpdateCoordinator updates;
+
+    /// <summary>
+    /// The platform's list of running applications, on a platform that keeps one apart from windows.
+    /// Null where there is nothing to decide.
+    /// </summary>
+    private readonly IDockPresence? dock;
+
+    /// <summary>
+    /// The server this copy works with. Null on the local library, where there is none.
+    /// </summary>
+    private readonly IServerSignOut? server;
+
+    /// <summary>
+    /// What else forgetting every sign in means for a server's copy. Null on the local library.
+    /// </summary>
+    private readonly IServerCredentialsReset? credentialsReset;
+
+    /// <summary>
+    /// Whether importing is offered. Null means the local library, where it always is.
+    /// </summary>
+    private readonly ILibraryPermissions? permissions;
+
+    private readonly IUserInterfaceThread? ui;
 
     private PilotSettings draft;
 
@@ -43,7 +68,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
         IAutoStartManager autoStart,
         ISessionStore sessions,
         DiagnosticsBundle diagnostics,
-        UpdateCoordinator updates)
+        UpdateCoordinator updates,
+        IDockPresence? dock = null,
+        IServerSignOut? server = null,
+        StorageSettingsViewModel? storage = null,
+        IServerCredentialsReset? credentialsReset = null,
+        ILibraryPermissions? permissions = null,
+        IUserInterfaceThread? ui = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(localizer);
@@ -66,6 +97,22 @@ public sealed partial class SettingsViewModel : ViewModelBase
         this.sessions = sessions;
         this.diagnostics = diagnostics;
         this.updates = updates;
+        this.dock = dock;
+        this.server = server;
+        this.credentialsReset = credentialsReset;
+        this.permissions = permissions;
+        this.ui = ui;
+        Storage = storage;
+
+        if (permissions is not null)
+        {
+            permissions.Changed += OnPermissionsChanged;
+        }
+
+        if (storage is not null)
+        {
+            storage.ScreenRequested += (_, screen) => ScreenRequested?.Invoke(this, screen);
+        }
 
         draft = settings.Current.Clone();
 
@@ -111,6 +158,23 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// </summary>
     public event EventHandler? ProfileReloadRequested;
 
+    /// <summary>
+    /// Raised when the settings are to show one page, wherever it stands among the tabs.
+    /// </summary>
+    public event EventHandler<SettingsPage>? PageRequested;
+
+    /// <summary>
+    /// The storage page: where the profiles live, and switching that. Null where nothing composed it.
+    /// </summary>
+    public StorageSettingsViewModel? Storage { get; }
+
+    public bool HasStorage => Storage is not null;
+
+    /// <summary>
+    /// Shows one page, for a screen elsewhere that opens the settings at it.
+    /// </summary>
+    public void ShowPage(SettingsPage page) => PageRequested?.Invoke(this, page);
+
     public ObservableCollection<LanguageChoice> Languages { get; }
 
     public ObservableCollection<ThemeChoice> Themes { get; }
@@ -139,6 +203,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     [ObservableProperty]
     public partial bool CloseToTray { get; set; }
+
+    [ObservableProperty]
+    public partial bool ShowInDock { get; set; }
 
     [ObservableProperty]
     public partial bool ProtectRoutes { get; set; }
@@ -236,7 +303,18 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// </summary>
     public bool SecretsAvailable => secrets.IsAvailable;
 
+    /// <summary>
+    /// True on a server's copy, where forgetting leaves this computer's library and other servers alone.
+    /// </summary>
+    public bool ForgetsThisServerOnly => credentialsReset is not null;
+
     public bool AutoStartAvailable => autoStart.IsSupported;
+
+    /// <summary>
+    /// False where the list of running applications follows the windows, which leaves nothing to
+    /// choose.
+    /// </summary>
+    public bool DockAvailable => dock is not null;
 
     public bool HotkeysAvailable => hotkeys.IsAvailable;
 
@@ -275,11 +353,17 @@ public sealed partial class SettingsViewModel : ViewModelBase
             Hotkeys.Add(editor);
         }
 
-        StoredSecretCount = (await secrets.ListAsync(cancellationToken)).Count;
+        // Profile sign ins only: a server's refresh token shares the store but is not one of them. On
+        // a server's copy, only its own profiles' are counted, because only those would be forgotten.
+        StoredSecretCount = credentialsReset is not null
+            ? await credentialsReset.CountAsync(cancellationToken)
+            : (await secrets.ListAsync(cancellationToken)).Count(SecretReference.IsProfileReference);
 
         // The registry is the truth for autostart, not the settings file, because the entry can be
         // removed from outside the application.
         StartWithSystem = autoStart.IsSupported && autoStart.IsEnabled();
+
+        Storage?.Refresh();
     }
 
     private void ReadFromDraft()
@@ -293,6 +377,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         StartMinimised = draft.General.StartMinimised;
         StartWithSystem = draft.General.StartWithSystem;
         CloseToTray = draft.General.CloseToTray;
+        ShowInDock = draft.General.ShowInDock;
 
         SelectedEditorView = EditorViews.FirstOrDefault(view => view.View == draft.General.ProfileEditor)
             ?? EditorViews[0];
@@ -330,6 +415,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         draft.General.StartMinimised = StartMinimised;
         draft.General.StartWithSystem = StartWithSystem;
         draft.General.CloseToTray = CloseToTray;
+        draft.General.ShowInDock = ShowInDock;
         draft.General.ProfileEditor = SelectedEditorView?.View ?? ProfileEditorView.Form;
 
         draft.Appearance.Theme = SelectedTheme?.Preference ?? ThemePreference.System;
@@ -427,6 +513,37 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private void Cancel() => Closed?.Invoke(this, false);
 
+    /// <summary>
+    /// Whether the import is offered: only to whoever may change what everybody shares.
+    /// </summary>
+    public bool CanChangeShared => permissions?.CanChangeShared != false;
+
+    public void Dispose()
+    {
+        if (permissions is not null)
+        {
+            permissions.Changed -= OnPermissionsChanged;
+        }
+
+        Storage?.Dispose();
+    }
+
+    // The role can change on the synchronisation thread while the screen is open.
+    private void OnPermissionsChanged(object? sender, EventArgs e)
+    {
+        if (ui is null)
+        {
+            OnPropertyChanged(nameof(CanChangeShared));
+            return;
+        }
+
+        _ = ui.InvokeAsync(() =>
+        {
+            OnPropertyChanged(nameof(CanChangeShared));
+            return Task.CompletedTask;
+        });
+    }
+
     [RelayCommand]
     private void OpenImport() => ScreenRequested?.Invoke(this, AppScreen.Import);
 
@@ -452,7 +569,28 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private async Task ForgetStoredCredentialsAsync()
     {
-        int removed = await secrets.ClearAsync();
+        // Signed out first, while the refresh token is still there to end the session with: removed
+        // from the keystore alone, the session would stay open on the server until it expired.
+        if (server is not null)
+        {
+            await server.SignOutAndEraseAsync();
+        }
+
+        int removed;
+
+        if (credentialsReset is not null)
+        {
+            // Only this server's: the library on this computer and other servers' copies keep theirs.
+            removed = await credentialsReset.ForgetAsync();
+        }
+        else
+        {
+            // Everything goes, but what is reported is the number of profile sign ins, the same
+            // number the screen showed before the button was pressed.
+            removed = (await secrets.ListAsync()).Count(SecretReference.IsProfileReference);
+            await secrets.ClearAsync();
+        }
+
         StoredSecretCount = 0;
         StatusMessage = localizer.Translate("settings.credentialsCleared", removed);
     }
@@ -555,3 +693,11 @@ public sealed record ThemeChoice(ThemePreference Preference, string Name);
 /// One entry in the picker for what the profile editor opens with.
 /// </summary>
 public sealed record EditorViewChoice(ProfileEditorView View, string Name);
+
+/// <summary>
+/// A page of the settings that another screen can open them at.
+/// </summary>
+public enum SettingsPage
+{
+    Storage,
+}

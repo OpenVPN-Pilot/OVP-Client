@@ -1,0 +1,50 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:OpenVpnPilot.App.ViewModels"
+             xmlns:loc="using:OpenVpnPilot.App.Localization"
+             xmlns:views="using:OpenVpnPilot.App.Views"
+             x:Class="OpenVpnPilot.App.Views.SignInView"
+             x:DataType="vm:SignInViewModel">
+
+  <!--
+    One form for every way a server signs people in. It is placed inside whichever window needs it:
+    the first start now, the storage settings and the request to sign in again later.
+  -->
+  <StackPanel Spacing="12">
+
+    <TextBlock Text="{Binding Heading}" Classes="title" TextWrapping="Wrap" />
+    <TextBlock Text="{Binding ModeHint}" Classes="muted" TextWrapping="Wrap" />
+
+    <StackPanel Spacing="5" IsVisible="{Binding AsksUsername}">
+      <TextBlock Text="{loc:Translate signIn.username}" Classes="muted" />
+      <TextBox Name="UsernameBox" Text="{Binding Username}" IsEnabled="{Binding IsIdle}" />
+    </StackPanel>
+
+    <StackPanel Spacing="5" IsVisible="{Binding AsksPassword}">
+      <TextBlock Text="{loc:Translate signIn.password}" Classes="muted" />
+      <TextBox Name="PasswordBox" Text="{Binding Password}" PasswordChar="&#x2022;"
+               IsEnabled="{Binding IsIdle}" />
+    </StackPanel>
+
+    <Border Background="{DynamicResource StatePendingSoft}"
+            CornerRadius="{StaticResource RadiusMedium}" Padding="10,7"
+            IsVisible="{Binding IsWaitingForBrowser}">
+      <TextBlock Text="{loc:Translate signIn.entraWaiting}"
+                 Foreground="{DynamicResource TextPrimary}" TextWrapping="Wrap" FontSize="12" />
+    </Border>
+
+    <Border Background="{DynamicResource StateFailedSoft}"
+            CornerRadius="{StaticResource RadiusMedium}" Padding="10,7"
+            IsVisible="{Binding HasMessage}">
+      <StackPanel Spacing="3">
+        <TextBlock Text="{Binding Message}" Foreground="{DynamicResource StateFailed}"
+                   TextWrapping="Wrap" FontSize="12" />
+        <TextBlock Text="{Binding Reference}" Classes="muted" TextWrapping="Wrap"
+                   IsVisible="{Binding HasReference}" />
+      </StackPanel>
+    </Border>
+
+    <views:SignInActions IsVisible="{Binding $parent[views:SignInView].ShowsActions}" />
+
+  </StackPanel>
+</UserControl>

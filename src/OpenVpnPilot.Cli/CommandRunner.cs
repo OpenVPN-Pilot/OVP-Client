@@ -38,6 +38,11 @@ internal static class CommandRunner
             return 1;
         }
 
+        if (ServerModeGuard.Refuses(command, args[1..], StoreFactory.Storage.Mode))
+        {
+            return ServerModeGuard.Refuse(command, StoreFactory.Storage);
+        }
+
         return command switch
         {
             "doctor" => await RunDoctorAsync(),
@@ -119,7 +124,7 @@ internal static class CommandRunner
         Console.WriteLine("  doctor, dr                 Check whether OpenVPN is installed and usable.");
         Console.WriteLine("  start [--headless]         Start the application, with or without a window.");
         Console.WriteLine("  stop                       End the application and its tunnels.");
-        Console.WriteLine("  list, ls                   List the profiles in the local store.");
+        Console.WriteLine("  list, ls                   List the stored profiles.");
         Console.WriteLine("  status, st                 Show what is currently connected.");
         Console.WriteLine("  connect, con <name>        Connect a profile.");
         Console.WriteLine("  disconnect, dis <name>     Disconnect a profile, or --all.");
@@ -137,6 +142,10 @@ internal static class CommandRunner
         Console.WriteLine();
         Console.WriteLine("Exit code 6 means the profile store could not be read or written. The most");
         Console.WriteLine("common reason is the application writing to it at the same moment.");
+        Console.WriteLine();
+        Console.WriteLine("When the application works with a server, the commands read the copy of that");
+        Console.WriteLine("server's profiles. Commands that would change it, import --commit, unpack");
+        Console.WriteLine("--commit, favourite and remove, are refused with exit code 7.");
         Console.WriteLine();
         Console.WriteLine("The application owns the tunnels and the profile store, so connect, disconnect");
         Console.WriteLine("and status are handed to it. Connecting starts it first when it is not running, so");
@@ -240,6 +249,9 @@ internal static class CommandRunner
                 Console.WriteLine();
                 Console.WriteLine("  --commit               Store the importable profiles.");
                 Console.WriteLine("  --tag <name>           Tag them. May be given more than once.");
+                Console.WriteLine();
+                Console.WriteLine("With --commit it is refused, exit code 7, while the application works with a");
+                Console.WriteLine("server: the profiles here are then the server's, and they change there.");
                 return 0;
 
             case "export":
@@ -326,7 +338,8 @@ internal static class CommandRunner
                 Console.WriteLine("  --commit               Write the package into the store.");
                 Console.WriteLine("  --passphrase <value>   Open a protected package.");
                 Console.WriteLine();
-                Console.WriteLine("Exit codes: 0 read, 1 no such package, 3 it could not be opened.");
+                Console.WriteLine("Exit codes: 0 read, 1 no such package, 3 it could not be opened, 7 --commit");
+                Console.WriteLine("while the application works with a server.");
                 return 0;
 
             case "favourite":
@@ -339,6 +352,8 @@ internal static class CommandRunner
                 Console.WriteLine();
                 Console.WriteLine("  --slot <1-9>           Put the profile in that slot.");
                 Console.WriteLine("  --clear                Remove the favourite mark and any slot.");
+                Console.WriteLine();
+                Console.WriteLine("Refused, exit code 7, while the application works with a server.");
                 return 0;
 
             case "remove":
@@ -347,6 +362,8 @@ internal static class CommandRunner
                 Console.WriteLine();
                 Console.WriteLine("Deletes a profile and its history from the store. Asks for confirmation");
                 Console.WriteLine("unless --yes is given.");
+                Console.WriteLine();
+                Console.WriteLine("Refused, exit code 7, while the application works with a server.");
                 return 0;
 
             case "completion":

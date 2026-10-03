@@ -81,6 +81,16 @@ public sealed class Profile
     /// </summary>
     public string? Colour { get; set; }
 
+    /// <summary>
+    /// Set on a server's copy when the server refused to take this profile, created here, for good:
+    /// the server's problem code, or the status when it named none. Null for every other profile.
+    /// </summary>
+    /// <remarks>
+    /// The profile stays, because it is somebody's work, and says that it exists on this computer
+    /// only. Changing it clears the mark and offers it to the server again.
+    /// </remarks>
+    public string? UploadRefusedCode { get; set; }
+
     public DateTimeOffset? LastConnectedAt { get; set; }
 
     public int ConnectCount { get; set; }
@@ -105,4 +115,9 @@ public enum ProfileSource
     /// Imported once from a file, an archive or a package.
     /// </summary>
     Imported,
+
+    /// <summary>
+    /// A copy of a profile the configured server holds, kept up to date by synchronisation.
+    /// </summary>
+    Server,
 }

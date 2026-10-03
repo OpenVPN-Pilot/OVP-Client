@@ -48,6 +48,7 @@ internal static partial class NativeMethods
 
     public const uint MfString = 0x00000000;
     public const uint MfGrayed = 0x00000001;
+    public const uint MfChecked = 0x00000008;
     public const uint MfSeparator = 0x00000800;
 
     public const uint TpmLeftButton = 0x0000;

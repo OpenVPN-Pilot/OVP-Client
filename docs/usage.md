@@ -1,6 +1,6 @@
 # Using OpenVPN Pilot
 
-[OpenVPN Pilot](../README.md) · [Windows](windows.md) · [macOS](macos.md) · Using it · [The `ovp` command](cli.md) · [Working on it](development.md)
+[OpenVPN Pilot](../README.md) · [Windows](windows.md) · [macOS](macos.md) · Using it · [Settings](settings.md) · [Server](server.md) · [The `ovp` command](cli.md) · [Working on it](development.md) · [Testing](testing.md)
 
 ## Organising a set
 
@@ -54,7 +54,9 @@ plain text keep return for a new line.
 **Export** writes the ticked profiles, or every profile carrying the tags chosen there, either as plain
 `.ovpn` files or as one encrypted `.ovppkg` package. A package can also carry the shortcuts, the
 settings and the saved sign ins of those profiles, each of them chosen on its own. What belongs to
-the machine is never in it: window positions, the OpenVPN path and autostart.
+the machine is never in it: window positions, the OpenVPN path and autostart, and with them the
+settings that say where the profiles live. The [settings page](settings.md#what-a-package-and-a-server-carry)
+lists them.
 
 Opening a package asks for its passphrase and then lists what it carries: every profile, marked as
 new or as already stored under a name, and under them the sign ins, the shortcuts and the settings.
@@ -62,23 +64,42 @@ Nothing that is not ticked is taken. A shortcut is added only where this machine
 action nor the combination yet, and the settings replace this machine's only when that is ticked. A
 package written by a newer version than the one opening it is refused rather than read in part.
 
+## Working with a server
+
+The profiles can live on an [OpenVPN Pilot Server](https://github.com/OpenVPN-Pilot/OVP-Server)
+instead of on this computer. Day to day the application looks and works the same, with a status bar
+that shows the server and what is waiting to be sent, and with the list kept in step by the
+application. The server pages cover the rest:
+
+- [Working with a server](server.md): what it is, starting to use one, switching between this computer
+  and a server, and what is shared and what stays here.
+- [Signing in](server-signing-in.md): the ways of signing in, the messages and what they mean,
+  certificates and roles.
+- [Synchronisation](server-sync.md): what is kept in step, working without the network, conflicts, shared
+  sign ins, signing out and withdrawn accounts.
+
 ## Adding a language
 
 Language files are JSON. The ones that ship live in `lang` beside the executable, and anything placed
 in `lang` under the application data directory is layered on top of them, key by key. Copy `en.json`,
 translate the values, drop it in and reload from the settings screen: no rebuild, and a key you have
-not translated falls back to English rather than disappearing.
+not translated falls back to English rather than disappearing. A key with an `@macos` suffix is the
+wording on macOS and the plain key is the one everywhere else.
 
 ## What reaches OpenVPN
 
 The application never edits a profile to make it work. It writes the configuration out exactly as it
 was imported and puts everything it needs on the command line, so what a server sees is the
-configuration you gave it plus a fixed set of options:
+configuration you gave it plus a fixed set of options. On Windows it is this line, handed to OpenVPN's
+interactive service:
 
 ```
 --config <file> --management 127.0.0.1 <port> stdin --management-query-passwords
 --management-hold --management-forget-disconnect --auth-retry interact --verb 3
 ```
+
+On macOS the helper builds the command line itself from values the application sends, and the same
+options end up in it, see [macOS](macos.md#where-things-are-kept).
 
 The verbosity is the one part of that line you can change, under **Settings, Advanced**. Three
 carries the state changes, the push reply and the reason a handshake failed, which is what the
@@ -110,8 +131,9 @@ command is, which is why a short run from a terminal is the way to look at it.
 
 ## Looking for a newer release
 
-The application can ask GitHub whether a newer release exists. It is the only thing here that
-contacts a network nobody asked it to, so it is worth saying exactly what it does:
+The application can ask GitHub whether a newer release exists. Apart from a server you chose to keep
+the profiles on (see [Working with a server](server.md#what-contacts-the-server)), it is the only thing
+here that contacts a network, so it is worth saying exactly what it does:
 
 - It reads `https://api.github.com/repos/<owner>/<name>/releases/latest`, without credentials.
 - It compares the release tag with the running version and reports the result.

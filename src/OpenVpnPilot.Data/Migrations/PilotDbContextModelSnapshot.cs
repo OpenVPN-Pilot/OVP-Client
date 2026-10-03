@@ -77,6 +77,42 @@ namespace OpenVpnPilot.Data.Migrations
                     b.ToTable("HotkeyBindings");
                 });
 
+            modelBuilder.Entity("OpenVpnPilot.Data.Entities.PendingChange", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ConfigurationChanged")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("EntityId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Realm")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Kind", "EntityId");
+
+                    b.ToTable("PendingChanges");
+                });
+
             modelBuilder.Entity("OpenVpnPilot.Data.Entities.Profile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -152,6 +188,10 @@ namespace OpenVpnPilot.Data.Migrations
 
                     b.Property<long>("UpdatedAt")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("UploadRefusedCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -257,6 +297,52 @@ namespace OpenVpnPilot.Data.Migrations
                     b.HasIndex("SessionId");
 
                     b.ToTable("SessionEvents");
+                });
+
+            modelBuilder.Entity("OpenVpnPilot.Data.Entities.SyncState", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("Cursor")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastRequestId")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("LastSuccessfulPullAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("LastSuccessfulPushAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserDisplayName")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserProvider")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserRole")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Username")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SyncStates");
                 });
 
             modelBuilder.Entity("OpenVpnPilot.Data.Entities.Tag", b =>

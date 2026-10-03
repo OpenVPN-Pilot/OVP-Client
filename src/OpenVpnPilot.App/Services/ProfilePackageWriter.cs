@@ -1,7 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Settings;
 using OpenVpnPilot.Data;
+using OpenVpnPilot.Data.Entities;
 using OpenVpnPilot.Data.Packaging;
 
 namespace OpenVpnPilot.App.Services;
@@ -144,22 +149,41 @@ public sealed class ProfilePackageWriter : IProfilePackageWriter
     private readonly ISecretStore secrets;
     private readonly ISettingsService settings;
     private readonly TimeProvider timeProvider;
+    private readonly ISyncEngine? engine;
+    private readonly IOutbox? outbox;
+    private readonly ILogger<ProfilePackageWriter> logger;
 
+    /// <param name="engine">
+    /// The synchronisation of a server's copy. With it, applying a package is an import for the
+    /// server: every profile it adds is recorded as a creation, every sign in it carries as one to
+    /// share, and the synchronisation is asked to send them. Null on this computer's own library.
+    /// </param>
     public ProfilePackageWriter(
         IDbContextFactory<PilotDbContext> contextFactory,
         ISecretStore secrets,
         ISettingsService settings,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ISyncEngine? engine = null,
+        IOutbox? outbox = null,
+        ILogger<ProfilePackageWriter>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(contextFactory);
         ArgumentNullException.ThrowIfNull(secrets);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
+        if (engine is not null && outbox is null)
+        {
+            throw new ArgumentException("A server's copy needs the outbox as well.", nameof(outbox));
+        }
+
         this.contextFactory = contextFactory;
         this.secrets = secrets;
         this.settings = settings;
         this.timeProvider = timeProvider;
+        this.engine = engine;
+        this.outbox = outbox;
+        this.logger = logger ?? NullLogger<ProfilePackageWriter>.Instance;
     }
 
     public async Task<PackageWriteResult> WriteAsync(
@@ -221,6 +245,16 @@ public sealed class ProfilePackageWriter : IProfilePackageWriter
 
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
+        // On a server's copy the profiles and the notes that they still have to be uploaded are
+        // written together or not at all.
+        HashSet<Guid> before = engine is null
+            ? []
+            : await context.Profiles.Select(profile => profile.Id).ToHashSetAsync(cancellationToken);
+
+        await using IDbContextTransaction? transaction = engine is null
+            ? null
+            : await context.Database.BeginTransactionAsync(cancellationToken);
+
         PackageApplyResult result = await new ProfilePackageService(context, timeProvider).ApplyAsync(
             package.Content,
             new PackageApplyOptions
@@ -231,7 +265,29 @@ public sealed class ProfilePackageWriter : IProfilePackageWriter
             },
             cancellationToken);
 
+        if (transaction is not null)
+        {
+            await RecordForServerAsync(context, before, result, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+
         int restored = await RestoreCredentialsAsync(result.Credentials, cancellationToken);
+
+        if (engine is not null)
+        {
+            // What the package carried is offered to the vault like a sign in typed here; the
+            // server keeps what it already has.
+            if (restored > 0)
+            {
+                foreach (PackagedCredential credential in result.Credentials)
+                {
+                    await outbox!.RecordAsync(PendingChangeKind.VaultAdd, credential.ProfileId, credential.Realm, cancellationToken);
+                }
+            }
+
+            ServerLibraryLog.PackageApplied(logger, result.Added, restored);
+            engine.RequestSync();
+        }
 
         bool settingsApplied = false;
 
@@ -265,6 +321,38 @@ public sealed class ProfilePackageWriter : IProfilePackageWriter
         }
 
         return counts;
+    }
+
+    /// <summary>
+    /// Records what applying the package changed that the server has to hear about.
+    /// </summary>
+    private async Task RecordForServerAsync(
+        PilotDbContext context,
+        HashSet<Guid> before,
+        PackageApplyResult result,
+        CancellationToken cancellationToken)
+    {
+        List<Profile> added = await context.Profiles
+            .AsNoTracking()
+            .Where(profile => !before.Contains(profile.Id))
+            .ToListAsync(cancellationToken);
+
+        foreach (Profile profile in added)
+        {
+            await outbox!.StageAsync(context, PendingChangeKind.ProfileCreate, profile.Id, cancellationToken: cancellationToken);
+        }
+
+        if (added.Any(profile => profile.IsFavourite || profile.FavouriteSlot is not null))
+        {
+            await outbox!.StageAsync(context, PendingChangeKind.Favourites, cancellationToken: cancellationToken);
+        }
+
+        if (result.Hotkeys > 0)
+        {
+            await outbox!.StageAsync(context, PendingChangeKind.Hotkeys, cancellationToken: cancellationToken);
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>

@@ -1,19 +1,19 @@
 # Working on OpenVPN Pilot
 
-[OpenVPN Pilot](../README.md) · [Windows](windows.md) · [macOS](macos.md) · [Using it](usage.md) · [The `ovp` command](cli.md) · Working on it
+[OpenVPN Pilot](../README.md) · [Windows](windows.md) · [macOS](macos.md) · [Using it](usage.md) · [Settings](settings.md) · [Server](server.md) · [The `ovp` command](cli.md) · Working on it · [Testing](testing.md)
 
 ## Architecture
 
 | Project | Responsibility |
 | --- | --- |
-| `OpenVpnPilot.Core` | Domain model, abstractions, localization, settings, update check |
+| `OpenVpnPilot.Core` | Domain model, abstractions, localization, settings, storage resolution, the client of an OpenVPN Pilot Server, update check |
 | `OpenVpnPilot.OpenVpn` | Management interface protocol, `.ovpn` parsing, connection supervision |
 | `OpenVpnPilot.Data` | SQLite persistence, import, portable packages |
 | `OpenVpnPilot.Platform.Windows` | Interactive service client, secret storage, notification area, shortcuts |
 | `OpenVpnPilot.Platform.MacOS` | Helper client, keychain, menu bar item, notifications, hotkeys, login item |
 | `OpenVpnPilot.Platform.MacOS.Protocol` | The messages and the installed paths the two sides of the helper agree on |
 | `OpenVpnPilot.Platform.MacOS.Helper` | The privileged helper: the only part that runs as root |
-| `OpenVpnPilot.App` | Avalonia user interface and the services that drive it |
+| `OpenVpnPilot.App` | Avalonia user interface, the services that drive it, and the synchronisation with a server |
 | `OpenVpnPilot.Cli` | `ovp`, a headless companion command |
 
 One connection, end to end: the profile is written out of SQLite to a private file under
@@ -38,6 +38,31 @@ Credentials are supplied over that interface and are never written to disk. `Cor
 and `App` contain no platform specific code, so support for another operating system means adding an
 implementation of the existing interfaces rather than restructuring the application.
 
+### Server mode
+
+Where the profiles live is decided before anything is composed. `StorageModeReader` reads the `storage`
+section of the settings file, `ActiveStorage` turns it into the database every store opens, and the mode
+cannot change while the process runs: switching writes the settings and starts another copy, which waits
+for this one through `--after-restart`. In Local mode that database is `pilot.db`; in Server mode it is
+`servers/<key>/pilot.db`, an ordinary library with the same schema plus a sync state row and the outbox.
+A settings file naming a server whose address cannot be used opens the local library and says why.
+
+- **`Core/Server`** is the client of the server's API: the HTTP pipeline with the mandatory headers and
+  the wipe check, the session with its tokens, the sign in, and `ServerKey`, which normalises an address
+  and derives the key a copy is filed under. Every failure of the network becomes a `ServerResult`
+  rather than an exception, and the transport is the one place that catches them.
+- **`App/Services/Server`** is the synchronisation: `SyncEngine` runs the cycles, `Outbox` records what
+  changed here, `OutboxPusher` and `ChangeFeedPuller` send and apply, `PersonalDataSync` carries the
+  favourites, shortcuts and settings, `ServerSessionCoordinator` ties the session to the engine and to
+  who signed in, `ServerWipe` carries out the withdrawal of an account, and `ServerStatusSource` feeds
+  the status bar. Everything that records a change goes through `IChangeRecorder`, which writes nothing
+  on the local library.
+- **`Cli`** refuses the commands that would write a server's copy, in `ServerModeGuard`, apart from running
+  them.
+
+The pages [server](server.md), [signing in](server-signing-in.md) and [synchronisation](server-sync.md)
+describe the behaviour.
+
 ## Building
 
 ```bash
@@ -50,7 +75,10 @@ dotnet test
 
 Requires the .NET 10 SDK. The user interface is built with Avalonia. Building the macOS installers
 needs Xcode's command line tools as well, which `installer/build-macos.sh` checks for before it
-starts and which [docs/macos.md](macos.md) explains.
+starts and which [docs/macos.md](macos.md) explains. The tests, and what they need, are on the
+[testing page](testing.md). The ones in `tests/OpenVpnPilot.Server.IntegrationTests` run only when
+`OVP_TEST_SERVER_URL` and `OVP_TEST_SERVER_CERT` name a server and its certificate, and the testing page
+[says how to start one](testing.md#against-a-real-server).
 
 To build and run what you just changed, in one step:
 
@@ -66,7 +94,8 @@ One per platform, doing the same thing. Both stop whatever copy is open first, w
 is easy to forget: only one copy runs per user, so starting a new one while an old one is open hands
 the request to the old one and nothing on screen changes. `-Headless` and `--headless` start it
 without a window, `-Connect <name>` and `--connect <name>` connect a profile once it is up, and
-`-NoBuild` and `--no-build` skip straight to starting what is already built.
+`-NoBuild` and `--no-build` skip straight to starting what is already built. Both take the
+configuration too, `Debug` by default.
 
 The macOS one also names where .NET is, which a build from the source tree needs and an installed
 build does not. An SDK unpacked into a home directory is found through `DOTNET_ROOT` and nowhere
@@ -81,6 +110,11 @@ The build output is where `dotnet` puts it:
 | Command | `src/OpenVpnPilot.Cli/bin/Debug/net10.0/ovp.exe` | `.../net10.0/ovp` |
 | Installer payload | `artifacts/install`, written by `installer/build.ps1` | `artifacts/install`, written by `installer/build-macos.sh` |
 | Installer | `artifacts/release/OpenVpnPilot-<version>-win-x64.msi` | `artifacts/release/OpenVpnPilot-<version>-osx-arm64.dmg` |
+
+The installers read the version from `Directory.Build.props`, the one place it is set, and take
+`-Version` or `--version` to override it. `installer/build.ps1` also takes `-Configuration`, `-Runtime`
+and `-SelfContained`; `installer/build-macos.sh` takes `--configuration`, `--runtime`,
+`--self-contained`, `--skip-openvpn`, `--app-only` and `--helper-only`.
 
 ### Building on macOS
 
@@ -163,38 +197,6 @@ background is drawn for those positions, so changing one means changing the othe
 window is the Finder's job, which is why the build mounts a writable image, tells the Finder what the
 window should look like, and only then compresses it.
 
-## The test lab
-
-`lab/` is a Docker Compose project with ten OpenVPN servers and a site behind each of them. It exists
-because one server proves one path, and the parts of a VPN client that are hardest to get right are
-the ones a single server never exercises.
-
-```bash
-docker compose -f lab/docker-compose.yml up -d --build
-```
-
-Open `lab/index.html` for a page listing the ten servers, what each one is for, the credentials they
-want, and a check that says which of their sites answer right now. A site that answers is proof the
-tunnel is carrying traffic, which is more than a client reporting that it is connected.
-
-The ten client configurations appear in `lab/clients` once the certificate material has been built.
-Import them and the whole set is covered: a certificate on its own, a private key with a passphrase,
-a user name and password with and without a client certificate, the same over TCP, a one time code
-presented up front and one raised as the reason for a refusal, a server pushing name servers and
-routes, a server asking to carry all traffic, and a server pushing a compression setting a current
-client refuses. Every server has its own tunnel network, so all ten can be connected at once.
-
-Each site answers only through the tunnel in front of it and serves three things: something small to
-look at, something large to pull as fast as the tunnel allows, and something large served at a fixed
-rate, which is what a video looks like to a network. Credentials, addresses and names are invented
-and written into the generated configurations.
-
-```bash
-docker compose -f lab/docker-compose.yml down -v
-```
-
-That stops it and removes the certificate authority with it.
-
 ## Contributing
 
 Issues and pull requests are welcome, including the small ones: a wrong translation, a confusing
@@ -209,11 +211,13 @@ importantly, the OpenVPN facts that were established by measurement rather than 
 before changing anything that talks to OpenVPN, and correct it if a measurement ever contradicts it.
 
 **Prove it against a server.** `lab/` runs ten of them, covering the paths a single server never
-does. A change to the connection lifecycle without a test is a change nobody can check.
+does, and the [testing page](testing.md) says how. A change to the connection lifecycle without a
+test is a change nobody can check.
 
 `dotnet build` treats warnings as errors and `dotnet test` has to stay green. Everything in the
 repository is English, including commit messages, which are short, imperative and prefixed with a
-gitmoji code.
+gitmoji code. Every user facing string goes through the localizer, and the shipped language files
+are checked against each other by the tests.
 
 ## How this was built
 

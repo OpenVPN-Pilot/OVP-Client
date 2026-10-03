@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
+using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.App.ViewModels;
 using OpenVpnPilot.App.Views;
 using OpenVpnPilot.Core.Abstractions;
@@ -20,6 +21,9 @@ namespace OpenVpnPilot.App.Services;
 ///
 /// A one time code is never stored. It is valid once by definition, so remembering it would only
 /// guarantee a failed attempt the next time.
+///
+/// Which answers were typed rather than read is told to the ledger, so a sign in that worked can be
+/// shared with a server's vault once the connection is up. Whether it worked is not known here.
 /// </remarks>
 public sealed class StoredCredentialProvider : ICredentialProvider
 {
@@ -27,22 +31,26 @@ public sealed class StoredCredentialProvider : ICredentialProvider
     private readonly ISecretStore secrets;
     private readonly ISettingsService settings;
     private readonly ILocalizer localizer;
+    private readonly ITypedCredentialLedger typed;
 
     public StoredCredentialProvider(
         IProfileNameLookup profileNames,
         ISecretStore secrets,
         ISettingsService settings,
-        ILocalizer localizer)
+        ILocalizer localizer,
+        ITypedCredentialLedger typed)
     {
         ArgumentNullException.ThrowIfNull(profileNames);
         ArgumentNullException.ThrowIfNull(secrets);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(localizer);
+        ArgumentNullException.ThrowIfNull(typed);
 
         this.profileNames = profileNames;
         this.secrets = secrets;
         this.settings = settings;
         this.localizer = localizer;
+        this.typed = typed;
     }
 
     public async Task<VpnCredentials?> RequestAsync(
@@ -66,6 +74,7 @@ public sealed class StoredCredentialProvider : ICredentialProvider
         // A challenge always needs a person, because the code exists only in the moment.
         if (stored is not null && request.Challenge is null)
         {
+            typed.NoteStored(request);
             return new VpnCredentials(stored.Username, stored.Password);
         }
 
@@ -76,7 +85,9 @@ public sealed class StoredCredentialProvider : ICredentialProvider
             return null;
         }
 
-        if (answer.Remember && secrets.IsAvailable)
+        bool remembered = answer.Remember && secrets.IsAvailable;
+
+        if (remembered)
         {
             await secrets.WriteAsync(
                 reference,
@@ -84,6 +95,7 @@ public sealed class StoredCredentialProvider : ICredentialProvider
                 cancellationToken);
         }
 
+        typed.NoteTyped(request, answer.Credentials, remembered);
         return answer.Credentials;
     }
 

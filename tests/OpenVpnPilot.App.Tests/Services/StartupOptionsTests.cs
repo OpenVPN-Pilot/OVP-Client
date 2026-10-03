@@ -166,4 +166,39 @@ public sealed class StartupOptionsTests
             Assert.True(StartupOptions.Parse([form]).ShowHelp, form);
         }
     }
+
+    /// <summary>
+    /// A restart is an ordinary start that waits first: no action to hand over, no window hidden.
+    /// </summary>
+    [Fact]
+    public void AfterRestart_CarriesTheProcessToWaitForAndIsNotAnAction()
+    {
+        StartupOptions options = StartupOptions.Parse(["--after-restart", "4242"]);
+
+        Assert.Null(options.Error);
+        Assert.Equal(4242, options.AfterRestartOf);
+        Assert.False(options.HasActions);
+        Assert.False(options.StartsHidden);
+        Assert.Empty(options.ToCommands());
+    }
+
+    [Fact]
+    public void AfterRestart_IsAbsentFromAnOrdinaryStart()
+    {
+        Assert.Null(StartupOptions.Parse([]).AfterRestartOf);
+    }
+
+    [Theory]
+    [InlineData]
+    [InlineData("--background")]
+    [InlineData("not-a-number")]
+    [InlineData("0")]
+    [InlineData("-12")]
+    [InlineData("12abc")]
+    public void AfterRestart_WithoutAProcessId_IsRefused(params string[] value)
+    {
+        StartupOptions options = StartupOptions.Parse(["--after-restart", .. value]);
+
+        Assert.NotNull(options.Error);
+    }
 }

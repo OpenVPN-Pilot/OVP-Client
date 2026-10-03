@@ -423,7 +423,7 @@ internal readonly record struct LogFileName(DateTime Hour, int Part) : IComparab
 /// One line of either log.
 /// </summary>
 /// <param name="Timestamp">When it happened.</param>
-/// <param name="Source">Which of the two streams it came from.</param>
+/// <param name="Source">Which stream it came from, and for the application's own, whether it concerns a server.</param>
 /// <param name="Level">Its severity, in the application's own terms.</param>
 /// <param name="Scope">
 /// The profile for an OpenVPN line, the component for an application line. This is what makes a
@@ -469,6 +469,16 @@ public enum LogSource
     /// OpenVPN's log stream, read from the management interface.
     /// </summary>
     OpenVpn,
+
+    /// <summary>
+    /// The application's own record of what it did with a server: calls, sign in, synchronisation,
+    /// the changes waiting to be sent and switching the store.
+    /// </summary>
+    /// <remarks>
+    /// Part of what the application writes, set apart so that server traffic can be read on its
+    /// own. <see cref="LogHubSink"/> decides which lines belong here.
+    /// </remarks>
+    Server,
 }
 
 /// <summary>

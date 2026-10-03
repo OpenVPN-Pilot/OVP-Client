@@ -1,0 +1,41 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:OpenVpnPilot.App.ViewModels"
+        xmlns:views="using:OpenVpnPilot.App.Views"
+        xmlns:loc="using:OpenVpnPilot.App.Localization"
+        x:Class="OpenVpnPilot.App.Views.ServerSignInWindow"
+        x:DataType="vm:ServerSignInViewModel"
+        Width="520" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="{DynamicResource SurfaceWindow}"
+        Icon="/Assets/openvpnpilot.ico"
+        Title="{loc:Translate storage.signInTitle}">
+
+  <StackPanel Margin="28,24" Spacing="16">
+
+    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsChecking}">
+      <ProgressBar IsIndeterminate="True" Width="80" VerticalAlignment="Center" />
+      <TextBlock Text="{loc:Translate firstRun.checking}" Classes="muted" VerticalAlignment="Center" />
+    </StackPanel>
+
+    <ContentControl Content="{Binding Form}">
+      <ContentControl.ContentTemplate>
+        <DataTemplate x:DataType="vm:SignInViewModel">
+          <views:SignInView />
+        </DataTemplate>
+      </ContentControl.ContentTemplate>
+    </ContentControl>
+
+    <Border Background="{DynamicResource StateFailedSoft}"
+            CornerRadius="{StaticResource RadiusMedium}" Padding="10,7"
+            IsVisible="{Binding HasMessage}">
+      <TextBlock Text="{Binding Message}" Foreground="{DynamicResource StateFailed}"
+                 TextWrapping="Wrap" FontSize="12" />
+    </Border>
+
+    <Button Content="{loc:Translate common.close}" Command="{Binding CloseCommand}"
+            HorizontalAlignment="Left" MinWidth="92" IsCancel="True" />
+
+  </StackPanel>
+</Window>

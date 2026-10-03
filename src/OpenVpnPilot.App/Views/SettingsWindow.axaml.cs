@@ -17,6 +17,8 @@ namespace OpenVpnPilot.App.Views;
 /// </remarks>
 public partial class SettingsWindow : Window
 {
+    private SettingsViewModel? listeningTo;
+
     public SettingsWindow()
     {
         InitializeComponent();
@@ -25,6 +27,48 @@ public partial class SettingsWindow : Window
         AddHandler(KeyDownEvent, OnPreviewKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
         this.FindControl<Button>("DiagnosticsButton")!.Click += async (_, _) => await WriteDiagnosticsAsync();
+    }
+
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        if (listeningTo is not null)
+        {
+            listeningTo.PageRequested -= OnPageRequested;
+        }
+
+        listeningTo = ViewModel;
+
+        if (listeningTo is not null)
+        {
+            listeningTo.PageRequested += OnPageRequested;
+        }
+
+        base.OnDataContextChanged(e);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        if (listeningTo is not null)
+        {
+            listeningTo.PageRequested -= OnPageRequested;
+            listeningTo = null;
+        }
+
+        base.OnClosed(e);
+    }
+
+    /// <summary>
+    /// Selects a page by its name, so the order of the tabs can change without breaking this.
+    /// </summary>
+    private void OnPageRequested(object? sender, SettingsPage page)
+    {
+        string name = page switch
+        {
+            SettingsPage.Storage => "StorageTab",
+            _ => throw new ArgumentOutOfRangeException(nameof(page), page, "No such page of the settings."),
+        };
+
+        this.FindControl<TabControl>("Pages")!.SelectedItem = this.FindControl<TabItem>(name);
     }
 
     /// <summary>

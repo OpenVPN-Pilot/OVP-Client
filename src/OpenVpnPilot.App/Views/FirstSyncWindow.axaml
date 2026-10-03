@@ -1,0 +1,67 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:OpenVpnPilot.App.ViewModels"
+        xmlns:views="using:OpenVpnPilot.App.Views"
+        xmlns:loc="using:OpenVpnPilot.App.Localization"
+        x:Class="OpenVpnPilot.App.Views.FirstSyncWindow"
+        x:DataType="vm:FirstSyncViewModel"
+        Width="560" SizeToContent="Height"
+        WindowStartupLocation="CenterScreen"
+        CanResize="False"
+        Background="{DynamicResource SurfaceWindow}"
+        Icon="/Assets/openvpnpilot.ico"
+        Title="{loc:Translate firstRun.windowTitle}">
+
+  <StackPanel Margin="28,24" Spacing="16">
+
+    <TextBlock Text="{Binding Heading}" Classes="title" TextWrapping="Wrap"
+               IsVisible="{Binding !IsSignIn}" />
+
+    <!-- Confirming the sign in, then fetching the profiles. -->
+    <StackPanel Spacing="10" IsVisible="{Binding IsWorking}">
+      <TextBlock Text="{Binding Status}" Classes="body" TextWrapping="Wrap" />
+      <ProgressBar IsIndeterminate="True" />
+    </StackPanel>
+
+    <ContentControl Content="{Binding SignIn}" IsVisible="{Binding IsSignIn}">
+      <ContentControl.ContentTemplate>
+        <DataTemplate x:DataType="vm:SignInViewModel">
+          <views:SignInView ShowsActions="False" />
+        </DataTemplate>
+      </ContentControl.ContentTemplate>
+    </ContentControl>
+
+    <StackPanel Spacing="12" IsVisible="{Binding IsLeaving}">
+      <TextBlock Text="{loc:Translate firstRun.leaving}" Classes="body" TextWrapping="Wrap" />
+      <ProgressBar IsIndeterminate="True" />
+    </StackPanel>
+
+    <Border Background="{DynamicResource StateFailedSoft}"
+            CornerRadius="{StaticResource RadiusMedium}" Padding="10,7"
+            IsVisible="{Binding HasMessage}">
+      <StackPanel Spacing="3">
+        <TextBlock Text="{Binding Message}" Foreground="{DynamicResource StateFailed}"
+                   TextWrapping="Wrap" FontSize="12" />
+        <TextBlock Text="{Binding Reference}" Classes="muted" TextWrapping="Wrap"
+                   IsVisible="{Binding HasReference}" />
+      </StackPanel>
+    </Border>
+
+    <Grid ColumnDefinitions="Auto,*,Auto" IsVisible="{Binding IsFailed}">
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+        <Button Content="{loc:Translate common.back}" Command="{Binding BackCommand}" MinWidth="92" />
+        <Button Content="{loc:Translate firstRun.useThisComputer}" Classes="quiet"
+                Command="{Binding UseThisComputerCommand}" />
+      </StackPanel>
+      <Button Grid.Column="2" Content="{loc:Translate firstRun.retry}"
+              Command="{Binding RetryCommand}" Classes="primary" MinWidth="120" IsDefault="True" />
+    </Grid>
+
+    <Grid ColumnDefinitions="Auto,*,Auto" IsVisible="{Binding IsSignIn}">
+      <Button Grid.Column="0" Content="{loc:Translate firstRun.useThisComputer}" Classes="quiet"
+              Command="{Binding UseThisComputerCommand}" />
+      <views:SignInActions Grid.Column="2" DataContext="{Binding SignIn}" />
+    </Grid>
+
+  </StackPanel>
+</Window>

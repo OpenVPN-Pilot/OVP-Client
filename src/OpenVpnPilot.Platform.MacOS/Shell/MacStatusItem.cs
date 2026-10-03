@@ -96,7 +96,12 @@ public sealed class MacStatusItem : ISystemTrayIcon
                 continue;
             }
 
-            NativeMenuItem item = new(entry.Label) { IsEnabled = entry.IsEnabled };
+            NativeMenuItem item = new(entry.Label)
+            {
+                IsEnabled = entry.IsEnabled,
+                ToggleType = entry.IsChecked ? MenuItemToggleType.CheckBox : MenuItemToggleType.None,
+                IsChecked = entry.IsChecked,
+            };
             string id = entry.Id;
             item.Click += (_, _) => MenuItemInvoked?.Invoke(this, id);
             menu.Items.Add(item);
