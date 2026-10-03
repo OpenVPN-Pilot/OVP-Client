@@ -10,6 +10,8 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-03
+
 ### Added
 
 - **The settings file names where the profiles live and which installation this is.** `storage`
@@ -52,8 +54,10 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   network, so the role is known while offline. Signing in as somebody other than the person this
   copy last knew first discards the previous person's waiting changes, the profiles they created
   that never reached the server with their stored sign ins, their favourites and shortcuts, and
-  then synchronises everything again; the same person simply continues. Signing out keeps the copy
-  and its waiting changes. When the keystore refuses a renewed session token, the session goes on
+  then synchronises everything again; the same person simply continues. Signing out ends every
+  tunnel and empties the copy: profiles, their stored sign ins, history, shortcuts and the changes
+  not yet sent, so nothing of the server can be connected at this computer without signing in
+  again. When the keystore refuses a renewed session token, the session goes on
   for this run and the used token is removed, so the next start asks for a sign in rather than
   presenting a token the server has already seen.
 - **When a server withdraws the account**, everything that came from it is removed: every tunnel
@@ -72,10 +76,9 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   on screen before the main window appears. A failure offers going back and using this computer
   instead.
 - **"Forget this server's stored credentials"** takes the place of "Forget all stored credentials"
-  in Server mode. It signs out of the server first, so the session ends on the server rather than
-  lingering until it expires, and removes the sign ins of that server's profiles only: those of this
-  computer's own library and of other servers stay. It also forgets where the synchronisation had
-  got to, so the next one fetches every shared sign in again.
+  in Server mode. It signs out of the server first, which empties the copy as signing out does, so
+  the session ends on the server rather than lingering until it expires, and removes the sign ins of
+  that server's profiles only: those of this computer's own library and of other servers stay.
 - **The log window can show the server on its own.** Calls to the server, signing in, the
   synchronisation, waiting changes and switching the store are marked `server` in the log and in
   the files, and "Server only" in the source filter shows just them; "This application only" still
@@ -83,7 +86,7 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
 - **The diagnostics bundle says where the profiles live** in a new `storage.txt`: the mode, the
   client version, and for a server its host, its version and API version as it answers then, the
   last pull and push, the cursor, the last error code with its request id, the signed in role and
-  how many changes wait with the problem codes they met. Never a name, a token, a sign in or the
+  how many changes wait with the problem codes they met. This file never holds a name, a token, a sign in or the
   address as it was written.
 - **A Storage page in the settings** ("Speicherort" in German) says where the profiles live and, for
   a server, its address, who is signed in with which role and provider in words rather than as the
