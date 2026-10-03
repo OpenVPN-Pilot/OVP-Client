@@ -41,12 +41,29 @@ public interface IServerAccountState
     /// their keystore entries stay: they belong to the team and to the machine.
     /// </remarks>
     public Task<PersonalDataDiscarded> DiscardPersonalDataAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Empties the copy, for the person signing out.
+    /// </summary>
+    /// <remarks>
+    /// Signing out leaves nothing of the server on this computer that could be used without signing
+    /// in again: every profile goes with its tags, history and stored sign ins, and so do the
+    /// shortcuts, the changes waiting and the memory of who was signed in, so the next sign in, by
+    /// anyone, starts with a complete synchronisation. The database itself stays, because the
+    /// running application keeps it open.
+    /// </remarks>
+    public Task<CopyErased> EraseCopyAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>
 /// How much of the previous person's data was discarded. Counts, never values.
 /// </summary>
 public sealed record PersonalDataDiscarded(int PendingChanges, int Favourites, int Hotkeys, int TemporaryProfiles);
+
+/// <summary>
+/// What emptying the copy removed. Counts, never values.
+/// </summary>
+public sealed record CopyErased(int Profiles, int Secrets, int PendingChanges);
 
 /// <summary>
 /// Keeps that state in the sync state row of the copy's database.
@@ -165,6 +182,32 @@ public sealed class ServerAccountState : IServerAccountState
         PersonalDataDiscarded discarded = new(pending, favourites, hotkeys, temporary.Count);
         ServerAccountLog.PersonalDataDiscarded(logger, discarded.PendingChanges, discarded.Favourites, discarded.Hotkeys, discarded.TemporaryProfiles);
         return discarded;
+    }
+
+    public async Task<CopyErased> EraseCopyAsync(CancellationToken cancellationToken = default)
+    {
+        int pending = await outbox.ClearAsync(cancellationToken);
+
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using IDbContextTransaction transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+
+        // Read inside the transaction, so a profile the keystore is cleared for is one that is deleted.
+        List<Guid> profiles = await context.Profiles.Select(profile => profile.Id).ToListAsync(cancellationToken);
+
+        // Tag links, sessions and their events go with the profiles by cascade.
+        await context.Profiles.ExecuteDeleteAsync(cancellationToken);
+        await context.Tags.ExecuteDeleteAsync(cancellationToken);
+        await context.HotkeyBindings.ExecuteDeleteAsync(cancellationToken);
+        await context.SyncStates.ExecuteDeleteAsync(cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        // After the commit, for the reason given in DiscardPersonalDataAsync.
+        int secrets = await maintenance.DeleteSecretsAsync(profiles, cancellationToken);
+
+        CopyErased erased = new(profiles.Count, secrets, pending);
+        ServerAccountLog.CopyErased(logger, erased.Profiles, erased.Secrets, erased.PendingChanges);
+        return erased;
     }
 
     private static Task<int> UpdateUserAsync(PilotDbContext context, CurrentUserResponse user, CancellationToken cancellationToken) =>

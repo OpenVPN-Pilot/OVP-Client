@@ -37,7 +37,7 @@ public sealed partial class StorageSettingsViewModel : ViewModelBase, IDisposabl
     private readonly ILogger<StorageSettingsViewModel> logger;
     private readonly IServerStatusSource? status;
     private readonly ISyncEngine? engine;
-    private readonly IServerSignIn? server;
+    private readonly IServerSignOut? server;
 
     // Cancelled when the page closes, which stops a synchronisation it asked for; the schedule
     // carries on from wherever that one stopped.
@@ -55,7 +55,7 @@ public sealed partial class StorageSettingsViewModel : ViewModelBase, IDisposabl
         ILogger<StorageSettingsViewModel> logger,
         IServerStatusSource? status = null,
         ISyncEngine? engine = null,
-        IServerSignIn? server = null)
+        IServerSignOut? server = null)
     {
         ArgumentNullException.ThrowIfNull(localizer);
         ArgumentNullException.ThrowIfNull(storage);
@@ -234,7 +234,7 @@ public sealed partial class StorageSettingsViewModel : ViewModelBase, IDisposabl
         try
         {
             // Not cancelled with the page: a sign out cut short leaves the session open on the server.
-            await Task.Run(() => server!.SignOutAsync(CancellationToken.None));
+            await Task.Run(() => server!.SignOutAndEraseAsync(CancellationToken.None));
             Message = localizer["storage.signedOut"];
         }
         finally

@@ -18,8 +18,15 @@ namespace OpenVpnPilot.App.Tests.Services.Server;
 /// </summary>
 public sealed class ServerSessionCoordinatorTests : IAsyncDisposable
 {
+    private static readonly Guid LocalProfile = Guid.NewGuid();
+
     private readonly FakeSyncEngine engine = new();
     private readonly RecordingWipe wipe = new();
+    private readonly CountedTunnels tunnels = new() { Count = 2 };
+    private readonly LibraryChangeNotifier library = new();
+    private TypedCredentials? held;
+    private Action? onLogout;
+    private bool unreachable;
     private TestDatabase? database;
     private TestConnection? server;
 
@@ -132,7 +139,81 @@ public sealed class ServerSessionCoordinatorTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task SignOut_StopsTheSynchronisationAndKeepsTheCopyAndItsWaitingChanges()
+    public async Task SignOutAndErase_EndsTunnelsSignsOutAndEmptiesTheCopy()
+    {
+        (ServerSessionCoordinator coordinator, Profile shared) = await ArrangeAsync(lastKnown: ServerAnswers.Alice, signsIn: ServerAnswers.Alice);
+        await coordinator.SignInAsync("alice", "secret");
+
+        await using (PilotDbContext tagging = await database!.Factory.CreateDbContextAsync())
+        {
+            tagging.ProfileTags.Add(new ProfileTag { ProfileId = shared.Id, Tag = new Tag { Name = "example-tag" } });
+            await tagging.SaveChangesAsync();
+        }
+
+        await server!.Secrets.WriteAsync(SecretReference.ForProfile(shared.Id, "Auth"), new StoredSecret("team", "shared"));
+        await server.Secrets.WriteAsync(SecretReference.ForProfile(LocalProfile, "Auth"), new StoredSecret("me", "local"));
+        held!.Hold(shared.Id, "Auth", new StoredSecret("team", "typed"));
+        LibraryChanges announced = LibraryChanges.None;
+        library.Changed += (_, change) => announced = change.Changes;
+        bool refreshTokenThereAtLogout = false;
+        onLogout = () => refreshTokenThereAtLogout = server.Secrets
+            .TryReadAsync(SecretReference.ForServerRefreshToken(TestConnection.ServerKey)).GetAwaiter().GetResult() is not null;
+
+        CopyErased erased = await coordinator.SignOutAndEraseAsync();
+
+        Assert.Equal(["start", "stop"], engine.Calls);
+        Assert.Equal(1, tunnels.Disconnects);
+        Assert.False(coordinator.IsSignedIn);
+        Assert.True(refreshTokenThereAtLogout);
+
+        await using PilotDbContext context = await database.Factory.CreateDbContextAsync();
+        Assert.Empty(await context.Profiles.ToListAsync());
+        Assert.Empty(await context.Tags.ToListAsync());
+        Assert.Empty(await context.HotkeyBindings.ToListAsync());
+        Assert.Empty(await context.SyncStates.ToListAsync());
+        Assert.Empty(await database.MarkersAsync());
+
+        // The server's sign ins go, this computer's own stay.
+        Assert.Null(await server.Secrets.TryReadAsync(SecretReference.ForProfile(shared.Id, "Auth")));
+        Assert.NotNull(await server.Secrets.TryReadAsync(SecretReference.ForProfile(LocalProfile, "Auth")));
+        Assert.Null(held.Peek(shared.Id, "Auth"));
+
+        Assert.Equal(new CopyErased(1, 1, 1), erased);
+        Assert.True(announced.HasFlag(LibraryChanges.Profiles));
+    }
+
+    [Fact]
+    public async Task SignOutAndErase_ServerUnreachable_StillEmptiesTheCopy()
+    {
+        (ServerSessionCoordinator coordinator, _) = await ArrangeAsync(lastKnown: ServerAnswers.Alice, signsIn: ServerAnswers.Alice);
+        await coordinator.SignInAsync("alice", "secret");
+        unreachable = true;
+
+        await coordinator.SignOutAndEraseAsync();
+
+        Assert.False(coordinator.IsSignedIn);
+        await using PilotDbContext context = await database!.Factory.CreateDbContextAsync();
+        Assert.Empty(await context.Profiles.ToListAsync());
+    }
+
+    [Fact]
+    public async Task SignIn_AfterSignOutAndErase_StartsWithACompleteSynchronisation()
+    {
+        (ServerSessionCoordinator coordinator, _) = await ArrangeAsync(lastKnown: ServerAnswers.Alice, signsIn: ServerAnswers.Alice);
+        await coordinator.SignInAsync("alice", "secret");
+        await coordinator.SignOutAndEraseAsync();
+
+        await coordinator.SignInAsync("alice", "secret");
+
+        await using PilotDbContext context = await database!.Factory.CreateDbContextAsync();
+        SyncStateRow state = await context.SyncStates.SingleAsync();
+        Assert.Null(state.Cursor);
+        Assert.Equal(ServerAnswers.Alice.Id, state.UserId);
+        Assert.Equal(["start", "stop", "start"], engine.Calls);
+    }
+
+    [Fact]
+    public async Task SignOut_DuringTheFirstSetup_StopsTheSynchronisationAndKeepsTheCopyAndItsWaitingChanges()
     {
         (ServerSessionCoordinator coordinator, _) = await ArrangeAsync(lastKnown: ServerAnswers.Alice, signsIn: ServerAnswers.Alice);
         await coordinator.SignInAsync("alice", "secret");
@@ -143,6 +224,7 @@ public sealed class ServerSessionCoordinatorTests : IAsyncDisposable
         Assert.False(coordinator.IsSignedIn);
         Assert.Single(await database!.MarkersAsync());
         Assert.Contains("POST /api/v1/auth/logout", server!.Network.Requests);
+        Assert.Equal(0, tunnels.Disconnects);
     }
 
     [Fact]
@@ -176,6 +258,17 @@ public sealed class ServerSessionCoordinatorTests : IAsyncDisposable
         Assert.Equal(ServerOutcome.Wiped, confirmed.Outcome);
         ServerWipeDirective directive = await wipe.Asked.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(401, directive.Status);
+    }
+
+    private HttpResponseMessage Logout()
+    {
+        if (unreachable)
+        {
+            throw new HttpRequestException("The server cannot be reached in this test.");
+        }
+
+        onLogout?.Invoke();
+        return new HttpResponseMessage(HttpStatusCode.NoContent);
     }
 
     public async ValueTask DisposeAsync()
@@ -232,16 +325,17 @@ public sealed class ServerSessionCoordinatorTests : IAsyncDisposable
                     ? ServerAnswers.Problem(HttpStatusCode.Unauthorized, ServerErrorCodes.AccountRevoked, wipe: true)
                     : ServerAnswers.Tokens(signsIn ?? lastKnown),
                 "/api/v1/auth/me" => ServerAnswers.Json(signsIn ?? lastKnown),
-                "/api/v1/auth/logout" => new HttpResponseMessage(HttpStatusCode.NoContent),
+                "/api/v1/auth/logout" => Logout(),
                 _ => new HttpResponseMessage(HttpStatusCode.NotFound),
             },
             secrets);
 
         Outbox outbox = new(database.Factory, TimeProvider.System, NullLogger<Outbox>.Instance);
+        held = new TypedCredentials(new FixedStorageMode(true));
         ServerAccountState account = new(
             database.Factory,
             outbox,
-            new ServerProfileMaintenance(database.Factory, server.Secrets, new TypedCredentials(new FixedStorageMode(true)), outbox, NullLogger<ServerProfileMaintenance>.Instance),
+            new ServerProfileMaintenance(database.Factory, server.Secrets, held, outbox, NullLogger<ServerProfileMaintenance>.Instance),
             NullLogger<ServerAccountState>.Instance);
 
         ServerSessionCoordinator coordinator = new(
@@ -249,6 +343,9 @@ public sealed class ServerSessionCoordinatorTests : IAsyncDisposable
             engine,
             account,
             wipe,
+            tunnels,
+            held,
+            library,
             NullLogger<ServerSessionCoordinator>.Instance);
 
         return (coordinator, favourite);

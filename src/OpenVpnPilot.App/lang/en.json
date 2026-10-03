@@ -574,7 +574,7 @@
       "syncDone": "Synchronised.",
       "syncIncomplete": "The synchronisation did not complete: {0}",
       "syncFailed": "The synchronisation failed. The log has the details.",
-      "signedOut": "Signed out. The copy and the changes waiting stay on this computer until you sign in again.",
+      "signedOut": "Signed out. The server's profiles and their stored sign ins have been removed from this computer; signing in again fetches them anew.",
       "switchTitle": "Switch to a server",
       "signInTitle": "Sign in to the server"
     },
@@ -612,7 +612,7 @@
     },
     "banner": {
       "signInTitle": "Sign in required",
-      "signInText": "The session with {0} has ended. The profiles keep working from the copy on this computer; sign in again to synchronise.",
+      "signInText": "You are not signed in to {0}. Sign in to load and synchronise the server's profiles.",
       "clientOutdatedTitle": "Update required",
       "clientOutdatedText": "{0} needs a newer version of OpenVPN Pilot. Nothing is synchronised until it is updated.",
       "clockTitle": "Clock wrong",

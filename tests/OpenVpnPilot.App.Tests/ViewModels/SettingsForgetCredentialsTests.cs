@@ -99,7 +99,7 @@ public sealed class SettingsForgetCredentialsTests : IAsyncDisposable
         }
     }
 
-    private async Task<SettingsViewModel> ModelAsync(IServerSignIn? server, IServerCredentialsReset? credentialsReset = null)
+    private async Task<SettingsViewModel> ModelAsync(IServerSignOut? server, IServerCredentialsReset? credentialsReset = null)
     {
         database ??= await TestDatabase.CreateAsync();
         FakeSettingsService settings = new();
@@ -125,28 +125,20 @@ public sealed class SettingsForgetCredentialsTests : IAsyncDisposable
             credentialsReset: credentialsReset);
     }
 
-    private sealed class RecordingSignIn(FakeSecrets secrets) : IServerSignIn
+    private sealed class RecordingSignIn(FakeSecrets secrets) : IServerSignOut
     {
         public int SignOuts { get; private set; }
 
         public bool RefreshTokenWasThere { get; private set; }
 
-        public Task<ServerCheckResult> CheckServerAsync(CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("Not part of forgetting.");
-
-        public Task<ServerResult<CurrentUserResponse>> SignInAsync(string username, string? password, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("Not part of forgetting.");
-
-        public Task<ServerResult<CurrentUserResponse>> SignInWithEntraAsync(string entraAccessToken, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("Not part of forgetting.");
-
-        public async Task SignOutAsync(CancellationToken cancellationToken = default)
+        public async Task<CopyErased> SignOutAndEraseAsync(CancellationToken cancellationToken = default)
         {
             SignOuts++;
             RefreshTokenWasThere = await secrets.TryReadAsync(SecretReference.ForServerRefreshToken(ServerKey), cancellationToken) is not null;
 
             // As the session does once the server has been told.
             await secrets.DeleteAsync(SecretReference.ForServerRefreshToken(ServerKey), cancellationToken);
+            return new CopyErased(0, 0, 0);
         }
     }
 

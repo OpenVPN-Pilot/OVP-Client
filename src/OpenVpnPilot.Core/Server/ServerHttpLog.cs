@@ -5,7 +5,7 @@ namespace OpenVpnPilot.Core.Server;
 // Event ids of server mode, 3600 to 3999, which the log hub reads as marking a line as the server's
 // wherever it was written. Who holds which part of the block:
 // 3600-3699 connection and HTTP (ServerHttpLog);
-// 3700-3711 session and tokens (ServerSessionLog), 3712-3726 the account (ServerAccountLog);
+// 3700-3711 session and tokens (ServerSessionLog), 3712-3728 the account (ServerAccountLog);
 // 3800-3899 synchronisation (SyncEngineLog);
 // 3900-3907 and 3929-3930 switching the store (StorageLog), 3908-3912 the wipe (ServerWipeLog),
 // 3913-3928 the server's status (ServerStatusLog), 3940-3949 restarting (the platforms' restart);

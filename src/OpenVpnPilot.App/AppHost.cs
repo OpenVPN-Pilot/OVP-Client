@@ -290,6 +290,7 @@ internal static class AppHost
         services.AddSingleton<ServerSessionCoordinator>();
         services.AddSingleton<IServerSessionCoordinator>(provider => provider.GetRequiredService<ServerSessionCoordinator>());
         services.AddSingleton<IServerSignIn>(provider => provider.GetRequiredService<ServerSessionCoordinator>());
+        services.AddSingleton<IServerSignOut>(provider => provider.GetRequiredService<ServerSessionCoordinator>());
 
         // What the status bar, the banners, the tray and the storage settings show about the server.
         services.AddSingleton<ServerStatusSource>();

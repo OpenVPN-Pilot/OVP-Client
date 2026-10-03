@@ -26,7 +26,7 @@
     <ContentControl Content="{Binding SignIn}" IsVisible="{Binding IsSignIn}">
       <ContentControl.ContentTemplate>
         <DataTemplate x:DataType="vm:SignInViewModel">
-          <views:SignInView />
+          <views:SignInView ShowsActions="False" />
         </DataTemplate>
       </ContentControl.ContentTemplate>
     </ContentControl>
@@ -57,10 +57,11 @@
               Command="{Binding RetryCommand}" Classes="primary" MinWidth="120" IsDefault="True" />
     </Grid>
 
-    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsSignIn}">
-      <Button Content="{loc:Translate firstRun.useThisComputer}" Classes="quiet"
+    <Grid ColumnDefinitions="Auto,*,Auto" IsVisible="{Binding IsSignIn}">
+      <Button Grid.Column="0" Content="{loc:Translate firstRun.useThisComputer}" Classes="quiet"
               Command="{Binding UseThisComputerCommand}" />
-    </StackPanel>
+      <views:SignInActions Grid.Column="2" DataContext="{Binding SignIn}" />
+    </Grid>
 
   </StackPanel>
 </Window>

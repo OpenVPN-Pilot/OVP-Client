@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using OpenVpnPilot.App.Services.Storage;
 using OpenVpnPilot.Core.Server;
 using OpenVpnPilot.Core.Server.Contracts;
 
@@ -59,13 +60,30 @@ public interface IServerSessionCoordinator
     public Task StopAsync(CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// Signing out as a person means it: nothing of the server stays usable on this computer.
+/// </summary>
+/// <remarks>
+/// <see cref="IServerSignIn.SignOutAsync"/> only ends the session and keeps the copy, which is what
+/// going back during the first setup needs. This is the sign out the settings offer, and it also
+/// ends every tunnel and empties the copy, because a copy left behind would keep its profiles and
+/// stored sign ins connectable by anyone at this computer.
+/// </remarks>
+public interface IServerSignOut
+{
+    public Task<CopyErased> SignOutAndEraseAsync(CancellationToken cancellationToken = default);
+}
+
 /// <inheritdoc cref="IServerSessionCoordinator"/>
-public sealed class ServerSessionCoordinator : IServerSessionCoordinator, IServerSignIn, IDisposable
+public sealed class ServerSessionCoordinator : IServerSessionCoordinator, IServerSignIn, IServerSignOut, IDisposable
 {
     private readonly IServerConnection connection;
     private readonly ISyncEngine engine;
     private readonly IServerAccountState account;
     private readonly IServerWipe wipe;
+    private readonly IActiveTunnels tunnels;
+    private readonly IHeldVaultSecrets heldSecrets;
+    private readonly ILibraryChangeNotifier library;
     private readonly ILogger<ServerSessionCoordinator> logger;
 
     // Start, sign in, sign out and the confirmation after a restart one at a time, so a sign in never
@@ -85,18 +103,27 @@ public sealed class ServerSessionCoordinator : IServerSessionCoordinator, IServe
         ISyncEngine engine,
         IServerAccountState account,
         IServerWipe wipe,
+        IActiveTunnels tunnels,
+        IHeldVaultSecrets heldSecrets,
+        ILibraryChangeNotifier library,
         ILogger<ServerSessionCoordinator> logger)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(wipe);
+        ArgumentNullException.ThrowIfNull(tunnels);
+        ArgumentNullException.ThrowIfNull(heldSecrets);
+        ArgumentNullException.ThrowIfNull(library);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.connection = connection;
         this.engine = engine;
         this.account = account;
         this.wipe = wipe;
+        this.tunnels = tunnels;
+        this.heldSecrets = heldSecrets;
+        this.library = library;
         this.logger = logger;
         stopping = lifetime.Token;
     }
@@ -198,7 +225,8 @@ public sealed class ServerSessionCoordinator : IServerSessionCoordinator, IServe
 
     /// <summary>
     /// Signs out and stops the synchronisation. The copy and its waiting changes stay, so signing in
-    /// again as the same person continues where this left off.
+    /// again as the same person continues where this left off. Only the first setup uses this; the
+    /// person signing out uses <see cref="SignOutAndEraseAsync"/>.
     /// </summary>
     public async Task SignOutAsync(CancellationToken cancellationToken = default)
     {
@@ -208,6 +236,35 @@ public sealed class ServerSessionCoordinator : IServerSessionCoordinator, IServe
         {
             await StopEngineAsync(cancellationToken);
             await connection.SignIn.SignOutAsync(cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public async Task<CopyErased> SignOutAndEraseAsync(CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken);
+
+        try
+        {
+            // Stopped first, so no synchronisation writes into the copy while it is emptied.
+            await StopEngineAsync(cancellationToken);
+
+            // Every profile shown is the server's, so every tunnel up is one of its profiles.
+            await tunnels.DisconnectAllAsync(cancellationToken);
+
+            // Before the copy is emptied, while the refresh token is still there to end the session
+            // with on the server. The tokens are discarded whatever the server answers.
+            await connection.SignIn.SignOutAsync(cancellationToken);
+
+            heldSecrets.Clear();
+            CopyErased erased = await account.EraseCopyAsync(cancellationToken);
+            ServerAccountLog.SignedOut(logger, connection.ServerKey);
+
+            library.Notify(LibraryChanges.Profiles | LibraryChanges.Hotkeys);
+            return erased;
         }
         finally
         {

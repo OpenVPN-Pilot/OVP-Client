@@ -42,7 +42,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     /// <summary>
     /// The server this copy works with. Null on the local library, where there is none.
     /// </summary>
-    private readonly IServerSignIn? server;
+    private readonly IServerSignOut? server;
 
     /// <summary>
     /// What else forgetting every sign in means for a server's copy. Null on the local library.
@@ -70,7 +70,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         DiagnosticsBundle diagnostics,
         UpdateCoordinator updates,
         IDockPresence? dock = null,
-        IServerSignIn? server = null,
+        IServerSignOut? server = null,
         StorageSettingsViewModel? storage = null,
         IServerCredentialsReset? credentialsReset = null,
         ILibraryPermissions? permissions = null,
@@ -573,7 +573,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         // from the keystore alone, the session would stay open on the server until it expired.
         if (server is not null)
         {
-            await server.SignOutAsync();
+            await server.SignOutAndEraseAsync();
         }
 
         int removed;

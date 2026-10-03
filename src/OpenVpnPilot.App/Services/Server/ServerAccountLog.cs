@@ -110,4 +110,16 @@ internal static partial class ServerAccountLog
         ServerOutcome outcome,
         string? code,
         string? requestId);
+
+    [LoggerMessage(
+        EventId = 3727,
+        Level = LogLevel.Information,
+        Message = "Signed out of server {ServerKey} and emptied its copy.")]
+    public static partial void SignedOut(ILogger logger, string serverKey);
+
+    [LoggerMessage(
+        EventId = 3728,
+        Level = LogLevel.Information,
+        Message = "Emptied the copy: {Profiles} profile(s), {Secrets} keystore entr(y/ies) and {PendingChanges} waiting change(s) removed.")]
+    public static partial void CopyErased(ILogger logger, int profiles, int secrets, int pendingChanges);
 }

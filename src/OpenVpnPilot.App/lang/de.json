@@ -574,7 +574,7 @@
       "syncDone": "Synchronisiert.",
       "syncIncomplete": "Die Synchronisation wurde nicht abgeschlossen: {0}",
       "syncFailed": "Die Synchronisation ist fehlgeschlagen. Die Einzelheiten stehen im Protokoll.",
-      "signedOut": "Abgemeldet. Die Kopie und die wartenden Änderungen bleiben auf diesem Computer, bis Sie sich wieder anmelden.",
+      "signedOut": "Abgemeldet. Die Profile des Servers und ihre gespeicherten Anmeldedaten wurden von diesem Computer entfernt; nach der nächsten Anmeldung werden sie neu geladen.",
       "switchTitle": "Zu einem Server wechseln",
       "signInTitle": "Am Server anmelden"
     },
@@ -612,7 +612,7 @@
     },
     "banner": {
       "signInTitle": "Anmeldung erforderlich",
-      "signInText": "Die Sitzung mit {0} ist beendet. Die Profile funktionieren weiter aus der Kopie auf diesem Computer; melden Sie sich erneut an, um zu synchronisieren.",
+      "signInText": "Sie sind bei {0} nicht angemeldet. Melden Sie sich an, um die Profile des Servers zu laden und zu synchronisieren.",
       "clientOutdatedTitle": "Update erforderlich",
       "clientOutdatedText": "{0} benötigt eine neuere Version von OpenVPN Pilot. Bis zum Update wird nichts synchronisiert.",
       "clockTitle": "Uhr falsch",

@@ -62,7 +62,7 @@
       <ContentControl Content="{Binding SignIn}">
         <ContentControl.ContentTemplate>
           <DataTemplate x:DataType="vm:SignInViewModel">
-            <views:SignInView />
+            <views:SignInView ShowsActions="False" />
           </DataTemplate>
         </ContentControl.ContentTemplate>
       </ContentControl>
@@ -97,6 +97,9 @@
       <Button Grid.Column="2" Content="{loc:Translate firstRun.continue}"
               Command="{Binding ContinueCommand}" Classes="primary" MinWidth="120"
               IsDefault="True" IsVisible="{Binding IsAddress}" />
+      <Panel Grid.Column="2" IsVisible="{Binding IsSignIn}">
+        <views:SignInActions DataContext="{Binding SignIn}" />
+      </Panel>
     </Grid>
 
   </StackPanel>

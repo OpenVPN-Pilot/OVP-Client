@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:OpenVpnPilot.App.ViewModels"
              xmlns:loc="using:OpenVpnPilot.App.Localization"
+             xmlns:views="using:OpenVpnPilot.App.Views"
              x:Class="OpenVpnPilot.App.Views.SignInView"
              x:DataType="vm:SignInViewModel">
 
@@ -43,18 +44,7 @@
       </StackPanel>
     </Border>
 
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <ProgressBar IsIndeterminate="True" Width="80" VerticalAlignment="Center"
-                   IsVisible="{Binding IsBusy}" />
-      <Button Content="{loc:Translate common.cancel}" Command="{Binding CancelAttemptCommand}"
-              MinWidth="92" IsVisible="{Binding IsBusy}" />
-      <Button Content="{loc:Translate signIn.signIn}" Command="{Binding SignInCommand}"
-              MinWidth="120" Classes="primary" IsDefault="True"
-              IsVisible="{Binding !IsEntra}" />
-      <Button Content="{loc:Translate signIn.signInMicrosoft}" Command="{Binding SignInCommand}"
-              MinWidth="120" Classes="primary" IsDefault="True"
-              IsVisible="{Binding IsEntra}" />
-    </StackPanel>
+    <views:SignInActions IsVisible="{Binding $parent[views:SignInView].ShowsActions}" />
 
   </StackPanel>
 </UserControl>
