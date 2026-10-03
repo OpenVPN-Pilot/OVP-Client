@@ -59,8 +59,9 @@ This repository is public. Keep it free of context about who uses it or why it w
 ## Documentation
 
 - A short README that says what this is and points at the rest, and one page per subject under
-  `docs/`: `windows.md`, `macos.md`, `usage.md`, `cli.md`, `development.md`. A subject gets a page
-  when it is a subject, not because there is more to say about one that already has one.
+  `docs/`: `windows.md`, `macos.md`, `usage.md`, `settings.md`, `server.md`, `server-signing-in.md`,
+  `server-sync.md`, `cli.md`, `development.md`, `testing.md`. A subject gets a page when it is a
+  subject, not because there is more to say about one that already has one.
 - Document behaviour there and in code, not in a growing pile of design notes. `docs/` is not a
   place for design documents, meeting notes or anything dated.
 

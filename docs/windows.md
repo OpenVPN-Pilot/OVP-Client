@@ -1,6 +1,6 @@
 # OpenVPN Pilot on Windows
 
-[OpenVPN Pilot](../README.md) · Windows · [macOS](macos.md) · [Using it](usage.md) · [The `ovp` command](cli.md) · [Working on it](development.md)
+[OpenVPN Pilot](../README.md) · Windows · [macOS](macos.md) · [Using it](usage.md) · [Settings](settings.md) · [Server](server.md) · [The `ovp` command](cli.md) · [Working on it](development.md) · [Testing](testing.md)
 
 ## Requirements
 
@@ -40,6 +40,10 @@ Building the installer needs the [WiX toolset](https://wixtoolset.org):
 dotnet tool install --global wix
 ```
 
+The script adds WiX's user interface extension itself, in the version that matches the toolset. The
+installer asks for the licence and the installation folder when it is run interactively, and
+`-Version`, `-Configuration`, `-Runtime` and `-SelfContained` change what the script builds.
+
 The installer is deliberately not part of the solution. Adding it would put WiX between a developer
 and an ordinary build, and building an installer is not something an ordinary build should do.
 
@@ -71,13 +75,16 @@ machine still keeps each person's profiles apart.
 | Profiles, tags and history | `%LOCALAPPDATA%\OpenVpnPilot\pilot.db` |
 | The copy of a server's profiles | `%LOCALAPPDATA%\OpenVpnPilot\servers\<key>\pilot.db`, one folder per server |
 | Settings | `%LOCALAPPDATA%\OpenVpnPilot\settings.json`, editable by hand |
-| Credentials | `%LOCALAPPDATA%\OpenVpnPilot\secrets\`, one protected file each |
-| Logs | `%LOCALAPPDATA%\OpenVpnPilot\logs\`, one `yyyy-MM-dd_HH.log` per hour, seven days and a gigabyte at most by default |
+| Credentials | `%LOCALAPPDATA%\OpenVpnPilot\secrets\`, one `.secret` file each, protected with the user's own Windows key. The sign ins of profiles, and the session with each server |
+| Logs | `%LOCALAPPDATA%\OpenVpnPilot\logs\`, one `yyyy-MM-dd_HH.log` per hour, seven days and a gigabyte at most by default. `failure.log` beside them records what ended the process when nothing else could |
 | Added languages | `%LOCALAPPDATA%\OpenVpnPilot\lang\` |
 | Configurations while connected | `%ProgramData%\OpenVpnPilot\runtime\<user SID>\` |
 
 A server's copy is filed under a key derived from its address, so every server has a copy of its own,
-and switching between servers or back to the profiles kept on the computer removes nothing.
+and switching between servers or back to the profiles kept on the computer removes nothing. The key is
+the first sixteen bytes of the SHA-256 of the address in its normal form, as 32 lower case hexadecimal
+characters, so a folder name says nothing about the server. [Working with a server](server.md) explains
+what the copy is.
 
 A materialised configuration carries its private key inline, which is why it lives under
 `%ProgramData%` with an access control list for one user rather than in a temporary directory. It
@@ -95,6 +102,7 @@ The registry holds settings that have nowhere else to go:
 | `HKLM\...\Uninstall\<product code>` | Windows | The entry under Apps and features. |
 | `HKLM\SOFTWARE\OpenVPN` | nobody, it is only read | Where OpenVPN Community says it is installed, and which group the interactive service authorises. |
 
-Nothing else is written to the registry. Removing the product removes the two keys the installer
-made; the profile store and the credentials are deliberately left alone, because uninstalling an
-application is not the same as asking it to forget everything.
+Nothing else is written to the registry. Removing the product removes what the installer registered:
+the program identifiers, the two markers and the PATH entry. The profile store, the settings, the
+credentials and the autostart entry the application wrote are deliberately left alone, because
+uninstalling an application is not the same as asking it to forget everything.

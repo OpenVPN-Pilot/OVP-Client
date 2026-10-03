@@ -17,7 +17,7 @@ installation directory and the data directory are `OpenVpnPilot`, and the compan
 `ovp`. On macOS the bundle is `OpenVPN Pilot.app`, because the Finder labels an application with its
 file name and with nothing else.
 
-> **Status: version 1.9.0.** The integration layer and the interface are proven end to end against
+> **Status: version 2.0.0.** The integration layer and the interface are proven end to end against
 > OpenVPN Community 2.7.6 and against the ten server lab in this repository. Windows is released as
 > an unsigned installer. **macOS is built from the source and is not released as a download**, which
 > is one command and is explained in [docs/macos.md](docs/macos.md). See [Roadmap](#roadmap).
@@ -34,9 +34,14 @@ The rest is one page per subject, so this one stays short:
 | --- | --- |
 | [Windows](docs/windows.md) | What it needs, installing it, deploying it with group policy, and what it writes |
 | [macOS](docs/macos.md) | What it needs, the helper package, Gatekeeper, and what it writes |
-| [Using it](docs/usage.md) | Tags and favourites, several tunnels at once, packages, languages, working with a server, what reaches OpenVPN |
-| [The `ovp` command](docs/cli.md) | The companion command, and driving the application from other software |
-| [Working on it](docs/development.md) | Architecture, building, the artwork, the ten server test lab, contributing |
+| [Using it](docs/usage.md) | Tags and favourites, several tunnels at once, packages, languages, what reaches OpenVPN |
+| [Settings](docs/settings.md) | The settings screen, the settings file and its keys |
+| [Working with a server](docs/server.md) | What server mode is, starting to use one, switching between this computer and a server |
+| [Signing in to a server](docs/server-signing-in.md) | The ways of signing in, what the messages mean, certificates, roles |
+| [Synchronisation](docs/server-sync.md) | What is kept in step, working offline, conflicts, shared sign ins, signing out |
+| [The `ovp` command](docs/cli.md) | The companion command, its exit codes, and driving the application from other software |
+| [Working on it](docs/development.md) | Architecture, building, the artwork, contributing |
+| [Testing](docs/testing.md) | The test projects, the ten server test lab, the tests against a real server |
 | [Changelog](CHANGELOG.md) | What changed in each version |
 
 ## Features
@@ -53,7 +58,7 @@ The rest is one page per subject, so this one stays short:
 - Global shortcuts for connect, reconnect, disconnect and the favourite slots
 - Several tunnels connected at once, each with its own live telemetry
 - Live figures per tunnel: throughput, uptime, round trip, assigned address, pushed routes and DNS
-- Credentials kept in the operating system keystore, never in a file on disk
+- Credentials kept in the operating system's protected storage, never as plain text on disk
 - One time codes, both the kind presented up front and the kind raised after a refusal
 - Session history with durations and transfer volumes, exportable as CSV and clearable by filter
 - A live log window carrying both this application's own record and OpenVPN's, filterable by source,

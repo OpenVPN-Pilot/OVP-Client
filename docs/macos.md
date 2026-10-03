@@ -1,6 +1,6 @@
 # OpenVPN Pilot on macOS
 
-[OpenVPN Pilot](../README.md) · [Windows](windows.md) · macOS · [Using it](usage.md) · [The `ovp` command](cli.md) · [Working on it](development.md)
+[OpenVPN Pilot](../README.md) · [Windows](windows.md) · macOS · [Using it](usage.md) · [Settings](settings.md) · [Server](server.md) · [The `ovp` command](cli.md) · [Working on it](development.md) · [Testing](testing.md)
 
 ## Requirements
 
@@ -79,13 +79,15 @@ Install the application first, then the helper. Open the disk image, drag **Open
 Applications folder, then:
 
 ```bash
-sudo installer -pkg artifacts/release/OpenVpnPilot-Helper-1.3.0-osx-arm64.pkg -target /
+sudo installer -pkg artifacts/release/OpenVpnPilot-Helper-<version>-osx-arm64.pkg -target /
 ```
 
-The helper package also links `ovp` into `/usr/local/bin`, which is what puts the command on PATH,
-and adds a standard account to the `openvpnpilot` group so it can start its own configurations. Until
-the helper is installed the application starts and works, says the helper is missing, and offers the
-link; it does not fail at the first connection.
+The helper package also links `ovp` into `/usr/local/bin`, which is what puts the command on PATH. It
+links the one inside the application, so it does that only when the application is already in
+`/Applications`, and prints the command to run otherwise. When the account that installs it is not an
+administrator, the package creates the group `openvpnpilot` if it is missing and adds that account to it,
+so it can start its own configurations. Until the helper is installed the application starts and works,
+says the helper is missing, and offers the link; it does not fail at the first connection.
 
 To remove the helper and everything it installed:
 
@@ -186,7 +188,8 @@ quiet with nothing to read anywhere cannot be told apart from one that is workin
 ## Stored sign ins, and the dialog macOS raises
 
 A sign in you asked to be remembered goes to the login keychain, never to a file. All of them share
-one item, so that macOS asks about one thing rather than about each profile in turn.
+one item, so that macOS asks about one thing rather than about each profile in turn. The session with
+a server, which is a token and not a sign in, is kept in the same item.
 
 It will still ask. The keychain decides who may read an item from the code signature of the program
 asking, and this application is signed ad-hoc, which means its signature changes every time it is
@@ -213,13 +216,16 @@ machine still keeps each person's profiles apart.
 | Profiles, tags and history | `~/Library/Application Support/OpenVpnPilot/pilot.db` |
 | The copy of a server's profiles | `~/Library/Application Support/OpenVpnPilot/servers/<key>/pilot.db`, one folder per server |
 | Settings | `~/Library/Application Support/OpenVpnPilot/settings.json`, editable by hand |
-| Credentials | the login keychain, all of them in one item under the service `OpenVpnPilot` |
-| Logs | `~/Library/Application Support/OpenVpnPilot/logs/`, one `yyyy-MM-dd_HH.log` per hour, seven days and a gigabyte at most by default |
+| Credentials | the login keychain, all of them in one item under the service `OpenVpnPilot`: the sign ins of profiles and the session with each server |
+| Logs | `~/Library/Application Support/OpenVpnPilot/logs/`, one `yyyy-MM-dd_HH.log` per hour, seven days and a gigabyte at most by default. `failure.log` beside them records what ended the process when nothing else could |
 | Added languages | `~/Library/Application Support/OpenVpnPilot/lang/` |
 | Autostart | `~/Library/LaunchAgents/org.openvpnpilot.app.login.plist`, only while "start with the system" is on |
 
 A server's copy is filed under a key derived from its address, so every server has a copy of its own,
-and switching between servers or back to the profiles kept on the computer removes nothing.
+and switching between servers or back to the profiles kept on the computer removes nothing. The key is
+the first sixteen bytes of the SHA-256 of the address in its normal form, as 32 lower case hexadecimal
+characters, so a folder name says nothing about the server. [Working with a server](server.md) explains
+what the copy is.
 
 Credentials go to the keychain through the Security framework, never through the `security` command,
 which would put the secret in the process list for anyone to read.
