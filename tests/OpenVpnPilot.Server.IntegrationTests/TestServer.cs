@@ -117,11 +117,11 @@ public sealed class ServerFactAttribute : FactAttribute
     {
         if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(TestServer.UrlVariable)))
         {
-            Skip = $"No test server: set {TestServer.UrlVariable} and {TestServer.CertificateVariable}, see docs/development.md.";
+            Skip = $"No test server: set {TestServer.UrlVariable} and {TestServer.CertificateVariable}, see docs/testing.md.";
         }
         else if (alsoNeeds is not null && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(alsoNeeds)))
         {
-            Skip = $"Needs {alsoNeeds}, see docs/development.md.";
+            Skip = $"Needs {alsoNeeds}, see docs/testing.md.";
         }
     }
 }

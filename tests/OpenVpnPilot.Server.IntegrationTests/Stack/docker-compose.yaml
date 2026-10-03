@@ -1,7 +1,7 @@
 # The server the integration tests run against, kept apart from any other stack on this machine: a
 # project name, port, database volume, image tag, certificate and user file of its own. Nothing here
 # reads or writes the server checkout's own .env, certs or config. How to run it is in
-# docs/development.md.
+# docs/testing.md.
 
 name: ovp-client-tests
 
