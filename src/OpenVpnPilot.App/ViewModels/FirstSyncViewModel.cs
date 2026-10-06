@@ -309,11 +309,12 @@ public sealed partial class FirstSyncViewModel : ViewModelBase, IDisposable
         SyncState.ClockWrong => localizer.Translate("signIn.clockSkew", snapshot.Detail ?? string.Empty),
         SyncState.CertificateUntrusted => localizer["signIn.certificateUntrusted"],
         SyncState.SettingsUnreadable => localizer["signIn.identityUnavailable"],
+        SyncState.KeystoreRefused => localizer["signIn.keystoreRefused"],
         _ => localizer["firstRun.syncFailed"],
     };
 
     private static bool NeedsSignIn(ServerResult result) =>
-        result.Outcome == ServerOutcome.NotSignedIn
+        result.Outcome is ServerOutcome.NotSignedIn or ServerOutcome.KeystoreRefused
         || (result.Code is { } code && (ServerErrorCodes.SignInRequired.Contains(code)
             || code is ServerErrorCodes.ClientMismatch or ServerErrorCodes.TokenInvalid or ServerErrorCodes.TokenMissing));
 

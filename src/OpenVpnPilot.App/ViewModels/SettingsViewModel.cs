@@ -225,6 +225,12 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     public partial bool RestoreOnStart { get; set; }
 
+    /// <summary>
+    /// How often, in minutes, the server is asked for changes. Offered only with a server.
+    /// </summary>
+    [ObservableProperty]
+    public partial int SyncIntervalMinutes { get; set; }
+
     [ObservableProperty]
     public partial bool NotificationsEnabled { get; set; }
 
@@ -389,6 +395,8 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         ReconnectDelaySeconds = draft.Connections.ReconnectDelaySeconds;
         RestoreOnStart = draft.Connections.RestoreOnStart;
 
+        SyncIntervalMinutes = draft.Storage.SyncIntervalMinutes;
+
         NotificationsEnabled = draft.Notifications.Enabled;
         NotifyOnConnecting = draft.Notifications.OnConnecting;
         NotifyOnConnected = draft.Notifications.OnConnected;
@@ -426,6 +434,11 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         draft.Connections.MaxReconnectAttempts = Math.Clamp(MaxReconnectAttempts, 0, 100);
         draft.Connections.ReconnectDelaySeconds = Math.Clamp(ReconnectDelaySeconds, 1, 600);
         draft.Connections.RestoreOnStart = RestoreOnStart;
+
+        draft.Storage.SyncIntervalMinutes = Math.Clamp(
+            SyncIntervalMinutes,
+            StorageSettings.MinimumSyncIntervalMinutes,
+            StorageSettings.MaximumSyncIntervalMinutes);
 
         draft.Notifications.Enabled = NotificationsEnabled;
         draft.Notifications.OnConnecting = NotifyOnConnecting;

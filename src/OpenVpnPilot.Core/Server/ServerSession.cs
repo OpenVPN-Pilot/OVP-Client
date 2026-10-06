@@ -20,6 +20,12 @@ namespace OpenVpnPilot.Core.Server;
 /// progress waits for its result instead of starting another. The new refresh token is stored before
 /// the new access token is handed to anyone.
 /// </para>
+/// <para>
+/// A server in Entra mode ends a session a fixed time after the Microsoft sign in. What that sign
+/// in left behind is kept beside the refresh token, under <see cref="SecretReference.ForServerEntraState"/>,
+/// and the session asks Microsoft again without the person before it gives up; only when Microsoft
+/// wants the person does the session end.
+/// </para>
 /// </remarks>
 public interface IServerSession
 {
@@ -29,7 +35,8 @@ public interface IServerSession
     public string ServerKey { get; }
 
     /// <summary>
-    /// True while there is a refresh token to keep the session going with.
+    /// True while there is a refresh token to keep the session going with, including one the
+    /// keystore holds but would not hand over at the start.
     /// </summary>
     public bool IsSignedIn { get; }
 
@@ -49,14 +56,22 @@ public interface IServerSession
     /// Picks up a session a previous run left in the keystore, without contacting the server.
     /// </summary>
     /// <param name="lastKnownUser">The user as the application last saw it, so the role can be shown offline.</param>
-    /// <returns>True when a refresh token was found.</returns>
+    /// <returns>
+    /// True when a refresh token was found, or when the keystore would not say: a session it refused
+    /// to hand over is kept, every call answers <see cref="ServerOutcome.KeystoreRefused"/>, and the
+    /// next start asks the keystore again.
+    /// </returns>
     public Task<bool> RestoreAsync(CurrentUserResponse? lastKnownUser, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Takes over the tokens of a sign in: the refresh token is stored first, then the access token
     /// becomes usable.
     /// </summary>
-    public Task EstablishAsync(TokenResponse tokens, CancellationToken cancellationToken = default);
+    /// <param name="tokens">What the server answered.</param>
+    /// <param name="entraState">What a Microsoft sign in left behind to renew the session with, or
+    /// null for any other sign in, which removes what an earlier one left.</param>
+    /// <param name="cancellationToken">Ends the wait for another sign in or refresh.</param>
+    public Task EstablishAsync(TokenResponse tokens, string? entraState = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// An access token to call with, refreshed first when it expires within a minute.
@@ -144,9 +159,11 @@ public sealed class ServerSession : IServerSession, IDisposable
 
     private readonly ServerTransport transport;
     private readonly ISecretStore secrets;
+    private readonly IEntraRenewal entra;
     private readonly TimeProvider time;
     private readonly ILogger logger;
     private readonly string refreshReference;
+    private readonly string entraReference;
 
     // Every refresh, sign in and sign out takes this, so no two of them ever use a token at once.
     private readonly SemaphoreSlim gate = new(1, 1);
@@ -159,6 +176,9 @@ public sealed class ServerSession : IServerSession, IDisposable
     private string? refreshToken;
     private CurrentUserResponse? user;
 
+    // The keystore held something at the start and would not hand it over.
+    private bool keystoreRefused;
+
     // Counts completed refreshes, so a caller that waited for one knows it may use its result.
     private long generation;
     private ServerResult<string>? lastRefresh;
@@ -167,18 +187,22 @@ public sealed class ServerSession : IServerSession, IDisposable
         string serverKey,
         ServerTransport transport,
         ISecretStore secrets,
+        IEntraRenewal entra,
         TimeProvider time,
         ILogger logger)
     {
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(secrets);
+        ArgumentNullException.ThrowIfNull(entra);
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(logger);
 
         refreshReference = SecretReference.ForServerRefreshToken(serverKey);
+        entraReference = SecretReference.ForServerEntraState(serverKey);
         ServerKey = serverKey;
         this.transport = transport;
         this.secrets = secrets;
+        this.entra = entra;
         this.time = time;
         this.logger = logger;
     }
@@ -191,7 +215,7 @@ public sealed class ServerSession : IServerSession, IDisposable
         {
             lock (state)
             {
-                return refreshToken is not null;
+                return refreshToken is not null || keystoreRefused;
             }
         }
     }
@@ -220,16 +244,35 @@ public sealed class ServerSession : IServerSession, IDisposable
 
         try
         {
-            StoredSecret? stored = await secrets.TryReadAsync(refreshReference, cancellationToken);
+            SecretRead stored = await secrets.ReadAsync(refreshReference, cancellationToken);
 
-            if (stored is null || string.IsNullOrEmpty(stored.Password))
+            if (stored.Outcome == SecretReadOutcome.Refused)
+            {
+                // Nothing is known to be gone, so nothing is treated as gone: the token stays where it
+                // is and the next start asks for it again. Asking now, at every synchronisation, would
+                // put the same question in front of a person who just answered it.
+                lock (state)
+                {
+                    keystoreRefused = true;
+                    accessToken = null;
+                    user = lastKnownUser;
+                    lastRefresh = null;
+                    generation++;
+                }
+
+                ServerSessionLog.RestoreRefused(logger, ServerKey);
+                return true;
+            }
+
+            if (stored.Secret is not { Password.Length: > 0 } secret)
             {
                 return false;
             }
 
             lock (state)
             {
-                refreshToken = stored.Password;
+                refreshToken = secret.Password;
+                keystoreRefused = false;
                 accessToken = null;
                 user = lastKnownUser;
                 lastRefresh = null;
@@ -245,7 +288,10 @@ public sealed class ServerSession : IServerSession, IDisposable
         }
     }
 
-    public async Task EstablishAsync(TokenResponse tokens, CancellationToken cancellationToken = default)
+    public async Task EstablishAsync(
+        TokenResponse tokens,
+        string? entraState = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tokens);
 
@@ -256,7 +302,10 @@ public sealed class ServerSession : IServerSession, IDisposable
         try
         {
             previous = User;
-            await KeepAsync(tokens, cancellationToken);
+
+            // The server has issued these, so they are kept whatever the caller does meanwhile.
+            await KeepAsync(tokens, CancellationToken.None);
+            await KeepEntraStateAsync(entraState, CancellationToken.None);
 
             lock (state)
             {
@@ -281,7 +330,7 @@ public sealed class ServerSession : IServerSession, IDisposable
         {
             if (refreshToken is null)
             {
-                return NotSignedIn();
+                return keystoreRefused ? KeystoreRefused() : NotSignedIn();
             }
 
             current = accessToken;
@@ -308,6 +357,7 @@ public sealed class ServerSession : IServerSession, IDisposable
         try
         {
             string? token;
+            bool refused;
 
             lock (state)
             {
@@ -327,18 +377,23 @@ public sealed class ServerSession : IServerSession, IDisposable
                 }
 
                 token = refreshToken;
+                refused = keystoreRefused;
             }
 
             if (token is null)
             {
-                return NotSignedIn();
+                return refused ? KeystoreRefused() : NotSignedIn();
             }
 
+            // Not cancelled by the caller from here on. Once the server has exchanged the token, the
+            // answer is the only copy of its successor, and a stop or a quit that dropped it would
+            // leave the used one stored, which the next start presents and the server answers by
+            // ending the session as stolen. The transport's own deadlines bound the wait.
             ServerResult<TokenResponse> answer = await transport.SendAsync<TokenResponse>(
                 new ServerRequest(HttpMethod.Post, ServerPaths.Refresh, new RefreshRequest(token)),
-                cancellationToken);
+                CancellationToken.None);
 
-            (outcome, change) = await ApplyRefreshAsync(answer, cancellationToken);
+            (outcome, change) = await ApplyRefreshAsync(answer, CancellationToken.None);
 
             lock (state)
             {
@@ -453,6 +508,13 @@ public sealed class ServerSession : IServerSession, IDisposable
         ServerSessionLog.RefreshFailed(logger, ServerKey, answer.Outcome, answer.Code, answer.RequestId);
 
         if (answer.Outcome == ServerOutcome.Problem
+            && answer.Code == ServerErrorCodes.ReauthenticationRequired
+            && await RenewWithEntraAsync(cancellationToken) is { } renewed)
+        {
+            return renewed;
+        }
+
+        if (answer.Outcome == ServerOutcome.Problem
             && answer.Code is { } code
             && ServerErrorCodes.SignInRequired.Contains(code))
         {
@@ -476,6 +538,155 @@ public sealed class ServerSession : IServerSession, IDisposable
     }
 
     /// <summary>
+    /// Asks Microsoft again without the person and trades its token for a new session, under the gate.
+    /// </summary>
+    /// <returns>
+    /// The new session; a failure that keeps the tokens when Microsoft or the server could not be
+    /// asked for now; or null when only signing in helps, which ends the session.
+    /// </returns>
+    private async Task<(ServerResult<string> Outcome, ServerSessionChangedEventArgs? Change)?> RenewWithEntraAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!secrets.IsAvailable)
+        {
+            return null;
+        }
+
+        SecretRead stored = await secrets.ReadAsync(entraReference, cancellationToken);
+
+        if (stored.Secret is not { Password.Length: > 0 } kept)
+        {
+            return null;
+        }
+
+        // Asked now rather than remembered, because what the server publishes decides which tenant
+        // and which application Microsoft is asked for.
+        ServerResult<ServerInfoResponse> info = await transport.SendAsync<ServerInfoResponse>(
+            new ServerRequest(HttpMethod.Get, ServerPaths.Info),
+            cancellationToken);
+
+        if (!info.IsSuccess)
+        {
+            ServerSessionLog.EntraRenewalPostponed(logger, ServerKey, info.Outcome.ToString(), info.Code);
+            return (info.AsFailure<string>(), null);
+        }
+
+        if (info.Value.Entra is not { } published)
+        {
+            return null;
+        }
+
+        EntraRenewalResult renewal = await entra.RenewAsync(published, kept.Password, cancellationToken);
+
+        switch (renewal)
+        {
+            case { Outcome: EntraRenewalOutcome.Renewed, AccessToken: { Length: > 0 } microsoftToken }:
+                return await ExchangeRenewedAsync(microsoftToken, renewal.State ?? kept.Password, cancellationToken);
+
+            case { Outcome: EntraRenewalOutcome.Unavailable }:
+                ServerSessionLog.EntraRenewalPostponed(logger, ServerKey, renewal.Outcome.ToString(), renewal.ErrorCode);
+                return (ServerResult.Failed<string>(ServerOutcome.Offline, detail: "Microsoft could not be asked for a new token."), null);
+
+            default:
+                ServerSessionLog.EntraRenewalRefused(logger, ServerKey, renewal.ErrorCode);
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// Trades a renewed Microsoft token for the server's own, under the gate.
+    /// </summary>
+    private async Task<(ServerResult<string> Outcome, ServerSessionChangedEventArgs? Change)?> ExchangeRenewedAsync(
+        string microsoftToken,
+        string entraState,
+        CancellationToken cancellationToken)
+    {
+        ServerResult<TokenResponse> exchanged = await transport.SendAsync<TokenResponse>(
+            new ServerRequest(HttpMethod.Post, ServerPaths.EntraExchange, new EntraExchangeRequest(microsoftToken)),
+            cancellationToken);
+
+        if (!exchanged.IsSuccess)
+        {
+            if (exchanged.Outcome == ServerOutcome.Problem && exchanged.Code is not null && exchanged.Status is < 500)
+            {
+                // The server looked at the person and said no, which a sign in has to settle.
+                ServerSessionLog.EntraRenewalRefused(logger, ServerKey, exchanged.Code);
+                return null;
+            }
+
+            ServerSessionLog.EntraRenewalPostponed(logger, ServerKey, exchanged.Outcome.ToString(), exchanged.Code);
+            return (exchanged.AsFailure<string>(), null);
+        }
+
+        TokenResponse tokens = exchanged.Value;
+        CurrentUserResponse? previous = User;
+
+        if (previous is not null && previous.Id != tokens.User.Id)
+        {
+            // Microsoft answered for somebody else than the person this copy belongs to. Whose data
+            // stays is decided where a person signs in, never here, so the new session is ended at
+            // once and the person is asked.
+            ServerSessionLog.EntraRenewalOtherUser(logger, ServerKey, previous.Id, tokens.User.Id);
+
+            ServerResult ended = await transport.SendAsync(
+                new ServerRequest(HttpMethod.Post, ServerPaths.Logout, new LogoutRequest(tokens.RefreshToken)),
+                cancellationToken);
+
+            if (!ended.IsSuccess)
+            {
+                ServerSessionLog.SignOutNotConfirmed(logger, ServerKey, ended.Outcome, ended.Code, ended.RequestId);
+            }
+
+            return null;
+        }
+
+        await KeepAsync(tokens, cancellationToken);
+        await KeepEntraStateAsync(entraState, cancellationToken);
+        ServerSessionLog.EntraRenewed(logger, ServerKey, tokens.User.Id);
+
+        ServerSessionChangedEventArgs? change = previous is not null && previous != tokens.User
+            ? new ServerSessionChangedEventArgs(ServerSessionChange.UserChanged, tokens.User, previous)
+            : null;
+
+        return (ServerResult.Succeeded<string>(tokens.AccessToken, exchanged.Status ?? 200, exchanged.RequestId), change);
+    }
+
+    /// <summary>
+    /// Keeps what a Microsoft sign in left behind, or removes what an earlier one left when there is
+    /// nothing, under the gate.
+    /// </summary>
+    /// <remarks>
+    /// A failure costs the renewal and nothing else: the session carries on, and the person is
+    /// asked to sign in when the server next wants proof.
+    /// </remarks>
+    private async Task KeepEntraStateAsync(string? entraState, CancellationToken cancellationToken)
+    {
+        if (!secrets.IsAvailable)
+        {
+            return;
+        }
+
+        try
+        {
+            if (string.IsNullOrEmpty(entraState))
+            {
+                await secrets.DeleteAsync(entraReference, cancellationToken);
+            }
+            else
+            {
+                await secrets.WriteAsync(entraReference, new StoredSecret(null, entraState), cancellationToken);
+            }
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or CryptographicException
+            or InvalidOperationException)
+        {
+            ServerSessionLog.EntraStateNotStored(logger, ServerKey, exception);
+        }
+    }
+
+    /// <summary>
     /// Stores the refresh token, and only then makes the access token usable.
     /// </summary>
     /// <remarks>
@@ -485,9 +696,10 @@ public sealed class ServerSession : IServerSession, IDisposable
     /// it would not bring the old token back.
     /// </para>
     /// <para>
-    /// What the keystore still holds is then removed. Presented at the next start it would be a
-    /// token used twice, which the server answers by ending the session as reused; without it the
-    /// next start simply asks for a sign in.
+    /// What the keystore still holds is then removed, when the keystore lets it. Presented at the
+    /// next start it would be a token used twice, which the server answers by ending the session as
+    /// reused; without it the next start simply asks for a sign in. A keychain that refused the write
+    /// usually refuses the removal too, and the next start then ends in that same request to sign in.
     /// </para>
     /// </remarks>
     private async Task KeepAsync(TokenResponse tokens, CancellationToken cancellationToken)
@@ -511,6 +723,7 @@ public sealed class ServerSession : IServerSession, IDisposable
         lock (state)
         {
             refreshToken = tokens.RefreshToken;
+            keystoreRefused = false;
             user = tokens.User;
             accessTokenExpiresAt = tokens.AccessTokenExpiresAt;
             accessToken = tokens.AccessToken;
@@ -526,6 +739,7 @@ public sealed class ServerSession : IServerSession, IDisposable
         {
             accessToken = null;
             refreshToken = null;
+            keystoreRefused = false;
             user = null;
             lastRefresh = null;
             generation++;
@@ -534,6 +748,7 @@ public sealed class ServerSession : IServerSession, IDisposable
         if (secrets.IsAvailable)
         {
             await RemoveStoredTokenAsync(cancellationToken);
+            await RemoveStoredAsync(entraReference, cancellationToken);
         }
     }
 
@@ -541,18 +756,28 @@ public sealed class ServerSession : IServerSession, IDisposable
     /// Removes the refresh token from the keystore. A failure is written down and not passed on,
     /// because nothing the caller could do differently follows from it.
     /// </summary>
-    private async Task RemoveStoredTokenAsync(CancellationToken cancellationToken)
+    private Task RemoveStoredTokenAsync(CancellationToken cancellationToken) =>
+        RemoveStoredAsync(refreshReference, cancellationToken);
+
+    private async Task RemoveStoredAsync(string reference, CancellationToken cancellationToken)
     {
         try
         {
-            await secrets.DeleteAsync(refreshReference, cancellationToken);
+            await secrets.DeleteAsync(reference, cancellationToken);
         }
         catch (Exception exception) when (exception is IOException
             or UnauthorizedAccessException
             or CryptographicException
             or InvalidOperationException)
         {
-            ServerSessionLog.RefreshTokenNotRemoved(logger, ServerKey, exception);
+            if (reference == refreshReference)
+            {
+                ServerSessionLog.RefreshTokenNotRemoved(logger, ServerKey, exception);
+            }
+            else
+            {
+                ServerSessionLog.EntraStateNotRemoved(logger, ServerKey, exception);
+            }
         }
     }
 
@@ -563,4 +788,7 @@ public sealed class ServerSession : IServerSession, IDisposable
 
     private static ServerResult<string> NotSignedIn() =>
         ServerResult.Failed<string>(ServerOutcome.NotSignedIn, detail: "Not signed in to this server.");
+
+    private static ServerResult<string> KeystoreRefused() =>
+        ServerResult.Failed<string>(ServerOutcome.KeystoreRefused, detail: "The keystore did not hand over the session.");
 }

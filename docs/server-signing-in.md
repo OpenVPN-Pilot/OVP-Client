@@ -46,16 +46,29 @@ the person sees the real Microsoft page with whatever single sign on and second 
 already holds. The redirect goes to `http://localhost` on a port the library picks, which is what the
 server's operator registers.
 
-The access token Microsoft issues is handed to the server for its own tokens and is then discarded.
-Nothing of Microsoft's is cached or written down: a new client is built for every sign in, and the
-server's refresh token is what keeps the session. Microsoft is asked again only when the server says
-the person has to prove who they are again. The browser tab says when the sign in is done and can be
-closed; a failure is reported as "The Microsoft sign in did not complete" with the library's error code,
-and a closed browser as "The sign in was cancelled."
+The access token Microsoft issues is handed to the server for its own tokens and is then discarded. The
+browser tab says when the sign in is done and can be closed; a failure is reported as "The Microsoft sign
+in did not complete" with the library's error code, and a closed browser as "The sign in was cancelled."
 
-**Known limit.** The sign in is covered by tests only with a stand in for Microsoft, never against
-Microsoft itself, and it has never been run on a Mac. The code does not depend on the platform, but
-what the system browser does on macOS, including the redirect to `http://localhost`, has not been seen.
+**Staying signed in.** A server in Entra mode ends every session a fixed time after the Microsoft sign
+in, eight hours unless its operator says otherwise (`OVP_ENTRA_REAUTH_HOURS`), and refreshing in between
+does not move that point. It is how the server notices an account that was disabled in the directory,
+because it has no other way to ask. Answering it with a browser window every morning is not how an
+application that stays signed in behaves, so the application keeps what the Microsoft sign in left
+behind, the library's token cache, in the keystore beside the session (`server/<key>/entra`, on a Mac in
+the same keychain item as everything else, so there is no further question from the keychain). When the
+server asks for proof, the application asks Microsoft again without the person and trades the new token
+for a new session. Microsoft still decides: a disabled account, a changed password or a policy that wants
+the person makes that attempt fail, and only then does the session end and the person sign in in the
+browser. When Microsoft or the server cannot be reached at that moment, nothing ends: the session is kept
+and the attempt is repeated with the next refresh. What is kept goes with the session, at signing out,
+when the server withdraws the account, and when another person signs in.
+
+**Known limit.** The sign in and its renewal are covered by tests only with a stand in for Microsoft.
+The interactive sign in has been used against Microsoft on a Mac; the renewal without the
+person has not yet been seen against Microsoft itself. The log says which way it went: `The session with
+server ... was renewed through Microsoft` when it worked, and `... was refused` followed by the session
+ending when Microsoft wanted the person.
 
 ## The session
 
@@ -70,11 +83,19 @@ without contacting the server, with the person as they were last seen, so the ro
   token share one renewal rather than spending the token twice, which the server would answer by ending
   the session. The new token is stored before it is used.
 - When the server refuses a refresh for good, because the token is invalid or reused, the person has to
-  prove who they are again, or the token belongs to another installation, the session ends. Nothing is
+  prove who they are again and Microsoft would not do it without them, or the token belongs to another
+  installation, the session ends. Nothing is
   erased: the copy keeps working offline, a banner says **Sign in required**, and **Sign in** on the
   banner, **Sign in again** in the status bar menu and **Sign in** under **Settings, Storage** open
   the form again.
 - Offline, throttled and a directory that cannot be reached do not end the session.
+- Once the server has been asked for a new token, the answer is taken over even when the application
+  is stopping or the synchronisation was cancelled meanwhile, bounded only by the network's own time
+  limits. The answer is the only copy of the new token, and the server ends a session whose old token is
+  presented again as stolen.
+- A keystore that does not hand over the stored session at the start, because the person denied or
+  dismissed the keychain's question, does not end it either. Nothing is sent, the banner says **The sign
+  in was not handed over**, and the next start asks the keychain again. Signing in replaces it.
 - When the keystore refuses the new refresh token, the session goes on from memory for this run and the
   stored token is removed, so the next start asks for a sign in rather than presenting a token the server
   has already seen.
@@ -106,6 +127,7 @@ case for the first two rows, and when the server sent none.
 | The server was reached without HTTPS. | `transport.https_required`. Cannot normally happen, because the client only uses `https://`. |
 | This account no longer has access to the server. | The server withdrew the account, see [synchronisation](server-sync.md#when-the-server-withdraws-the-account). |
 | There is no sign in to continue with. Sign in again. | No session is stored. |
+| The system's credential store, the keychain on a Mac, did not hand over the stored sign in... | The person denied or dismissed the keychain's question at the start. Start the application again and allow access, or sign in again. |
 | The settings could not be read when the application started... | There is no installation identity to send, so nothing is asked of the server until the application starts again, see [the settings file](settings.md#the-file). |
 | The server refused the sign in (`code`) or (status N) | Anything else. The code is the server's stable problem code. |
 

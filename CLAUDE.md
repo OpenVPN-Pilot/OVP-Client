@@ -590,6 +590,13 @@ assumptions. Do not re-derive them, and correct this section if a measurement ev
   tombstones are 90 days old. The client asks again from zero and completes.
 - **The user file takes plain passwords.** A password that is not an Argon2id hash signs in, and the
   server warns about it at every start. Only the test stack relies on this.
+- **An Entra session ends eight hours after the Microsoft sign in, however often it is refreshed.**
+  Measured against a server in Entra mode with the default `OVP_ENTRA_REAUTH_HOURS`: a session signed
+  in on a Mac in the afternoon was answered `401 auth.reauthentication_required` at its first refresh
+  the next morning. The server copies the time of the Microsoft sign in into every rotated token, so the
+  limit is absolute, and it is the server's only way to notice an account disabled in the directory.
+  That is why the client keeps the library's token cache and renews through Microsoft without the
+  person, see `ServerSession.RenewWithEntraAsync`.
 
 The container disposes a singleton once for every registration it was resolved through. A service
 registered as itself and handed out again under its interfaces by factory, as
@@ -597,6 +604,6 @@ registered as itself and handed out again under its interfaces by factory, as
 is a view model that its owner disposes as well. Measured as an `ObjectDisposedException` from a
 second `CancellationTokenSource.Cancel`; every `Dispose` in server mode is therefore idempotent.
 
-What has not been measured, and is therefore not written here: the Microsoft sign in through the
-system browser on macOS, the single instance guard across the restart that `--after-restart`
-bridges, and the re-key of an offline profile anywhere but in the tests on a SQLite file.
+What has not been measured, and is therefore not written here: that renewal against Microsoft itself,
+the single instance guard across the restart that `--after-restart` bridges, and the re-key of an
+offline profile anywhere but in the tests on a SQLite file.

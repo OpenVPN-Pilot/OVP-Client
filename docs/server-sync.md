@@ -31,7 +31,8 @@ connection alone.
 One synchronisation is a cycle. A cycle runs:
 
 - at once when the application starts with a stored session;
-- every two minutes;
+- every two minutes, or as often as **Settings, Storage** says, from one minute to an hour. Saving
+  a different interval runs a cycle at once, and the next one is the new interval away;
 - two seconds after a change made here, so that a burst of edits becomes one cycle;
 - when the network comes back, and then from the start of the retry schedule;
 - when asked: **Sync now** in the status bar, in **Settings, Storage**, in the notification area
@@ -75,7 +76,7 @@ often they changed. A secret is never written to the database for this.
 **How it retries.** After a cycle that could not reach the server, or found it failing, the next one
 waits 5, then 15, then 30, then 60 seconds, and 60 seconds for as long as that lasts. A longer
 `Retry-After` from the server is honoured instead. A network that comes back is tried at once. Every
-other outcome waits the ordinary two minutes: a session that needs a new sign in, a clock the server
+other outcome waits the ordinary interval: a session that needs a new sign in, a clock the server
 refuses, a client that is too old and a certificate that is not trusted do not improve by asking
 sooner. How the server answers is asked apart from the synchronisation, every 30 seconds, so the status
 bar notices the server going away or coming back before the next cycle would.

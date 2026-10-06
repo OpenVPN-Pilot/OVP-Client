@@ -136,6 +136,32 @@ public sealed class StorageSettings
     /// </remarks>
     public string? ServerUrl { get; set; }
 
+    /// <summary>
+    /// How often, in minutes, a reachable server is asked for changes when nothing asks sooner.
+    /// </summary>
+    /// <remarks>
+    /// Kept with the storage rather than with what follows a person, because how often a computer
+    /// asks is a matter of that computer's connection, and a server handing it to every other
+    /// computer would decide it for them. A value outside the range is read as the nearest limit.
+    /// </remarks>
+    public int SyncIntervalMinutes { get; set; } = DefaultSyncIntervalMinutes;
+
+    public const int DefaultSyncIntervalMinutes = 2;
+
+    public const int MinimumSyncIntervalMinutes = 1;
+
+    // An hour is the longest a change made elsewhere may take to arrive without a person asking.
+    public const int MaximumSyncIntervalMinutes = 60;
+
+    /// <summary>
+    /// <see cref="SyncIntervalMinutes"/> within its range, which a file edited by hand may leave.
+    /// </summary>
+    /// <remarks>
+    /// A method rather than a property, so that it is not written into the file beside the value.
+    /// </remarks>
+    public TimeSpan SyncInterval() => TimeSpan.FromMinutes(
+        Math.Clamp(SyncIntervalMinutes, MinimumSyncIntervalMinutes, MaximumSyncIntervalMinutes));
+
     public StorageSettings Clone() => (StorageSettings)MemberwiseClone();
 }
 

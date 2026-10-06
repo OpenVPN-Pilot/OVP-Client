@@ -28,8 +28,13 @@ public interface IServerSignIn
     /// Trades an access token from the Microsoft sign in for this server's own tokens, in mode
     /// <c>entra</c>. Obtaining that token is the caller's part.
     /// </summary>
+    /// <param name="entraAccessToken">The token Microsoft issued for the server.</param>
+    /// <param name="entraState">What the Microsoft sign in left behind, kept with the session so
+    /// that it can be renewed without the person; null when there is nothing.</param>
+    /// <param name="cancellationToken">Ends the attempt.</param>
     public Task<ServerResult<CurrentUserResponse>> SignInWithEntraAsync(
         string entraAccessToken,
+        string? entraState,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -156,11 +161,12 @@ public sealed class ServerSignIn : IServerSignIn
             new ServerRequest(HttpMethod.Post, ServerPaths.Login, new LoginRequest(username, password)),
             cancellationToken);
 
-        return await TakeOverAsync(answer, cancellationToken);
+        return await TakeOverAsync(answer, null, cancellationToken);
     }
 
     public async Task<ServerResult<CurrentUserResponse>> SignInWithEntraAsync(
         string entraAccessToken,
+        string? entraState,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(entraAccessToken);
@@ -169,7 +175,7 @@ public sealed class ServerSignIn : IServerSignIn
             new ServerRequest(HttpMethod.Post, ServerPaths.EntraExchange, new EntraExchangeRequest(entraAccessToken)),
             cancellationToken);
 
-        return await TakeOverAsync(answer, cancellationToken);
+        return await TakeOverAsync(answer, entraState, cancellationToken);
     }
 
     public Task SignOutAsync(CancellationToken cancellationToken = default) => session.SignOutAsync(cancellationToken);
@@ -219,6 +225,7 @@ public sealed class ServerSignIn : IServerSignIn
 
     private async Task<ServerResult<CurrentUserResponse>> TakeOverAsync(
         ServerResult<TokenResponse> answer,
+        string? entraState,
         CancellationToken cancellationToken)
     {
         if (!answer.IsSuccess)
@@ -227,7 +234,7 @@ public sealed class ServerSignIn : IServerSignIn
             return answer.AsFailure<CurrentUserResponse>();
         }
 
-        await session.EstablishAsync(answer.Value, cancellationToken);
+        await session.EstablishAsync(answer.Value, entraState, cancellationToken);
 
         return ServerResult.Succeeded<CurrentUserResponse>(answer.Value.User, answer.Status ?? 200, answer.RequestId);
     }

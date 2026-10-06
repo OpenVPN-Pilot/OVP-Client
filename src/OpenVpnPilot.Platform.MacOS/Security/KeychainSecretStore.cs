@@ -79,6 +79,12 @@ public sealed class KeychainSecretStore : ISecretStore
         return Task.Run(() => Read(reference), cancellationToken);
     }
 
+    public Task<SecretRead> ReadAsync(string reference, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reference);
+        return Task.Run(() => ReadWithOutcome(reference), cancellationToken);
+    }
+
     public Task WriteAsync(string reference, StoredSecret secret, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(reference);
@@ -98,13 +104,22 @@ public sealed class KeychainSecretStore : ISecretStore
     public Task<int> ClearAsync(CancellationToken cancellationToken = default) =>
         Task.Run(Clear, cancellationToken);
 
-    private StoredSecret? Read(string reference)
+    private StoredSecret? Read(string reference) => ReadWithOutcome(reference).Secret;
+
+    private SecretRead ReadWithOutcome(string reference)
     {
         lock (gate)
         {
-            return ReadVault().Entries.TryGetValue(reference, out Payload? stored)
-                ? new StoredSecret(stored.Username, stored.Password)
-                : null;
+            Vaulted vault = ReadVault();
+
+            if (vault.Outcome == VaultOutcome.Refused)
+            {
+                return SecretRead.Refused;
+            }
+
+            return vault.Entries.TryGetValue(reference, out Payload? stored)
+                ? SecretRead.Found(new StoredSecret(stored.Username, stored.Password))
+                : SecretRead.Absent;
         }
     }
 

@@ -448,6 +448,7 @@ internal sealed class SyncHarness : IAsyncDisposable
             Tunnels,
             Notices,
             Settings,
+            Settings,
             Notifier,
             NetworkAvailability,
             time,

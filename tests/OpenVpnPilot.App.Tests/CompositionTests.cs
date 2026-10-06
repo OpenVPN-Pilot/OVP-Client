@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenVpnPilot.App.Services.Server;
@@ -95,6 +96,19 @@ public sealed class CompositionTests : IDisposable
         }
 
         Assert.Empty(failures);
+    }
+
+    [Fact]
+    public void Compose_ReadsNoFilesAndWatchesNothing()
+    {
+        HostApplicationBuilder builder = Compose(StorageSelection.Local);
+
+        // A file source reloading on change is a recursive watcher on the content root, which for
+        // an application started from the Finder is the whole disk.
+        Assert.DoesNotContain(builder.Configuration.Sources, source => source is FileConfigurationSource);
+        Assert.Equal(
+            Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory),
+            Path.TrimEndingDirectorySeparator(builder.Environment.ContentRootPath));
     }
 
     [Theory]

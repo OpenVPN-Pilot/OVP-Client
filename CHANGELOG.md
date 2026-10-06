@@ -10,6 +10,41 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-06
+
+### Added
+
+- **How often a server is asked for changes is a setting**, under **Settings, Storage**, from one
+  minute to an hour and two minutes to begin with. Saving another interval runs a synchronisation at
+  once. It belongs to this computer and is not synchronised to others.
+- **A session with a server in Entra mode renews itself through Microsoft.** The server ends every
+  such session a fixed time after the Microsoft sign in, eight hours by default however often it is
+  refreshed, which signed a person out overnight. The application now keeps the Microsoft library's
+  token cache in the keystore beside the session, on a Mac in the same keychain item, and when the
+  server asks for proof it asks Microsoft again without the person and continues with a new session.
+  Only when Microsoft wants the person, for a disabled account, a changed password or a policy, does
+  the session end. When Microsoft or the server cannot be reached at that moment the session is kept
+  and the renewal is tried again later. What is kept is removed with the session.
+
+### Fixed
+
+- **macOS asked for access to other applications' data and to folders whenever something changed on
+  the disk**, such as Outlook starting or a folder being created in the Finder. The application host
+  was built with its defaults, which watch the working directory recursively for a configuration file
+  nothing here reads, and an application started from the Finder runs in `/`. The host is now built
+  without them and watches nothing; Windows had the same watcher on whatever directory it was started
+  in.
+- **A refresh of the server session interrupted by a stop or a quit could end the session.** Once
+  the server has been asked, its answer is the only copy of the new token, and dropping it left the
+  used one stored, which the server answers at the next start by ending the session as stolen. The
+  answer is now taken over whatever the caller does meanwhile, bounded by the network's own limits.
+- **A keychain question denied or dismissed at the start read as "not signed in".** The stored
+  session is now kept, nothing is sent, a banner says the sign in was not handed over, and the next
+  start asks again; signing in replaces it.
+- **The settings put long labels right against their input boxes**, so "Wartezeit vor dem ersten
+  Versuch, in Sekunden" and its neighbours ran into the box. The label column is wider and keeps a
+  gap, and a label that is still too long wraps.
+
 ## [2.0.0] - 2026-10-03
 
 ### Added

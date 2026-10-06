@@ -104,18 +104,18 @@
             <CheckBox Content="{loc:Translate settings.autoReconnect}"
                       IsChecked="{Binding AutoReconnect}" />
 
-            <Grid ColumnDefinitions="220,140" RowDefinitions="Auto,Auto,Auto" >
-              <TextBlock Grid.Row="0" Grid.Column="0" Classes="muted" VerticalAlignment="Center"
+            <Grid ColumnDefinitions="320,140" ColumnSpacing="16" RowDefinitions="Auto,Auto,Auto">
+              <TextBlock Grid.Row="0" Grid.Column="0" Classes="muted" VerticalAlignment="Center" TextWrapping="Wrap"
                          Text="{loc:Translate settings.maxAttempts}" />
               <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="0" Maximum="100" Increment="1"
                              FormatString="0" Value="{Binding MaxReconnectAttempts}" />
 
-              <TextBlock Grid.Row="1" Grid.Column="0" Classes="muted" VerticalAlignment="Center"
+              <TextBlock Grid.Row="1" Grid.Column="0" Classes="muted" VerticalAlignment="Center" TextWrapping="Wrap"
                          Margin="0,8,0,0" Text="{loc:Translate settings.reconnectDelay}" />
               <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="1" Maximum="600" Increment="1"
                              Margin="0,8,0,0" FormatString="0" Value="{Binding ReconnectDelaySeconds}" />
 
-              <TextBlock Grid.Row="2" Grid.Column="0" Classes="muted" VerticalAlignment="Center"
+              <TextBlock Grid.Row="2" Grid.Column="0" Classes="muted" VerticalAlignment="Center" TextWrapping="Wrap"
                          Margin="0,8,0,0" Text="{loc:Translate settings.connectTimeout}" />
               <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="5" Maximum="600" Increment="5"
                              Margin="0,8,0,0" FormatString="0" Value="{Binding ConnectTimeoutSeconds}" />
@@ -277,6 +277,21 @@
                 <Button Content="{loc:Translate storage.showServerLog}" Classes="quiet"
                         Command="{Binding ShowServerLogCommand}" />
               </StackPanel>
+
+              <!-- Saved with the rest of the form, so it is bound to the settings rather than the page. -->
+              <StackPanel Spacing="12" DataContext="{Binding $parent[Window].DataContext}"
+                          x:DataType="vm:SettingsViewModel">
+                <Border Classes="divider" />
+                <TextBlock Text="{loc:Translate storage.schedule}" Classes="section" />
+                <Grid ColumnDefinitions="320,140" ColumnSpacing="16">
+                  <TextBlock Grid.Column="0" Classes="muted" VerticalAlignment="Center" TextWrapping="Wrap"
+                             Text="{loc:Translate storage.syncInterval}" />
+                  <NumericUpDown Grid.Column="1" Minimum="1" Maximum="60" Increment="1"
+                                 FormatString="0" Value="{Binding SyncIntervalMinutes}" />
+                </Grid>
+                <TextBlock Text="{loc:Translate storage.syncIntervalHint}" Classes="muted"
+                           TextWrapping="Wrap" />
+              </StackPanel>
             </StackPanel>
 
             <Border Classes="divider" />
@@ -343,8 +358,8 @@
             <TextBox Text="{Binding OpenVpnPath}"
                      PlaceholderText="{loc:Translate settings.openVpnPathHint}" />
 
-            <Grid ColumnDefinitions="220,140">
-              <TextBlock Grid.Column="0" Classes="muted" VerticalAlignment="Center"
+            <Grid ColumnDefinitions="320,140" ColumnSpacing="16">
+              <TextBlock Grid.Column="0" Classes="muted" VerticalAlignment="Center" TextWrapping="Wrap"
                          Text="{loc:Translate settings.verbosity}" />
               <NumericUpDown Grid.Column="1" Minimum="0" Maximum="11" Increment="1"
                              FormatString="0" Value="{Binding OpenVpnVerbosity}" />
@@ -356,14 +371,14 @@
                         MinWidth="200" HorizontalAlignment="Left" />
             </StackPanel>
 
-            <Grid ColumnDefinitions="220,140">
+            <Grid ColumnDefinitions="320,140" ColumnSpacing="16">
               <TextBlock Grid.Column="0" Classes="muted" VerticalAlignment="Center"
                          TextWrapping="Wrap"
                          Text="{loc:Translate settings.logRetention}" />
               <NumericUpDown Grid.Column="1" Minimum="0" Maximum="365" Increment="1"
                              FormatString="0" Value="{Binding LogRetentionDays}" />
             </Grid>
-            <Grid ColumnDefinitions="220,140">
+            <Grid ColumnDefinitions="320,140" ColumnSpacing="16">
               <TextBlock Grid.Column="0" Classes="muted" VerticalAlignment="Center"
                          TextWrapping="Wrap"
                          Text="{loc:Translate settings.logMaximum}" />

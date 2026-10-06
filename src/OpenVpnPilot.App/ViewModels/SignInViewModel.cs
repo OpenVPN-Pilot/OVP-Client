@@ -214,7 +214,7 @@ public sealed partial class SignInViewModel : ViewModelBase, IDisposable
         switch (microsoft)
         {
             case { Outcome: EntraSignInOutcome.Success, AccessToken: { } token }:
-                return await signIn.SignInWithEntraAsync(token, cancellationToken);
+                return await signIn.SignInWithEntraAsync(token, microsoft.State, cancellationToken);
 
             case { Outcome: EntraSignInOutcome.Cancelled }:
                 Show(() => localizer["signIn.cancelled"], null);

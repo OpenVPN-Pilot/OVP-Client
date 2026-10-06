@@ -38,6 +38,7 @@ public sealed class InstallationIdentityTests : IDisposable
                 clients,
                 new AssemblyClientVersionProvider(typeof(InstallationIdentityTests).Assembly),
                 secrets,
+                new NoEntraRenewal(),
                 TimeProvider.System,
                 NullLoggerFactory.Instance)
             .Create(new Uri(Address), ServerKey.Compute(Address));

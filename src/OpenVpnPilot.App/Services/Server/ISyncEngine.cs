@@ -85,6 +85,12 @@ public enum SyncState
     /// nothing is asked of the server until the application starts again.
     /// </summary>
     SettingsUnreadable,
+
+    /// <summary>
+    /// The session is stored, but the keychain did not hand it over at the start. Nothing is asked
+    /// of the server until the application starts again or the person signs in.
+    /// </summary>
+    KeystoreRefused,
 }
 
 /// <summary>

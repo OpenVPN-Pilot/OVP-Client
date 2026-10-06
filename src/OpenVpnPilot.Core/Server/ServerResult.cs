@@ -51,6 +51,12 @@ public enum ServerOutcome
     /// was sent. Starting the application again reads them again.
     /// </summary>
     IdentityUnavailable,
+
+    /// <summary>
+    /// The session is stored, but the keystore did not hand it over at the start, so nothing was
+    /// sent. Starting the application again asks the keystore again; signing in replaces it.
+    /// </summary>
+    KeystoreRefused,
 }
 
 /// <summary>

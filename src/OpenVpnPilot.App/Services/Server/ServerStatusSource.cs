@@ -102,7 +102,7 @@ public sealed record ServerStatusSnapshot(
                 return SyncState.SignInRequired;
             }
 
-            // The synchronisation asks every two minutes, the round trip every thirty seconds, so the
+            // The synchronisation asks every few minutes, the round trip every thirty seconds, so the
             // round trip is the first to notice the server going away or coming back unwell.
             if (Sync.State is SyncState.Idle or SyncState.Synchronised or SyncState.ChangesWaiting)
             {

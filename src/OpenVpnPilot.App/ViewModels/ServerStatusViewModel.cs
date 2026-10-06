@@ -191,7 +191,7 @@ public sealed partial class ServerStatusViewModel : ViewModelBase, IDisposable
         Details = ServerStatusText.Details(localizer, snapshot);
         Tone = ServerStatusText.Tone(state);
         CanSyncNow = snapshot.SignedIn && state != SyncState.Synchronising;
-        NeedsSignIn = state == SyncState.SignInRequired;
+        NeedsSignIn = state is SyncState.SignInRequired or SyncState.KeystoreRefused;
 
         (string Title, string Text)? banner = state switch
         {
@@ -200,6 +200,7 @@ public sealed partial class ServerStatusViewModel : ViewModelBase, IDisposable
             SyncState.ClockWrong => (localizer["banner.clockTitle"], localizer.Translate("banner.clockText", snapshot.Sync.Detail ?? string.Empty)),
             SyncState.CertificateUntrusted => (localizer["banner.certificateTitle"], localizer.Translate("banner.certificateText", snapshot.Host)),
             SyncState.SettingsUnreadable => (localizer["banner.settingsTitle"], localizer["banner.settingsText"]),
+            SyncState.KeystoreRefused => (localizer["banner.keystoreTitle"], localizer["banner.keystoreText"]),
             _ => null,
         };
 

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Server;
 using OpenVpnPilot.Core.Server.Contracts;
+using OpenVpnPilot.Core.Settings;
 using OpenVpnPilot.Data;
 using SyncStateRow = OpenVpnPilot.Data.Entities.SyncState;
 
@@ -33,6 +34,7 @@ public sealed partial class SyncEngine : ISyncEngine, IDisposable
     private readonly IServerProfileMaintenance maintenance;
     private readonly ILibraryChangeNotifier notifier;
     private readonly INetworkAvailability network;
+    private readonly ISettingsService settings;
     private readonly TimeProvider time;
     private readonly ILogger<SyncEngine> logger;
 
@@ -59,7 +61,8 @@ public sealed partial class SyncEngine : ISyncEngine, IDisposable
         IHeldVaultSecrets heldSecrets,
         IRemovedProfileTunnels tunnels,
         IServerNotices notices,
-        IPortableSettings settings,
+        IPortableSettings portableSettings,
+        ISettingsService settings,
         ILibraryChangeNotifier notifier,
         INetworkAvailability network,
         TimeProvider time,
@@ -73,6 +76,7 @@ public sealed partial class SyncEngine : ISyncEngine, IDisposable
         ArgumentNullException.ThrowIfNull(heldSecrets);
         ArgumentNullException.ThrowIfNull(tunnels);
         ArgumentNullException.ThrowIfNull(notices);
+        ArgumentNullException.ThrowIfNull(portableSettings);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(notifier);
         ArgumentNullException.ThrowIfNull(network);
@@ -85,11 +89,12 @@ public sealed partial class SyncEngine : ISyncEngine, IDisposable
         this.maintenance = maintenance;
         this.notifier = notifier;
         this.network = network;
+        this.settings = settings;
         this.time = time;
         this.logger = logger;
 
-        personal = new PersonalDataSync(connection.Api, contextFactory, outbox, settings, logger);
-        pusher = new OutboxPusher(connection.Api, contextFactory, outbox, maintenance, secrets, heldSecrets, settings, personal, logger);
+        personal = new PersonalDataSync(connection.Api, contextFactory, outbox, portableSettings, logger);
+        pusher = new OutboxPusher(connection.Api, contextFactory, outbox, maintenance, secrets, heldSecrets, portableSettings, personal, logger);
         puller = new ChangeFeedPuller(connection.Api, contextFactory, secrets, maintenance, tunnels, notices, time, logger);
     }
 

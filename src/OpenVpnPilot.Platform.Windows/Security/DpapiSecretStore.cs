@@ -43,7 +43,10 @@ public sealed class DpapiSecretStore : ISecretStore
 
     public async Task<StoredSecret?> TryReadAsync(
         string reference,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        (await ReadAsync(reference, cancellationToken)).Secret;
+
+    public async Task<SecretRead> ReadAsync(string reference, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(reference);
 
@@ -51,7 +54,7 @@ public sealed class DpapiSecretStore : ISecretStore
 
         if (!File.Exists(path))
         {
-            return null;
+            return SecretRead.Absent;
         }
 
         try
@@ -61,17 +64,19 @@ public sealed class DpapiSecretStore : ISecretStore
 
             // A payload whose reference does not match means the file was moved or tampered with.
             return payload is null || !string.Equals(payload.Reference, reference, StringComparison.Ordinal)
-                ? null
-                : new StoredSecret(payload.Username, payload.Password);
+                ? SecretRead.Absent
+                : SecretRead.Found(new StoredSecret(payload.Username, payload.Password));
         }
         catch (CryptographicException)
         {
-            // Written by another user or another machine. Treated as absent so the caller prompts.
-            return null;
+            // Written by another user or another machine, which no later attempt can open either.
+            // Treated as absent so the caller prompts.
+            return SecretRead.Absent;
         }
         catch (IOException)
         {
-            return null;
+            // Held open by something else for the moment, such as a scanner or a backup.
+            return SecretRead.Refused;
         }
     }
 

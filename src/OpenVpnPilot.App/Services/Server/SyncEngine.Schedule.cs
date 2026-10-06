@@ -1,11 +1,14 @@
+using OpenVpnPilot.Core.Settings;
+
 namespace OpenVpnPilot.App.Services.Server;
 
 public sealed partial class SyncEngine
 {
     /// <summary>
-    /// How often a reachable server is asked for changes when nothing else asks sooner.
+    /// How often a reachable server is asked for changes when nothing else asks sooner, as the
+    /// settings say it now.
     /// </summary>
-    public static readonly TimeSpan Interval = TimeSpan.FromMinutes(2);
+    public TimeSpan Interval => settings.Current.Storage.SyncInterval();
 
     /// <summary>
     /// How long a burst of local changes may go on before it is pushed.
@@ -29,6 +32,7 @@ public sealed partial class SyncEngine
     private Task? schedule;
     private ITimer? pushTimer;
     private int failuresInARow;
+    private long scheduledIntervalTicks;
     private bool disposed;
 
     /// <summary>
@@ -53,8 +57,11 @@ public sealed partial class SyncEngine
             pushTimer = time.CreateTimer(_ => RequestSync(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         }
 
+        Interlocked.Exchange(ref scheduledIntervalTicks, Interval.Ticks);
+
         outbox.PushRequested += OnPushRequested;
         network.AvailabilityChanged += OnAvailabilityChanged;
+        settings.Changed += OnSettingsChanged;
 
         await LoadStoredStatusAsync(cancellationToken);
         SyncEngineLog.Started(logger, Server);
@@ -134,6 +141,7 @@ public sealed partial class SyncEngine
     {
         outbox.PushRequested -= OnPushRequested;
         network.AvailabilityChanged -= OnAvailabilityChanged;
+        settings.Changed -= OnSettingsChanged;
 
         lock (scheduleGate)
         {
@@ -230,6 +238,21 @@ public sealed partial class SyncEngine
 
         // A network that came back is worth trying at once, and from the start of the back off.
         Interlocked.Exchange(ref failuresInARow, 0);
+        RequestSync();
+    }
+
+    private void OnSettingsChanged(object? sender, PilotSettings changed)
+    {
+        TimeSpan interval = changed.Storage.SyncInterval();
+
+        if (Interlocked.Exchange(ref scheduledIntervalTicks, interval.Ticks) == interval.Ticks)
+        {
+            return;
+        }
+
+        // The wait under way was measured with the old interval and may be an hour long. A cycle
+        // now ends it, and the next one is the new interval away from that.
+        SyncEngineLog.IntervalChanged(logger, interval);
         RequestSync();
     }
 }

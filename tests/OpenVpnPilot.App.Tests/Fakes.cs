@@ -208,6 +208,9 @@ internal sealed class FakeSecrets : ISecretStore
     public Task<StoredSecret?> TryReadAsync(string reference, CancellationToken cancellationToken = default) =>
         Task.FromResult(entries.GetValueOrDefault(reference));
 
+    public Task<SecretRead> ReadAsync(string reference, CancellationToken cancellationToken = default) =>
+        Task.FromResult(entries.TryGetValue(reference, out StoredSecret? secret) ? SecretRead.Found(secret) : SecretRead.Absent);
+
     public Task WriteAsync(string reference, StoredSecret secret, CancellationToken cancellationToken = default)
     {
         entries[reference] = secret;
@@ -341,6 +344,9 @@ internal sealed class FailingSecrets(int failOnWrite) : ISecretStore
 
     public Task<StoredSecret?> TryReadAsync(string reference, CancellationToken cancellationToken = default) =>
         inner.TryReadAsync(reference, cancellationToken);
+
+    public Task<SecretRead> ReadAsync(string reference, CancellationToken cancellationToken = default) =>
+        inner.ReadAsync(reference, cancellationToken);
 
     public Task WriteAsync(string reference, StoredSecret secret, CancellationToken cancellationToken = default)
     {
