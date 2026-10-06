@@ -111,11 +111,68 @@ public sealed class SyncEngineScheduleTests
         await harness.Engine.StartAsync(CancellationToken.None);
 
         await SyncHarness.EventuallyAsync(() => harness.Engine.Status.State == SyncState.Synchronised && time.NextDue is not null, "the first cycle");
-        Assert.Equal(SyncEngine.Interval, time.NextDue);
+        Assert.Equal(harness.Engine.Interval, time.NextDue);
 
-        time.Advance(SyncEngine.Interval);
+        time.Advance(harness.Engine.Interval);
 
         await SyncHarness.EventuallyAsync(() => harness.Count(HttpMethod.Get, "/api/v1/sync/changes") == 2, "the second cycle");
+    }
+
+    [Fact]
+    public async Task StartAsync_IntervalSet_WaitsAsLongAsTheSettingsSay()
+    {
+        ManualTime time = new(Start);
+        await using SyncHarness harness = await SyncHarness.CreateAsync(time);
+        await harness.Settings.UpdateAsync(settings => settings.Storage.SyncIntervalMinutes = 15);
+
+        await harness.Engine.StartAsync(CancellationToken.None);
+
+        await SyncHarness.EventuallyAsync(() => harness.Engine.Status.State == SyncState.Synchronised && time.NextDue is not null, "the first cycle");
+        Assert.Equal(TimeSpan.FromMinutes(15), time.NextDue);
+    }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(-5, 1)]
+    [InlineData(1000, 60)]
+    public async Task Interval_OutsideTheRange_IsReadAsTheNearestLimit(int minutes, int expected)
+    {
+        await using SyncHarness harness = await SyncHarness.CreateAsync();
+        await harness.Settings.UpdateAsync(settings => settings.Storage.SyncIntervalMinutes = minutes);
+
+        Assert.Equal(TimeSpan.FromMinutes(expected), harness.Engine.Interval);
+    }
+
+    [Fact]
+    public async Task IntervalChanged_WhileWaiting_RunsACycleAndWaitsTheNewInterval()
+    {
+        ManualTime time = new(Start);
+        await using SyncHarness harness = await SyncHarness.CreateAsync(time);
+
+        await harness.Engine.StartAsync(CancellationToken.None);
+        await SyncHarness.EventuallyAsync(() => harness.Engine.Status.State == SyncState.Synchronised && time.NextDue is not null, "the first cycle");
+        Assert.Equal(TimeSpan.FromMinutes(2), time.NextDue);
+
+        await harness.Settings.UpdateAsync(settings => settings.Storage.SyncIntervalMinutes = 30);
+
+        await SyncHarness.EventuallyAsync(
+            () => harness.Count(HttpMethod.Get, "/api/v1/sync/changes") == 2 && time.NextDue == TimeSpan.FromMinutes(30),
+            "the cycle for the new interval");
+    }
+
+    [Fact]
+    public async Task SettingsChanged_IntervalUnchanged_RunsNoCycle()
+    {
+        ManualTime time = new(Start);
+        await using SyncHarness harness = await SyncHarness.CreateAsync(time);
+
+        await harness.Engine.StartAsync(CancellationToken.None);
+        await SyncHarness.EventuallyAsync(() => harness.Engine.Status.State == SyncState.Synchronised && time.NextDue is not null, "the first cycle");
+
+        await harness.Settings.UpdateAsync(settings => settings.Connections.ReconnectDelaySeconds = 9);
+        await Task.Delay(100);
+
+        Assert.Equal(1, harness.Count(HttpMethod.Get, "/api/v1/sync/changes"));
     }
 
     [Fact]
@@ -164,7 +221,7 @@ public sealed class SyncEngineScheduleTests
         await Task.Delay(100);
 
         Assert.Equal(2, harness.Count(HttpMethod.Get, "/api/v1/sync/changes"));
-        Assert.Equal(SyncEngine.Interval, time.NextDue);
+        Assert.Equal(harness.Engine.Interval, time.NextDue);
     }
 
     private static void InterlockedMax(ref int target, int value)

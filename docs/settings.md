@@ -13,7 +13,7 @@ Everything a person can configure is one JSON file, and the settings screen is a
 | Shortcuts | The global shortcuts, which are recorded by pressing them. A combination another shortcut or another application already owns is reported rather than failing silently |
 | Notifications | Notifications as a whole, and each of connecting, connected, disconnected, connection lost, reconnecting and failed |
 | Credentials | Using stored credentials, ticking remember by default, how many are stored, and forgetting them |
-| Storage | Where the profiles live, and with a server its status, **Sync now**, **Sign out** and **Sign in**, see [server](server.md) |
+| Storage | Where the profiles live, and with a server its status, **Sync now**, **Sign out**, **Sign in** and how often it is asked for changes, see [server](server.md) |
 | Profiles | Import and export, and reloading the list after the store was changed from somewhere else, such as `ovp` |
 | Advanced | The OpenVPN verbosity, the log level, how long and how large the logs may grow, the check for a newer release, clearing the connection history, and writing a diagnostics bundle |
 
@@ -87,6 +87,7 @@ Defaults are given as they stand in a new file.
 | `advanced.portableMode` | `false` | Not read by anything: the data directory is always the user's application data directory |
 | `storage.mode` | `"Local"` | `"Local"` or `"Server"`, read before anything else starts |
 | `storage.serverUrl` | `null` | The server's address, kept when switching back to this computer |
+| `storage.syncIntervalMinutes` | `2` | How often a reachable server is asked for changes, from 1 to 60; a value outside is read as the nearest limit |
 | `installation.id` | generated | A random identity made once, which a server binds its tokens to |
 
 The favourites, their slots and the shortcuts are not in this file: they are in the database, and they
@@ -102,7 +103,7 @@ from the receiving computer on the way in:
 - `general.startWithSystem`;
 - `advanced.openVpnPath` and `advanced.portableMode`;
 - `storage`, because taking another computer's mode from a server would switch this one to a store
-  nobody chose here;
+  nobody chose here, and how often a computer asks the server is a matter of its own connection;
 - `installation`, because taking another computer's identity would make two computers one to the
   server.
 

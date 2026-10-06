@@ -211,4 +211,10 @@ internal static partial class SyncEngineLog
         Level = LogLevel.Debug,
         Message = "Profile {ProfileId} is in the server's answer but gone from the server by now; skipped.")]
     public static partial void ProfileVanished(ILogger logger, Guid profileId);
+
+    [LoggerMessage(
+        EventId = 3828,
+        Level = LogLevel.Information,
+        Message = "The synchronisation interval is now {Interval}.")]
+    public static partial void IntervalChanged(ILogger logger, TimeSpan interval);
 }

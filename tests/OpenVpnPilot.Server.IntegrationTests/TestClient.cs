@@ -61,6 +61,7 @@ internal sealed class TestClient : IAsyncDisposable
             new NoTunnels(),
             new ServerNotices(),
             Settings,
+            Settings,
             new LibraryChangeNotifier(),
             new QuietNetwork(),
             TimeProvider.System,
