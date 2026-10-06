@@ -1,4 +1,5 @@
 using System.Net;
+using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Server;
 using OpenVpnPilot.Core.Server.Contracts;
 
@@ -123,13 +124,14 @@ public sealed class ServerSignInTests
     {
         using TestServer server = new(_ => Answers.Tokens("access-1", "refresh-1", TestServer.Start.AddMinutes(15)));
 
-        ServerResult<CurrentUserResponse> result = await server.Connection.SignIn.SignInWithEntraAsync("entra-token");
+        ServerResult<CurrentUserResponse> result = await server.Connection.SignIn.SignInWithEntraAsync("entra-token", "entra-state");
 
         SentRequest sent = Assert.Single(server.Handler.Requests);
         Assert.True(result.IsSuccess);
         Assert.Equal("/api/v1/auth/entra/exchange", sent.Path);
         Assert.Equal("entra-token", sent.Json.GetProperty("accessToken").GetString());
         Assert.True(server.Session.IsSignedIn);
+        Assert.Equal("entra-state", server.Secrets.Entries[SecretReference.ForServerEntraState(TestServer.ServerKey)].Password);
     }
 
     [Fact]

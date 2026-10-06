@@ -42,7 +42,7 @@ internal sealed class TestClient : IAsyncDisposable
             () => new RecordingHandler(Requests) { InnerHandler = TestServer.CreateNetwork() });
 
         Uri address = ServerHttpClientFactory.NormaliseBaseAddress(TestServer.Address);
-        Connection = new ServerConnectionFactory(clients, new AssemblyClientVersionProvider(typeof(SyncEngine).Assembly), Secrets, TimeProvider.System, NullLoggerFactory.Instance)
+        Connection = new ServerConnectionFactory(clients, new AssemblyClientVersionProvider(typeof(SyncEngine).Assembly), Secrets, new NoEntraRenewal(), TimeProvider.System, NullLoggerFactory.Instance)
             .Create(address, ServerKey.Compute(address.AbsoluteUri));
 
         Outbox = new Outbox(Database, TimeProvider.System, NullLogger<Outbox>.Instance);
@@ -238,6 +238,9 @@ internal sealed class MemorySecrets : ISecretStore
 
     public Task<StoredSecret?> TryReadAsync(string reference, CancellationToken cancellationToken = default) =>
         Task.FromResult(entries.GetValueOrDefault(reference));
+
+    public Task<SecretRead> ReadAsync(string reference, CancellationToken cancellationToken = default) =>
+        Task.FromResult(entries.TryGetValue(reference, out StoredSecret? secret) ? SecretRead.Found(secret) : SecretRead.Absent);
 
     public Task WriteAsync(string reference, StoredSecret secret, CancellationToken cancellationToken = default)
     {

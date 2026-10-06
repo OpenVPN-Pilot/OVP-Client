@@ -593,6 +593,7 @@
       "clockWrong": "Uhr falsch",
       "certificateUntrusted": "Zertifikat nicht vertrauenswürdig",
       "settingsUnreadable": "Einstellungen nicht lesbar, Neustart nötig",
+      "keystoreRefused": "Anmeldespeicher verweigert, Neustart oder Anmelden",
       "neverSynced": "noch nicht synchronisiert",
       "syncedJustNow": "gerade synchronisiert",
       "syncedMinutes": "vor {0} Min. synchronisiert",
@@ -624,6 +625,8 @@
       "certificateText": "Dieser Computer vertraut dem Zertifikat von {0} nicht. Das ist Sache des Serveradministrators: Der Server braucht ein Zertifikat, dem dieser Computer vertraut, oder seine Zertifizierungsstelle muss hier installiert werden. Es lässt sich nicht übergehen.",
       "settingsTitle": "Einstellungen nicht lesbar",
       "settingsText": "Die Einstellungsdatei konnte beim Start nicht gelesen werden, deshalb kann sich dieser Computer beim Server nicht ausweisen. Bis zum nächsten Start der Anwendung wird nichts synchronisiert.",
+      "keystoreTitle": "Die Anmeldung wurde nicht herausgegeben",
+      "keystoreText": "Der Anmeldespeicher des Systems, auf dem Mac der Schlüsselbund, hat die gespeicherte Anmeldung an diesem Server beim Start der Anwendung nicht herausgegeben, deshalb wird nichts synchronisiert. Die Anmeldung ist weiterhin gespeichert: Starten Sie die Anwendung neu und erlauben Sie den Zugriff, wenn danach gefragt wird, oder melden Sie sich erneut an.",
       "signIn": "Anmelden",
       "getUpdate": "Update holen",
       "storageSettings": "Speicherort-Einstellungen"
@@ -668,6 +671,7 @@
       "notPilotServer": "Unter dieser Adresse antwortet etwas, aber es ist kein OpenVPN Pilot Server.",
       "notSignedIn": "Es gibt keine Anmeldung, mit der es weitergehen kann. Melden Sie sich erneut an.",
       "identityUnavailable": "Die Einstellungen konnten beim Start nicht gelesen werden, deshalb kann sich dieser Computer beim Server nicht ausweisen. Starten Sie die Anwendung neu.",
+      "keystoreRefused": "Der Anmeldespeicher des Systems, auf dem Mac der Schlüsselbund, hat die gespeicherte Anmeldung beim Start der Anwendung nicht herausgegeben. Starten Sie die Anwendung neu und erlauben Sie den Zugriff, wenn danach gefragt wird, oder melden Sie sich erneut an.",
       "failedCode": "Der Server hat die Anmeldung abgelehnt ({0}).",
       "failedStatus": "Der Server hat die Anmeldung abgelehnt (Status {0}).",
       "reference": "Anfrage-ID: {0}"

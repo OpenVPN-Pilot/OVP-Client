@@ -21,6 +21,16 @@ public interface ISecretStore
     /// </summary>
     public Task<StoredSecret?> TryReadAsync(string reference, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Reads a stored secret and says why there is none: nothing is stored, or the store refused.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="TryReadAsync"/> answers null for both, which suits a sign in the person can simply
+    /// type again. It does not suit a server session: one the keychain would not hand over still
+    /// exists, and reading it as gone asks the person to sign in for nothing.
+    /// </remarks>
+    public Task<SecretRead> ReadAsync(string reference, CancellationToken cancellationToken = default);
+
     public Task WriteAsync(string reference, StoredSecret secret, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -48,6 +58,36 @@ public interface ISecretStore
 public sealed record StoredSecret(string? Username, string Password);
 
 /// <summary>
+/// How reading one secret ended.
+/// </summary>
+public enum SecretReadOutcome
+{
+    Found,
+
+    /// <summary>
+    /// Nothing is stored under the reference.
+    /// </summary>
+    Absent,
+
+    /// <summary>
+    /// Something may be stored, but the store did not hand it over: the person denied or dismissed
+    /// the keychain's question, or the file could not be opened. Asking again later may succeed.
+    /// </summary>
+    Refused,
+}
+
+/// <param name="Outcome">How the read ended.</param>
+/// <param name="Secret">The secret when it was found, otherwise null.</param>
+public sealed record SecretRead(SecretReadOutcome Outcome, StoredSecret? Secret)
+{
+    public static SecretRead Absent { get; } = new(SecretReadOutcome.Absent, null);
+
+    public static SecretRead Refused { get; } = new(SecretReadOutcome.Refused, null);
+
+    public static SecretRead Found(StoredSecret secret) => new(SecretReadOutcome.Found, secret);
+}
+
+/// <summary>
 /// Builds the references under which credentials are stored: a profile's sign ins, and the refresh
 /// token of a server this machine is signed in to.
 /// </summary>
@@ -66,6 +106,7 @@ public static class SecretReference
     private const string ProfilePrefix = "profile/";
     private const string ServerPrefix = "server/";
     private const string RefreshSuffix = "/refresh";
+    private const string EntraSuffix = "/entra";
 
     /// <summary>
     /// How long a server key is: lower case hex of 16 bytes.
@@ -91,6 +132,22 @@ public static class SecretReference
         }
 
         return ServerPrefix + serverKey + RefreshSuffix;
+    }
+
+    /// <summary>
+    /// The reference of what a Microsoft sign in to one server left behind, from which it is renewed
+    /// without the person.
+    /// </summary>
+    /// <param name="serverKey">The server's key, lower case hex of 16 bytes.</param>
+    /// <exception cref="ArgumentException">The key is not in that form.</exception>
+    public static string ForServerEntraState(string serverKey)
+    {
+        if (!IsServerKey(serverKey))
+        {
+            throw new ArgumentException("A server key is 32 lower case hexadecimal digits.", nameof(serverKey));
+        }
+
+        return ServerPrefix + serverKey + EntraSuffix;
     }
 
     /// <summary>

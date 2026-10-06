@@ -220,8 +220,9 @@ public sealed class ServerSessionCoordinator : IServerSessionCoordinator, IServe
 
     public Task<ServerResult<CurrentUserResponse>> SignInWithEntraAsync(
         string entraAccessToken,
+        string? entraState,
         CancellationToken cancellationToken = default) =>
-        SignInCoreAsync(token => connection.SignIn.SignInWithEntraAsync(entraAccessToken, token), cancellationToken);
+        SignInCoreAsync(token => connection.SignIn.SignInWithEntraAsync(entraAccessToken, entraState, token), cancellationToken);
 
     /// <summary>
     /// Signs out and stops the synchronisation. The copy and its waiting changes stay, so signing in

@@ -44,6 +44,7 @@ public sealed class ServerConnectionFactory : IServerConnectionFactory
     private readonly IServerHttpClientFactory clients;
     private readonly IClientVersionProvider version;
     private readonly ISecretStore secrets;
+    private readonly IEntraRenewal entra;
     private readonly TimeProvider time;
     private readonly ILoggerFactory loggers;
 
@@ -51,18 +52,21 @@ public sealed class ServerConnectionFactory : IServerConnectionFactory
         IServerHttpClientFactory clients,
         IClientVersionProvider version,
         ISecretStore secrets,
+        IEntraRenewal entra,
         TimeProvider time,
         ILoggerFactory loggers)
     {
         ArgumentNullException.ThrowIfNull(clients);
         ArgumentNullException.ThrowIfNull(version);
         ArgumentNullException.ThrowIfNull(secrets);
+        ArgumentNullException.ThrowIfNull(entra);
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(loggers);
 
         this.clients = clients;
         this.version = version;
         this.secrets = secrets;
+        this.entra = entra;
         this.time = time;
         this.loggers = loggers;
     }
@@ -79,7 +83,7 @@ public sealed class ServerConnectionFactory : IServerConnectionFactory
 
         ServerTransport transport = new(client, wipe, time, loggers.CreateLogger("OpenVpnPilot.Core.Server.ServerHttp"));
         ILogger sessionLogger = loggers.CreateLogger("OpenVpnPilot.Core.Server.ServerSession");
-        ServerSession session = new(serverKey, transport, secrets, time, sessionLogger);
+        ServerSession session = new(serverKey, transport, secrets, entra, time, sessionLogger);
         ServerApi api = new(address, transport, session);
         ServerSignIn signIn = new(api, transport, session, version, sessionLogger);
 

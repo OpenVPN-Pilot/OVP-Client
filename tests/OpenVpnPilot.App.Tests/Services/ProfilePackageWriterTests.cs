@@ -355,6 +355,9 @@ public sealed class ProfilePackageWriterTests : IAsyncLifetime
         public Task<StoredSecret?> TryReadAsync(string reference, CancellationToken cancellationToken = default) =>
             Task.FromResult(entries.GetValueOrDefault(reference));
 
+        public Task<SecretRead> ReadAsync(string reference, CancellationToken cancellationToken = default) =>
+            Task.FromResult(entries.TryGetValue(reference, out StoredSecret? secret) ? SecretRead.Found(secret) : SecretRead.Absent);
+
         public Task WriteAsync(string reference, StoredSecret secret, CancellationToken cancellationToken = default)
         {
             entries[reference] = secret;

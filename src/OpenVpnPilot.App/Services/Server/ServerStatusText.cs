@@ -40,7 +40,7 @@ public static class ServerStatusText
         SyncState.Synchronising => ServerStatusTone.Busy,
         SyncState.Offline or SyncState.Degraded or SyncState.ChangesWaiting => ServerStatusTone.Warning,
         SyncState.SignInRequired or SyncState.ClientOutdated or SyncState.ClockWrong or SyncState.CertificateUntrusted
-            or SyncState.SettingsUnreadable => ServerStatusTone.Problem,
+            or SyncState.SettingsUnreadable or SyncState.KeystoreRefused => ServerStatusTone.Problem,
         _ => ServerStatusTone.Neutral,
     };
 
@@ -102,6 +102,7 @@ public static class ServerStatusText
             SyncState.ClockWrong => localizer["statusBar.clockWrong"],
             SyncState.CertificateUntrusted => localizer["statusBar.certificateUntrusted"],
             SyncState.SettingsUnreadable => localizer["statusBar.settingsUnreadable"],
+            SyncState.KeystoreRefused => localizer["statusBar.keystoreRefused"],
             _ => null,
         };
     }

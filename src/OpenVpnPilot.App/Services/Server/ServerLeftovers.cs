@@ -165,6 +165,10 @@ public sealed class ServerLeftovers : IServerLeftovers
 
         string reference = SecretReference.ForServerRefreshToken(serverKey);
 
+        // What a Microsoft sign in left goes with the session it belongs to, whether or not a
+        // refresh token is still there to report.
+        await secrets.DeleteAsync(SecretReference.ForServerEntraState(serverKey), cancellationToken);
+
         if (await secrets.TryReadAsync(reference, cancellationToken) is null)
         {
             return false;

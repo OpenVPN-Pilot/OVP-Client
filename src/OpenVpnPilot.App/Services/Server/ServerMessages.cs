@@ -32,6 +32,7 @@ public static class ServerMessages
             ServerOutcome.InvalidResponse => localizer["signIn.notPilotServer"],
             ServerOutcome.NotSignedIn => localizer["signIn.notSignedIn"],
             ServerOutcome.IdentityUnavailable => localizer["signIn.identityUnavailable"],
+            ServerOutcome.KeystoreRefused => localizer["signIn.keystoreRefused"],
             _ => Problem(localizer, result),
         };
     }

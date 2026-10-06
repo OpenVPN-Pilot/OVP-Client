@@ -124,7 +124,7 @@ internal sealed class TestConnection : IDisposable
             () => network,
             ClientPlatform.Windows);
 
-        return new ServerConnectionFactory(clients, version, secrets, TimeProvider.System, NullLoggerFactory.Instance);
+        return new ServerConnectionFactory(clients, version, secrets, new NoEntraRenewal(), TimeProvider.System, NullLoggerFactory.Instance);
     }
 
     public void Dispose() => Connection.Dispose();

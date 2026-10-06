@@ -199,10 +199,26 @@ internal sealed class FakeSecretStore(Journal? journal = null) : ISecretStore
     /// </summary>
     public bool RefusesWrites { get; set; }
 
+    /// <summary>
+    /// Makes every read refuse the way a keychain does whose question the person denied.
+    /// </summary>
+    public bool RefusesReads { get; set; }
+
     public IReadOnlyDictionary<string, StoredSecret> Entries => entries;
 
     public Task<StoredSecret?> TryReadAsync(string reference, CancellationToken cancellationToken = default) =>
-        Task.FromResult(entries.GetValueOrDefault(reference));
+        Task.FromResult(RefusesReads ? null : entries.GetValueOrDefault(reference));
+
+    public Task<SecretRead> ReadAsync(string reference, CancellationToken cancellationToken = default)
+    {
+        if (RefusesReads)
+        {
+            journal?.Add($"refuse read {reference}");
+            return Task.FromResult(SecretRead.Refused);
+        }
+
+        return Task.FromResult(entries.TryGetValue(reference, out StoredSecret? secret) ? SecretRead.Found(secret) : SecretRead.Absent);
+    }
 
     public Task WriteAsync(string reference, StoredSecret secret, CancellationToken cancellationToken = default)
     {
@@ -232,6 +248,28 @@ internal sealed class FakeSecretStore(Journal? journal = null) : ISecretStore
         int count = entries.Count;
         entries.Clear();
         return Task.FromResult(count);
+    }
+}
+
+/// <summary>
+/// Microsoft as the test scripts it, recording what it was asked with.
+/// </summary>
+internal sealed class FakeEntraRenewal : IEntraRenewal
+{
+    private readonly ConcurrentQueue<string> states = new();
+
+    /// <summary>
+    /// The answer to every renewal; renewed with a fixed token by default.
+    /// </summary>
+    public EntraRenewalResult Answer { get; set; } =
+        new(EntraRenewalOutcome.Renewed, "entra-renewed", "entra-state-2");
+
+    public IReadOnlyList<string> States => [.. states];
+
+    public Task<EntraRenewalResult> RenewAsync(EntraInfoResponse entra, string state, CancellationToken cancellationToken = default)
+    {
+        states.Enqueue(state);
+        return Task.FromResult(Answer);
     }
 }
 
@@ -325,6 +363,7 @@ internal sealed class TestServer : IDisposable
             clients,
             new FixedVersion(version ?? new Version(1, 9, 0)),
             Secrets,
+            Entra,
             Time,
             Logs);
 
@@ -342,6 +381,8 @@ internal sealed class TestServer : IDisposable
 
     public FakeSecretStore Secrets { get; }
 
+    public FakeEntraRenewal Entra { get; } = new();
+
     public FakeTime Time { get; } = new(Start);
 
     public RecordingLoggerFactory Logs { get; } = new();
@@ -354,16 +395,24 @@ internal sealed class TestServer : IDisposable
 
     public static string RefreshReference => SecretReference.ForServerRefreshToken(ServerKey);
 
+    public static string EntraReference => SecretReference.ForServerEntraState(ServerKey);
+
     /// <summary>
     /// Signs in as the server would let anyone, without going through the network.
     /// </summary>
-    public Task SignedInAsync(string access = "access-1", string refresh = "refresh-1", TimeSpan? validFor = null) =>
-        Session.EstablishAsync(new TokenResponse(
-            access,
-            Time.Now + (validFor ?? TimeSpan.FromMinutes(15)),
-            refresh,
-            Time.Now.AddDays(30),
-            Answers.User()));
+    public Task SignedInAsync(
+        string access = "access-1",
+        string refresh = "refresh-1",
+        TimeSpan? validFor = null,
+        string? entraState = null) =>
+        Session.EstablishAsync(
+            new TokenResponse(
+                access,
+                Time.Now + (validFor ?? TimeSpan.FromMinutes(15)),
+                refresh,
+                Time.Now.AddDays(30),
+                Answers.User()),
+            entraState);
 
     public void Dispose() => Connection.Dispose();
 

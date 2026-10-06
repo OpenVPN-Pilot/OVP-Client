@@ -265,7 +265,9 @@ internal static class AppHost
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<ILoggerFactory>()));
         services.AddSingleton<IServerConnectionFactory, ServerConnectionFactory>();
-        services.AddSingleton<IEntraSignIn, MsalEntraSignIn>();
+        services.AddSingleton<MsalEntraSignIn>();
+        services.AddSingleton<IEntraSignIn>(provider => provider.GetRequiredService<MsalEntraSignIn>());
+        services.AddSingleton<IEntraRenewal>(provider => provider.GetRequiredService<MsalEntraSignIn>());
 
         // A sign in from this computer's library, or to another server, can be answered with the wipe
         // directive too; what is kept of that server then goes, without switching anything.
