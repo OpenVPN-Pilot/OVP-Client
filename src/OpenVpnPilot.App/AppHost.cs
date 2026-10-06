@@ -78,7 +78,15 @@ internal static class AppHost
         bool headless,
         ServiceProviderOptions? providerOptions = null)
     {
-        HostApplicationBuilder builder = Host.CreateApplicationBuilder();
+        // Without the defaults, because they watch the working directory recursively for an
+        // appsettings.json nothing here reads, and a bundle started from the Finder runs in "/".
+        // That watcher touched every file changed anywhere on the disk, and macOS asked the person
+        // to allow access to other applications' data and to their folders on its behalf.
+        HostApplicationBuilder builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+        {
+            DisableDefaults = true,
+            ContentRootPath = AppContext.BaseDirectory,
+        });
 
         if (providerOptions is not null)
         {
