@@ -78,6 +78,15 @@ public sealed class ReconnectSupervisor : IDisposable
             return;
         }
 
+        // A retry passes through launching, authenticating and connecting before it either comes up
+        // or fails, and none of those says anything about how it ends. Forgetting the count there
+        // started every failed retry again from the first attempt, so the limit was never reached
+        // and the back-off never grew.
+        if (status.State is not (VpnConnectionState.Disconnected or VpnConnectionState.Failed))
+        {
+            return;
+        }
+
         if (!ShouldRetry(status))
         {
             attempts.TryRemove(change.ProfileId, out _);
