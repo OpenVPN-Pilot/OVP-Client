@@ -75,6 +75,11 @@ public sealed class EnvironmentGate
     public bool IsBlocked => Report is not null && !Report.CanConnect;
 
     /// <summary>
+    /// Raised after the environment was examined, whatever the answer.
+    /// </summary>
+    public event EventHandler? Changed;
+
+    /// <summary>
     /// Examines the environment and keeps the result.
     /// </summary>
     /// <remarks>
@@ -103,6 +108,7 @@ public sealed class EnvironmentGate
                     string.Join("; ", Blocking.Select(check => $"{check.Id}: {check.Detail}")));
             }
 
+            Changed?.Invoke(this, EventArgs.Empty);
             return Report;
         }
         catch (Exception exception)

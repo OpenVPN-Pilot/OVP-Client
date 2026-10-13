@@ -10,6 +10,25 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-13
+
+### Added
+
+- **The tray icon takes the colour of what the application is doing**, on Windows in the
+  notification area and on macOS in the menu bar: waiting for credentials, a server sign in required,
+  OpenVPN unavailable, failed, reconnecting, connecting, several tunnels up, one tunnel up, the server
+  offline, a server problem, idle with a server and idle on this computer. The most pressing one wins,
+  and the tooltip names it. Under **Settings, General** each state can have a colour of its own, the
+  icon's original colour, or be switched off so the next state that applies decides; the whole of it
+  can be turned off too. Nothing happening, with a server or without one, keeps the icon's original
+  colour to begin with. The colours travel with the other settings to a server.
+
+### Fixed
+
+- The automatic reconnect forgot how often it had tried as soon as a retry started, so every failed
+  retry counted as the first: the limit on attempts was never reached and the wait between them never
+  grew.
+
 ## [2.1.0] - 2026-10-06
 
 ### Added

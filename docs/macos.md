@@ -165,6 +165,16 @@ Whichever the setting says, launching alone never reaches the Dock: the applicat
 accessory one, and a window is what puts it there. A copy started hidden, at login or with
 `--headless`, leaves the Dock untouched.
 
+## The colour of the menu bar entry
+
+The entry is drawn in a colour that says what the application is doing, which the
+[settings](settings.md#the-colour-of-the-tray-icon) describe state by state. Without a colour it is a
+template, black shapes the menu bar draws black or white to match itself and to match a highlighted
+entry, which is what every other entry up there is. A coloured entry is an image of its own and is
+not adjusted: on macOS 26 the menu bar takes its colour from the desktop picture, so a colour has to
+read on light and on dark. The defaults are of middle lightness for that reason, and nothing happening
+is the template.
+
 ## Notifications
 
 A tunnel coming up, dropping or failing is announced through the user notification centre, which asks

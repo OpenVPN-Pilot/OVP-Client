@@ -455,6 +455,17 @@ What the setting costs when it is off, and what it does not:
   keystrokes. `activateIgnoringOtherApps:` does the job for an accessory application on macOS 26,
   measured against a probe that compared it with `activate` and `activate(from:)`.
 
+### The menu bar entry can change between template and colour while it runs
+
+Measured on macOS 26 with Avalonia 12.1: setting `MacOSProperties.SetIsTemplateIcon` and a new
+`Icon` on the existing `TrayIcon` switches the entry from the template to a coloured mark and back,
+in both directions, without recreating it. The coloured mark is the template recoloured in place by
+`TrayIconTint`, so the artwork still lives in `assets/artwork` only.
+
+In Server mode the settings follow the person from the server, so a value written into
+`settings.json` by hand before a start is replaced by the server's copy at the first
+synchronisation. Testing a setting by editing the file therefore needs the library on this computer.
+
 ### A Unix socket path is short
 
 `sockaddr_un` holds 104 characters on macOS. The per user temporary directory alone is longer than

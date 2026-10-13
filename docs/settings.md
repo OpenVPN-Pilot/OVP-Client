@@ -8,7 +8,7 @@ Everything a person can configure is one JSON file, and the settings screen is a
 
 | Tab | What it holds |
 | --- | --- |
-| General | The language, the theme, starting with the system, starting with the window hidden, whether closing the window keeps the tunnels running, whether the application is shown in the Dock while a window is open (macOS only), and whether the profile editor opens on the form or on the plain configuration |
+| General | The language, the theme, the colour of the tray icon for each state, starting with the system, starting with the window hidden, whether closing the window keeps the tunnels running, whether the application is shown in the Dock while a window is open (macOS only), and whether the profile editor opens on the form or on the plain configuration |
 | Connections | Ignoring pushed routes and DNS, reconnecting a tunnel that drops, the attempts and the delay, the connection timeout, and reconnecting the tunnels that were up when the application closed |
 | Shortcuts | The global shortcuts, which are recorded by pressing them. A combination another shortcut or another application already owns is reported rather than failing silently |
 | Notifications | Notifications as a whole, and each of connecting, connected, disconnected, connection lost, reconnecting and failed |
@@ -66,6 +66,8 @@ Defaults are given as they stand in a new file.
 | `general.mainWindow` | `x`, `y`, `width`, `height`, `maximised` | Where the main window was left |
 | `general.profileEditor` | `"Form"` | `"Form"` or `"PlainText"` |
 | `appearance.theme` | `"System"` | `"System"`, `"Light"` or `"Dark"` |
+| `appearance.trayIcon.showStatus` | `true` | Colour the tray icon by the state of the application; off draws it as without this setting |
+| `appearance.trayIcon.<state>` | see below | `#RRGGBB`, `null` for the icon's original colour, or `"off"` to pass the state over; a value that cannot be read counts as `null` |
 | `connections.protectRoutes` | `true` | Ignore pushed routes and DNS; a profile can override it |
 | `connections.connectTimeoutSeconds` | `60` | `0` waits forever |
 | `connections.autoReconnect` | `true` | |
@@ -89,6 +91,39 @@ Defaults are given as they stand in a new file.
 | `storage.serverUrl` | `null` | The server's address, kept when switching back to this computer |
 | `storage.syncIntervalMinutes` | `2` | How often a reachable server is asked for changes, from 1 to 60; a value outside is read as the nearest limit |
 | `installation.id` | generated | A random identity made once, which a server binds its tokens to |
+
+## The colour of the tray icon
+
+The icon in the notification area on Windows and in the menu bar on macOS has one colour, so it shows
+the most pressing of what is going on. The states, in the order they win:
+
+| Key | Default | When |
+| --- | --- | --- |
+| `awaitingInput` | `#F59E0B` | A credential prompt is open |
+| `remoteSignInRequired` | `#F59E0B` | The server session ended and needs a new sign in |
+| `unavailable` | `#DC2626` | Nothing is connected and nothing can be: OpenVPN, the interactive service or the helper is missing |
+| `failed` | `#EF4444` | A tunnel ended in an error since the main window was last in front, even beside one that is up |
+| `reconnecting` | `#F97316` | A tunnel dropped and is being brought back, by OpenVPN or by the automatic reconnect |
+| `connecting` | `#06B6D4` | A tunnel is starting, negotiating or stopping |
+| `connectedMultiple` | `#14B8A6` | More than one tunnel is up |
+| `connected` | `#22C55E` | At least one tunnel is up |
+| `remoteOffline` | `#8A94A6` | The server does not answer |
+| `remoteProblem` | `#EC4899` | The server answers but cannot be used: degraded, a newer client required, a wrong clock, an untrusted certificate, unreadable settings or a refused keystore |
+| `idleRemote` | `null` | Nothing connected, signed in to a server that answers |
+| `idleLocal` | `null` | Nothing connected, on the library on this computer |
+
+A state set to `"off"` is passed over: the next state in the table that applies at that moment decides
+instead, so with `failed` off a failure beside a tunnel that is up shows as connected. The idle states
+apply only while nothing is connected or under way, so when every state that applies is off the icon is
+drawn in its original colour. The settings screen offers the three as **Own colour**, the original
+colour and **Off**.
+
+`null` is the original colour: the blue mark on Windows, and on macOS the template the menu bar draws
+black or white to match itself, which is why the settings screen calls it the system colour there. A
+fixed colour stays the same on a light and on a dark menu bar. A synchronisation under way is not a
+state of its own, or the icon would change every few minutes. The tooltip names the most pressing
+state, whether or not it is off. The colours are part of what a server carries to a person's other
+computers.
 
 The favourites, their slots and the shortcuts are not in this file: they are in the database, and they
 follow a person from a server separately from the settings.

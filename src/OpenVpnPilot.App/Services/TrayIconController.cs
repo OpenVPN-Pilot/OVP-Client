@@ -63,8 +63,19 @@ public sealed class TrayIconController : IDisposable
     /// </summary>
     private readonly IServerStatusSource? serverStatus;
 
+    /// <summary>
+    /// The one state the icon's colour stands for.
+    /// </summary>
+    private readonly TrayStatusMonitor status;
+
     private readonly TimeProvider time;
     private string? serverLine;
+
+    /// <summary>
+    /// What the icon was last told, so a report that changes nothing redraws nothing.
+    /// </summary>
+    private TrayIconColour? appliedColour;
+    private bool colourApplied;
     private bool disposed;
 
     public TrayIconController(
@@ -72,6 +83,7 @@ public sealed class TrayIconController : IDisposable
         ConnectionManager connections,
         ILocalizer localizer,
         ISettingsService settings,
+        TrayStatusMonitor status,
         IApplicationMenu? applicationMenu = null,
         IDockPresence? dock = null,
         IServerStatusSource? serverStatus = null,
@@ -81,11 +93,13 @@ public sealed class TrayIconController : IDisposable
         ArgumentNullException.ThrowIfNull(connections);
         ArgumentNullException.ThrowIfNull(localizer);
         ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(status);
 
         this.tray = tray;
         this.connections = connections;
         this.localizer = localizer;
         this.settings = settings;
+        this.status = status;
         this.applicationMenu = applicationMenu;
         this.dock = dock;
         this.serverStatus = serverStatus;
@@ -113,7 +127,11 @@ public sealed class TrayIconController : IDisposable
             return;
         }
 
-        tray.Show(localizer["tray.tooltipIdle"]);
+        status.Attach();
+
+        // Before the icon appears, so it does not appear in one colour and turn into another.
+        ApplyColour();
+        tray.Show(Tooltip());
         RebuildMenu();
 
         tray.Activated += OnActivated;
@@ -122,6 +140,7 @@ public sealed class TrayIconController : IDisposable
         connections.StateChanged += OnStateChanged;
         localizer.LanguageChanged += OnLanguageChanged;
         settings.Changed += OnSettingsChanged;
+        status.Changed += OnStatusChanged;
 
         if (serverStatus is not null)
         {
@@ -147,7 +166,37 @@ public sealed class TrayIconController : IDisposable
         : ServerStatusText.Compact(localizer, serverStatus.Current, time.GetUtcNow());
 
     private void OnSettingsChanged(object? sender, PilotSettings changed) =>
-        Dispatcher.UIThread.Post(RebuildMenu);
+        Dispatcher.UIThread.Post(() =>
+        {
+            RebuildMenu();
+            ApplyColour();
+        });
+
+    private void OnStatusChanged(object? sender, EventArgs e) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            ApplyColour();
+            UpdateTooltip();
+        });
+
+    /// <summary>
+    /// Draws the icon in the colour of the most pressing state that is not switched off, or as the
+    /// platform does when the feature is off, every state that applies is switched off, or the one
+    /// that decides has no colour or one that cannot be read.
+    /// </summary>
+    private void ApplyColour()
+    {
+        TrayIconColour? colour = Colour(settings.Current.Appearance.TrayIcon, status.Applicable);
+
+        if (colourApplied && colour == appliedColour)
+        {
+            return;
+        }
+
+        tray.SetColour(colour);
+        appliedColour = colour;
+        colourApplied = true;
+    }
 
     private void OnActivated(object? sender, EventArgs e) =>
         Dispatcher.UIThread.Post(() => ShowWindowRequested?.Invoke(this, EventArgs.Empty));
@@ -169,13 +218,51 @@ public sealed class TrayIconController : IDisposable
             UpdateTooltip();
         });
 
-    private void UpdateTooltip()
+    /// <summary>
+    /// The colour the icon is drawn in, null for the platform's own drawing.
+    /// </summary>
+    public static TrayIconColour? Colour(TrayIconSettings preferences, IReadOnlyList<TrayStatus> applicable)
+    {
+        ArgumentNullException.ThrowIfNull(preferences);
+        ArgumentNullException.ThrowIfNull(applicable);
+
+        if (!preferences.ShowStatus)
+        {
+            return null;
+        }
+
+        foreach (TrayStatus state in applicable)
+        {
+            if (preferences.IsOff(state))
+            {
+                continue;
+            }
+
+            return TrayIconColour.TryParse(preferences.Get(state), out TrayIconColour chosen) ? chosen : null;
+        }
+
+        return null;
+    }
+
+    private void UpdateTooltip() => tray.SetTooltip(Tooltip());
+
+    /// <summary>
+    /// Says in words what the colour says, for whoever cannot tell the colours apart, and names the
+    /// state whether or not the icon is coloured.
+    /// </summary>
+    private string Tooltip()
     {
         int active = connections.ActiveCount;
 
-        tray.SetTooltip(active == 0
+        string text = active == 0
             ? localizer["tray.tooltipIdle"]
-            : localizer.Translate("tray.tooltipActive", active));
+            : localizer.Translate("tray.tooltipActive", active);
+
+        TrayStatus current = status.Current;
+
+        return current is TrayStatus.IdleLocal or TrayStatus.Connected or TrayStatus.ConnectedMultiple
+            ? text
+            : localizer.Translate("tray.tooltipStatus", text, localizer[TrayStatusNames.Key(current)]);
     }
 
     private void RebuildMenu()
@@ -234,6 +321,7 @@ public sealed class TrayIconController : IDisposable
 
         disposed = true;
         settings.Changed -= OnSettingsChanged;
+        status.Changed -= OnStatusChanged;
 
         if (serverStatus is not null)
         {

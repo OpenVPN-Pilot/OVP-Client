@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenVpnPilot.App.Services;
@@ -207,6 +208,17 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     public partial bool ShowInDock { get; set; }
 
+    /// <summary>
+    /// Whether the notification area icon is coloured by the application's state.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool TrayShowStatus { get; set; }
+
+    /// <summary>
+    /// One row per state, in the order the icon gives them priority.
+    /// </summary>
+    public ObservableCollection<TrayColourChoice> TrayColours { get; } = [];
+
     [ObservableProperty]
     public partial bool ProtectRoutes { get; set; }
 
@@ -385,6 +397,25 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         CloseToTray = draft.General.CloseToTray;
         ShowInDock = draft.General.ShowInDock;
 
+        TrayShowStatus = draft.Appearance.TrayIcon.ShowStatus;
+        TrayColours.Clear();
+
+        IReadOnlyList<TrayColourModeChoice> modes =
+        [
+            new TrayColourModeChoice(TrayColourMode.Colour, localizer["settings.trayIconColour"]),
+            new TrayColourModeChoice(TrayColourMode.Original, localizer["settings.trayIconOriginal"]),
+            new TrayColourModeChoice(TrayColourMode.Off, localizer["settings.trayIconOff"]),
+        ];
+
+        foreach (TrayStatus status in TrayColourChoice.Order)
+        {
+            TrayColours.Add(new TrayColourChoice(
+                status,
+                localizer[TrayStatusNames.Key(status)],
+                modes,
+                draft.Appearance.TrayIcon.Get(status)));
+        }
+
         SelectedEditorView = EditorViews.FirstOrDefault(view => view.View == draft.General.ProfileEditor)
             ?? EditorViews[0];
 
@@ -427,6 +458,12 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         draft.General.ProfileEditor = SelectedEditorView?.View ?? ProfileEditorView.Form;
 
         draft.Appearance.Theme = SelectedTheme?.Preference ?? ThemePreference.System;
+        draft.Appearance.TrayIcon.ShowStatus = TrayShowStatus;
+
+        foreach (TrayColourChoice choice in TrayColours)
+        {
+            draft.Appearance.TrayIcon.Set(choice.Status, choice.Stored);
+        }
 
         draft.Connections.ProtectRoutes = ProtectRoutes;
         draft.Connections.ConnectTimeoutSeconds = Math.Clamp(ConnectTimeoutSeconds, 5, 600);
@@ -482,6 +519,19 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Puts every state back to the colour it starts with. Takes effect when the settings are saved,
+    /// like everything else on this screen.
+    /// </summary>
+    [RelayCommand]
+    private void ResetTrayColours()
+    {
+        foreach (TrayColourChoice choice in TrayColours)
+        {
+            choice.Reset();
+        }
     }
 
     [RelayCommand]
@@ -701,6 +751,131 @@ public sealed record LanguageChoice(string? Code, string Name);
 /// One entry in the theme picker.
 /// </summary>
 public sealed record ThemeChoice(ThemePreference Preference, string Name);
+
+/// <summary>
+/// What one state of the notification area icon does.
+/// </summary>
+public enum TrayColourMode
+{
+    /// <summary>The state draws the icon in a colour of its own.</summary>
+    Colour,
+
+    /// <summary>The state draws the icon as the platform does.</summary>
+    Original,
+
+    /// <summary>The state is passed over and the next one that applies decides.</summary>
+    Off,
+}
+
+/// <summary>
+/// One entry in the picker for what a state of the icon does.
+/// </summary>
+public sealed record TrayColourModeChoice(TrayColourMode Mode, string Name);
+
+/// <summary>
+/// The colour chosen for one state of the notification area icon.
+/// </summary>
+/// <remarks>
+/// The original colour is a choice of its own rather than a colour, because on macOS it is the
+/// template the menu bar tints and no fixed colour is. The picker keeps the last colour while another
+/// choice is made, so switching back and forth does not lose it.
+/// </remarks>
+public sealed partial class TrayColourChoice : ObservableObject
+{
+    /// <summary>
+    /// The states in the order the icon gives them priority, so the list reads like the decision.
+    /// </summary>
+    public static IReadOnlyList<TrayStatus> Order { get; } =
+    [
+        TrayStatus.AwaitingInput,
+        TrayStatus.RemoteSignInRequired,
+        TrayStatus.Unavailable,
+        TrayStatus.Failed,
+        TrayStatus.Reconnecting,
+        TrayStatus.Connecting,
+        TrayStatus.ConnectedMultiple,
+        TrayStatus.Connected,
+        TrayStatus.RemoteOffline,
+        TrayStatus.RemoteProblem,
+        TrayStatus.IdleRemote,
+        TrayStatus.IdleLocal,
+    ];
+
+    /// <summary>
+    /// What the picker shows while no colour was ever chosen: the blue of the mark, which is what the
+    /// original is on Windows.
+    /// </summary>
+    private static readonly Color Mark = Color.FromRgb(59, 130, 246);
+
+    public TrayColourChoice(TrayStatus status, string name, IReadOnlyList<TrayColourModeChoice> modes, string? stored)
+    {
+        ArgumentNullException.ThrowIfNull(modes);
+
+        Status = status;
+        Name = name;
+        Modes = modes;
+        Load(stored);
+    }
+
+    public TrayStatus Status { get; }
+
+    public string Name { get; }
+
+    public IReadOnlyList<TrayColourModeChoice> Modes { get; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasColour))]
+    public partial TrayColourModeChoice? SelectedMode { get; set; }
+
+    [ObservableProperty]
+    public partial Color Colour { get; set; }
+
+    /// <summary>
+    /// True when the colour picker applies.
+    /// </summary>
+    public bool HasColour => SelectedMode?.Mode == TrayColourMode.Colour;
+
+    /// <summary>
+    /// The value the settings file keeps: <c>#RRGGBB</c>, null for the original, or
+    /// <see cref="TrayIconSettings.Off"/>.
+    /// </summary>
+    public string? Stored => SelectedMode?.Mode switch
+    {
+        TrayColourMode.Colour => new TrayIconColour(Colour.R, Colour.G, Colour.B).ToString(),
+        TrayColourMode.Off => TrayIconSettings.Off,
+        _ => null,
+    };
+
+    public void Reset() => Load(TrayIconSettings.Default(Status));
+
+    private void Load(string? stored)
+    {
+        TrayColourMode mode;
+
+        if (string.Equals(stored?.Trim(), TrayIconSettings.Off, StringComparison.OrdinalIgnoreCase))
+        {
+            mode = TrayColourMode.Off;
+        }
+        else if (TrayIconColour.TryParse(stored, out TrayIconColour colour))
+        {
+            mode = TrayColourMode.Colour;
+            Colour = Color.FromRgb(colour.Red, colour.Green, colour.Blue);
+        }
+        else
+        {
+            mode = TrayColourMode.Original;
+        }
+
+        if (mode != TrayColourMode.Colour)
+        {
+            Colour = TrayIconColour.TryParse(TrayIconSettings.Default(Status), out TrayIconColour fallback)
+                ? Color.FromRgb(fallback.Red, fallback.Green, fallback.Blue)
+                : Mark;
+        }
+
+        SelectedMode = Modes.FirstOrDefault(choice => choice.Mode == mode) ?? Modes[0];
+    }
+}
 
 /// <summary>
 /// One entry in the picker for what the profile editor opens with.

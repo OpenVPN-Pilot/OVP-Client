@@ -272,6 +272,11 @@ public partial class App : Application, IDisposable
             TrayIconController tray = services.GetRequiredService<TrayIconController>();
             tray.Attach();
             tray.ShowWindowRequested += (_, _) => windows!.Reveal(window);
+
+            // The window is where a failure is explained, so once it is in front the icon has said
+            // what it had to.
+            TrayStatusMonitor trayStatus = services.GetRequiredService<TrayStatusMonitor>();
+            window.Activated += (_, _) => trayStatus.AcknowledgeFailures();
             tray.MenuActionRequested += (_, action) => windows!.HandleTrayAction(action, desktop);
         }
 
@@ -563,6 +568,7 @@ public partial class App : Application, IDisposable
         RunStep(logger, "reconnects", () => services.GetRequiredService<ReconnectSupervisor>().Dispose());
         RunStep(logger, started, "ping", async () => await services.GetRequiredService<PingMonitor>().DisposeAsync());
         RunStep(logger, "tray icon", () => services.GetRequiredService<TrayIconController>().Dispose());
+        RunStep(logger, "tray status", () => services.GetRequiredService<TrayStatusMonitor>().Dispose());
         RunStep(logger, "application menu", () => applicationMenu?.Dispose());
         RunStep(logger, "log relay", () => services.GetRequiredService<OpenVpnLogRelay>().Dispose());
         RunStep(logger, "log settings", () => services.GetRequiredService<LogSettingsApplier>().Dispose());

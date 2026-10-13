@@ -35,6 +35,16 @@ public interface ISystemTrayIcon : IDisposable
     public void SetMenu(IReadOnlyList<TrayMenuEntry> entries);
 
     /// <summary>
+    /// Draws the mark in the given colour, or as the platform normally draws it when null.
+    /// </summary>
+    /// <remarks>
+    /// Null is not a colour of its own. On macOS it is the template the menu bar tints for light and
+    /// dark, which no fixed colour can be, so it is what "the system's colour" means there. May be
+    /// called before <see cref="Show"/>, in which case the icon appears in that colour.
+    /// </remarks>
+    public void SetColour(TrayIconColour? colour);
+
+    /// <summary>
     /// Raised when the icon itself is activated, which is how the window is brought back.
     /// </summary>
     public event EventHandler? Activated;

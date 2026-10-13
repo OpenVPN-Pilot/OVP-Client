@@ -33,12 +33,18 @@ public sealed class StoredCredentialProvider : ICredentialProvider
     private readonly ILocalizer localizer;
     private readonly ITypedCredentialLedger typed;
 
+    /// <summary>
+    /// Told while a prompt is open, so the notification area icon can say somebody is needed.
+    /// </summary>
+    private readonly CredentialPromptTracker? prompts;
+
     public StoredCredentialProvider(
         IProfileNameLookup profileNames,
         ISecretStore secrets,
         ISettingsService settings,
         ILocalizer localizer,
-        ITypedCredentialLedger typed)
+        ITypedCredentialLedger typed,
+        CredentialPromptTracker? prompts = null)
     {
         ArgumentNullException.ThrowIfNull(profileNames);
         ArgumentNullException.ThrowIfNull(secrets);
@@ -51,6 +57,7 @@ public sealed class StoredCredentialProvider : ICredentialProvider
         this.settings = settings;
         this.localizer = localizer;
         this.typed = typed;
+        this.prompts = prompts;
     }
 
     public async Task<VpnCredentials?> RequestAsync(
@@ -78,7 +85,12 @@ public sealed class StoredCredentialProvider : ICredentialProvider
             return new VpnCredentials(stored.Username, stored.Password);
         }
 
-        PromptResult? answer = await PromptAsync(request, stored, cancellationToken);
+        PromptResult? answer;
+
+        using (prompts?.Open())
+        {
+            answer = await PromptAsync(request, stored, cancellationToken);
+        }
 
         if (answer is null)
         {
