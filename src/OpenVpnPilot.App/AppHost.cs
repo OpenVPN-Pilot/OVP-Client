@@ -165,6 +165,8 @@ internal static class AppHost
         builder.Services.AddSingleton<ProfileNameCache>();
         builder.Services.AddSingleton<IProfileNameLookup>(
             provider => provider.GetRequiredService<ProfileNameCache>());
+        builder.Services.AddSingleton<CredentialPromptTracker>();
+        builder.Services.AddSingleton<ICredentialPromptState>(provider => provider.GetRequiredService<CredentialPromptTracker>());
         builder.Services.AddSingleton<ICredentialProvider, StoredCredentialProvider>();
 
         // What was typed into the prompt and worked is shared with a server's vault. On the local
@@ -183,6 +185,7 @@ internal static class AppHost
         builder.Services.AddSingleton<HotkeyCoordinator>();
         builder.Services.AddSingleton<MainWindowViewModel>();
         builder.Services.AddSingleton<QuickSwitcherViewModel>();
+        builder.Services.AddSingleton<TrayStatusMonitor>();
         builder.Services.AddSingleton<TrayIconController>();
         builder.Services.AddSingleton<ServerStatusViewModel>();
         builder.Services.AddTransient<StorageSettingsViewModel>();

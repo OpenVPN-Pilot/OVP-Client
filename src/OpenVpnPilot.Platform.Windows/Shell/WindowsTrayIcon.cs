@@ -27,6 +27,12 @@ public sealed class WindowsTrayIcon : ISystemTrayIcon, INotificationPresenter
 
     private MessageWindow? owner;
     private nint icon;
+
+    /// <summary>
+    /// The icon recoloured for the current state, or zero while the original is shown.
+    /// </summary>
+    private nint tinted;
+    private TrayIconColour? colour;
     private string? pendingNotificationTag;
     private bool visible;
     private bool disposed;
@@ -57,6 +63,11 @@ public sealed class WindowsTrayIcon : ISystemTrayIcon, INotificationPresenter
         {
             owner ??= new MessageWindow("OpenVpnPilot.TrayWindow", HandleMessage, canBecomeForeground: true);
             EnsureIcon();
+
+            if (tinted == nint.Zero)
+            {
+                Recolour();
+            }
 
             NativeMethods.NotifyIconData data = CreateData(
                 NativeMethods.NifMessage | NativeMethods.NifIcon | NativeMethods.NifTip);
@@ -92,6 +103,47 @@ public sealed class WindowsTrayIcon : ISystemTrayIcon, INotificationPresenter
             NativeMethods.ShellNotifyIcon(NativeMethods.NimModify, ref data);
         }
     }
+
+    public void SetColour(TrayIconColour? colour)
+    {
+        lock (gate)
+        {
+            if (this.colour == colour)
+            {
+                return;
+            }
+
+            this.colour = colour;
+
+            // Before the icon exists there is nothing to recolour; Show does it once it does.
+            if (icon == nint.Zero)
+            {
+                return;
+            }
+
+            nint previous = tinted;
+            Recolour();
+
+            if (visible)
+            {
+                NativeMethods.NotifyIconData data = CreateData(NativeMethods.NifIcon);
+                NativeMethods.ShellNotifyIcon(NativeMethods.NimModify, ref data);
+            }
+
+            // Only once the shell holds the new one, so it never draws a handle that is gone.
+            if (previous != nint.Zero && previous != tinted)
+            {
+                NativeMethods.DestroyIcon(previous);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Makes the icon for the current colour. Zero, and therefore the original, when there is no
+    /// colour or the icon cannot be recoloured.
+    /// </summary>
+    private void Recolour() =>
+        tinted = colour is { } chosen ? IconTinting.Create(icon, chosen) : nint.Zero;
 
     public void SetMenu(IReadOnlyList<TrayMenuEntry> entries)
     {
@@ -171,7 +223,7 @@ public sealed class WindowsTrayIcon : ISystemTrayIcon, INotificationPresenter
         uID = IconId,
         uFlags = flags,
         uCallbackMessage = IconCallbackMessage,
-        hIcon = icon,
+        hIcon = tinted != nint.Zero ? tinted : icon,
     };
 
     private static void WriteTooltip(ref NativeMethods.NotifyIconData data, string value)
@@ -343,6 +395,12 @@ public sealed class WindowsTrayIcon : ISystemTrayIcon, INotificationPresenter
                 NativeMethods.NotifyIconData data = CreateData(0);
                 NativeMethods.ShellNotifyIcon(NativeMethods.NimDelete, ref data);
                 visible = false;
+            }
+
+            if (tinted != nint.Zero)
+            {
+                NativeMethods.DestroyIcon(tinted);
+                tinted = nint.Zero;
             }
 
             if (icon != nint.Zero)

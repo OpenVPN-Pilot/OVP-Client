@@ -190,6 +190,94 @@ internal static partial class NativeMethods
     [LibraryImport("shell32.dll", EntryPoint = "ExtractIconExW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     public static partial uint ExtractIconEx(string file, int index, nint[] large, nint[] small, uint count);
 
+    public const uint DibRgbColors = 0;
+    public const uint BiRgb = 0;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct IconInfo
+    {
+        // A BOOL, which is four bytes; a managed bool would be one and shift every field after it.
+        public int fIcon;
+        public int xHotspot;
+        public int yHotspot;
+        public nint hbmMask;
+        public nint hbmColor;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct BitmapObject
+    {
+        public int bmType;
+        public int bmWidth;
+        public int bmHeight;
+        public int bmWidthBytes;
+        public ushort bmPlanes;
+        public ushort bmBitsPixel;
+        public nint bmBits;
+    }
+
+    /// <summary>
+    /// A <c>BITMAPINFO</c> with room for the three masks a 32 bit format may carry, so nothing is
+    /// written past the end whatever the system decides to fill in.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct BitmapInfo
+    {
+        public uint biSize;
+        public int biWidth;
+        public int biHeight;
+        public ushort biPlanes;
+        public ushort biBitCount;
+        public uint biCompression;
+        public uint biSizeImage;
+        public int biXPelsPerMeter;
+        public int biYPelsPerMeter;
+        public uint biClrUsed;
+        public uint biClrImportant;
+        public uint mask0;
+        public uint mask1;
+        public uint mask2;
+    }
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetIconInfo(nint icon, out IconInfo info);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial nint CreateIconIndirect(ref IconInfo info);
+
+    [LibraryImport("gdi32.dll", EntryPoint = "GetObjectW")]
+    public static partial int GetObject(nint handle, int size, out BitmapObject bitmap);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial int GetDIBits(
+        nint deviceContext,
+        nint bitmap,
+        uint startLine,
+        uint lines,
+        byte[] bits,
+        ref BitmapInfo info,
+        uint usage);
+
+    [LibraryImport("gdi32.dll", SetLastError = true)]
+    public static partial nint CreateDIBSection(
+        nint deviceContext,
+        ref BitmapInfo info,
+        uint usage,
+        out nint bits,
+        nint section,
+        uint offset);
+
+    [LibraryImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool DeleteObject(nint handle);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint GetDC(nint window);
+
+    [LibraryImport("user32.dll")]
+    public static partial int ReleaseDC(nint window, nint deviceContext);
+
     [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     public static partial nint GetModuleHandle(string? moduleName);
 

@@ -65,6 +65,20 @@ public sealed class ReconnectSupervisor : IDisposable
     /// </summary>
     public event EventHandler<string>? Reported;
 
+    /// <summary>
+    /// Raised when a profile starts or stops waiting for its next attempt.
+    /// </summary>
+    public event EventHandler? WaitingChanged;
+
+    /// <summary>
+    /// The profiles that ended and are waiting for the next attempt.
+    /// </summary>
+    /// <remarks>
+    /// Such a profile has no process, so the connection manager no longer knows it, and without this
+    /// a tunnel being brought back would look like one that was never there.
+    /// </remarks>
+    public IReadOnlyCollection<Guid> Waiting => attempts.Keys.ToList();
+
     public void Attach() => connections.StateChanged += OnStateChanged;
 
     private void OnStateChanged(object? sender, ConnectionStatusChanged change)
@@ -74,7 +88,7 @@ public sealed class ReconnectSupervisor : IDisposable
         if (status.State == VpnConnectionState.Connected)
         {
             // A tunnel that came up has nothing left to recover from.
-            attempts.TryRemove(change.ProfileId, out _);
+            Forget(change.ProfileId);
             return;
         }
 
@@ -89,7 +103,7 @@ public sealed class ReconnectSupervisor : IDisposable
 
         if (!ShouldRetry(status))
         {
-            attempts.TryRemove(change.ProfileId, out _);
+            Forget(change.ProfileId);
             return;
         }
 
@@ -120,9 +134,11 @@ public sealed class ReconnectSupervisor : IDisposable
             _ => new Attempt(1),
             (_, existing) => new Attempt(existing.Count + 1));
 
+        WaitingChanged?.Invoke(this, EventArgs.Empty);
+
         if (preferences.MaxReconnectAttempts > 0 && attempt.Count > preferences.MaxReconnectAttempts)
         {
-            attempts.TryRemove(profileId, out _);
+            Forget(profileId);
             ReconnectLog.GaveUp(logger, profileId, preferences.MaxReconnectAttempts);
             Report("status.reconnectGaveUp", profileId, preferences.MaxReconnectAttempts);
             return;
@@ -154,7 +170,7 @@ public sealed class ReconnectSupervisor : IDisposable
 
         if (configuration is null)
         {
-            attempts.TryRemove(profileId, out _);
+            Forget(profileId);
             return;
         }
 
@@ -176,6 +192,14 @@ public sealed class ReconnectSupervisor : IDisposable
         {
             // The next state change decides whether to try again, so this only needs recording.
             ReconnectLog.AttemptFailed(logger, profileId, exception);
+        }
+    }
+
+    private void Forget(Guid profileId)
+    {
+        if (attempts.TryRemove(profileId, out _))
+        {
+            WaitingChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 

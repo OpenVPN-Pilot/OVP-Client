@@ -51,6 +51,41 @@
 
             <Border Classes="divider" />
 
+            <TextBlock Text="{loc:Translate settings.trayIcon}" Classes="section" />
+            <CheckBox Content="{loc:Translate settings.trayIconShowStatus}"
+                      IsChecked="{Binding TrayShowStatus}" />
+            <TextBlock Text="{loc:Translate settings.trayIconHint}" Classes="muted"
+                       TextWrapping="Wrap" />
+
+            <ItemsControl ItemsSource="{Binding TrayColours}" IsEnabled="{Binding TrayShowStatus}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:TrayColourChoice">
+                  <Grid ColumnDefinitions="240,Auto,*" ColumnSpacing="16" Margin="0,3">
+                    <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
+                               TextWrapping="Wrap" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding Modes}" SelectedItem="{Binding SelectedMode}"
+                              MinWidth="170">
+                      <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:TrayColourModeChoice">
+                          <TextBlock Text="{Binding Name}" />
+                        </DataTemplate>
+                      </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ColorPicker Grid.Column="2" Color="{Binding Colour}" HorizontalAlignment="Left"
+                                 IsAlphaEnabled="False" IsAlphaVisible="False"
+                                 IsVisible="{Binding HasColour}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="{loc:Translate settings.trayIconOriginalHint}" Classes="muted"
+                       TextWrapping="Wrap" />
+            <Button Content="{loc:Translate settings.trayIconReset}" Classes="quiet"
+                    Command="{Binding ResetTrayColoursCommand}" IsEnabled="{Binding TrayShowStatus}" />
+
+            <Border Classes="divider" />
+
             <TextBlock Text="{loc:Translate settings.startup}" Classes="section" />
             <CheckBox Content="{loc:Translate settings.startWithSystem}"
                       IsChecked="{Binding StartWithSystem}"

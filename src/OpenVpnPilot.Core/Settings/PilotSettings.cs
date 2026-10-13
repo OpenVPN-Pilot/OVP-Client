@@ -303,7 +303,186 @@ public sealed class AppearanceSettings
 {
     public ThemePreference Theme { get; set; } = ThemePreference.System;
 
-    public AppearanceSettings Clone() => (AppearanceSettings)MemberwiseClone();
+    /// <summary>
+    /// Whether and how the notification area icon shows the state of the application.
+    /// </summary>
+    public TrayIconSettings TrayIcon { get; set; } = new();
+
+    public AppearanceSettings Clone()
+    {
+        AppearanceSettings copy = (AppearanceSettings)MemberwiseClone();
+        copy.TrayIcon = TrayIcon.Clone();
+        return copy;
+    }
+}
+
+/// <summary>
+/// The colour of the notification area icon for each state the application can be in.
+/// </summary>
+/// <remarks>
+/// Each value is <c>#RRGGBB</c>; null for the mark as the platform normally draws it, the blue icon on
+/// Windows and the template the menu bar tints on macOS; or <see cref="Off"/>, which passes the state
+/// over so the next one that applies decides. A value that cannot be read counts as null rather than
+/// as an error, so a hand edited file cannot cost the icon.
+///
+/// The defaults are of middle lightness, because the same colour has to be legible on a light and
+/// on a dark taskbar or menu bar, and on macOS on a translucent one whose colour comes from the
+/// desktop picture.
+/// </remarks>
+public sealed class TrayIconSettings
+{
+    /// <summary>
+    /// Off draws the mark as the platform normally does, whatever happens.
+    /// </summary>
+    public bool ShowStatus { get; set; } = true;
+
+    /// <summary>
+    /// The value that passes a state over.
+    /// </summary>
+    public const string Off = "off";
+
+    public string? IdleLocal { get; set; } = Default(TrayStatus.IdleLocal);
+
+    public string? IdleRemote { get; set; } = Default(TrayStatus.IdleRemote);
+
+    public string? RemoteOffline { get; set; } = Default(TrayStatus.RemoteOffline);
+
+    public string? RemoteSignInRequired { get; set; } = Default(TrayStatus.RemoteSignInRequired);
+
+    public string? RemoteProblem { get; set; } = Default(TrayStatus.RemoteProblem);
+
+    public string? Connecting { get; set; } = Default(TrayStatus.Connecting);
+
+    public string? AwaitingInput { get; set; } = Default(TrayStatus.AwaitingInput);
+
+    public string? Connected { get; set; } = Default(TrayStatus.Connected);
+
+    public string? ConnectedMultiple { get; set; } = Default(TrayStatus.ConnectedMultiple);
+
+    public string? Reconnecting { get; set; } = Default(TrayStatus.Reconnecting);
+
+    public string? Failed { get; set; } = Default(TrayStatus.Failed);
+
+    public string? Unavailable { get; set; } = Default(TrayStatus.Unavailable);
+
+    /// <summary>
+    /// The colour a state starts with, or null for the platform's own drawing.
+    /// </summary>
+    /// <remarks>
+    /// Nothing happening is the platform's own drawing, so an application at rest looks like every
+    /// other entry beside it.
+    /// </remarks>
+    public static string? Default(TrayStatus status) => status switch
+    {
+        TrayStatus.IdleLocal => null,
+        TrayStatus.IdleRemote => "#8B5CF6",
+        TrayStatus.RemoteOffline => "#8A94A6",
+        TrayStatus.RemoteSignInRequired => "#F59E0B",
+        TrayStatus.RemoteProblem => "#EC4899",
+        TrayStatus.Connecting => "#06B6D4",
+        TrayStatus.AwaitingInput => "#F59E0B",
+        TrayStatus.Connected => "#22C55E",
+        TrayStatus.ConnectedMultiple => "#14B8A6",
+        TrayStatus.Reconnecting => "#F97316",
+        TrayStatus.Failed => "#EF4444",
+        TrayStatus.Unavailable => "#DC2626",
+        _ => null,
+    };
+
+    /// <summary>
+    /// True when the state is passed over.
+    /// </summary>
+    public bool IsOff(TrayStatus status) =>
+        string.Equals(Get(status)?.Trim(), Off, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The stored value for a state, which may be null, <see cref="Off"/> or unreadable.
+    /// </summary>
+    public string? Get(TrayStatus status) => status switch
+    {
+        TrayStatus.IdleLocal => IdleLocal,
+        TrayStatus.IdleRemote => IdleRemote,
+        TrayStatus.RemoteOffline => RemoteOffline,
+        TrayStatus.RemoteSignInRequired => RemoteSignInRequired,
+        TrayStatus.RemoteProblem => RemoteProblem,
+        TrayStatus.Connecting => Connecting,
+        TrayStatus.AwaitingInput => AwaitingInput,
+        TrayStatus.Connected => Connected,
+        TrayStatus.ConnectedMultiple => ConnectedMultiple,
+        TrayStatus.Reconnecting => Reconnecting,
+        TrayStatus.Failed => Failed,
+        TrayStatus.Unavailable => Unavailable,
+        _ => null,
+    };
+
+    public void Set(TrayStatus status, string? colour)
+    {
+        switch (status)
+        {
+            case TrayStatus.IdleLocal: IdleLocal = colour; break;
+            case TrayStatus.IdleRemote: IdleRemote = colour; break;
+            case TrayStatus.RemoteOffline: RemoteOffline = colour; break;
+            case TrayStatus.RemoteSignInRequired: RemoteSignInRequired = colour; break;
+            case TrayStatus.RemoteProblem: RemoteProblem = colour; break;
+            case TrayStatus.Connecting: Connecting = colour; break;
+            case TrayStatus.AwaitingInput: AwaitingInput = colour; break;
+            case TrayStatus.Connected: Connected = colour; break;
+            case TrayStatus.ConnectedMultiple: ConnectedMultiple = colour; break;
+            case TrayStatus.Reconnecting: Reconnecting = colour; break;
+            case TrayStatus.Failed: Failed = colour; break;
+            case TrayStatus.Unavailable: Unavailable = colour; break;
+            default: throw new ArgumentOutOfRangeException(nameof(status), status, null);
+        }
+    }
+
+    public TrayIconSettings Clone() => (TrayIconSettings)MemberwiseClone();
+}
+
+/// <summary>
+/// The one state the notification area icon shows, of everything the application is doing.
+/// </summary>
+/// <remarks>
+/// Ordered by the question it answers, not by priority; the priority is
+/// <c>TrayStatusResolver</c>'s. The values are stored by name, so a state can be removed without
+/// renumbering anything a file holds.
+/// </remarks>
+public enum TrayStatus
+{
+    /// <summary>No tunnel, and the profiles are this machine's own.</summary>
+    IdleLocal,
+
+    /// <summary>No tunnel, signed in to a server that answers.</summary>
+    IdleRemote,
+
+    /// <summary>The server does not answer; work continues from the local copy.</summary>
+    RemoteOffline,
+
+    /// <summary>The server session ended and needs a new sign in.</summary>
+    RemoteSignInRequired,
+
+    /// <summary>The server answers, but something only a person or its operator can fix stands in the way.</summary>
+    RemoteProblem,
+
+    /// <summary>A tunnel is being started, negotiated or stopped.</summary>
+    Connecting,
+
+    /// <summary>A tunnel waits for credentials or a one time code somebody has to type.</summary>
+    AwaitingInput,
+
+    /// <summary>One tunnel is up.</summary>
+    Connected,
+
+    /// <summary>More than one tunnel is up.</summary>
+    ConnectedMultiple,
+
+    /// <summary>A tunnel dropped and is being brought back.</summary>
+    Reconnecting,
+
+    /// <summary>A tunnel ended in an error nobody has looked at yet.</summary>
+    Failed,
+
+    /// <summary>OpenVPN, or what starts it with privileges, is missing, so nothing can connect.</summary>
+    Unavailable,
 }
 
 public enum ThemePreference
