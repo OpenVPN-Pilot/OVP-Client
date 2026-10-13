@@ -19,6 +19,12 @@ in one go. Deleting asks a second time, because it is the one action here that c
 Profiles are connected one after another rather than all at once: each tunnel is a process, an
 adapter and a port, and twenty starting in the same instant is how a machine runs out of all three.
 
+The menu of the icon in the notification area, or in the menu bar on macOS, lists every tunnel that
+is running by name with its state, each beside a dot in the colour its state has under
+[the colour of the tray icon](settings.md#the-colour-of-the-tray-icon). Clicking one disconnects it,
+without asking, which is what the line above the list says; **Disconnect all** is below them. A state
+drawn in the original colour or switched off there has no dot.
+
 A single profile is deleted from the detail panel, which asks first and names the profile it is
 about. Its notes are shown there too, under when it was last used, and can be selected and copied.
 

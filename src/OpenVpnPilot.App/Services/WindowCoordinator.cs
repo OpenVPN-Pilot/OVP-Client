@@ -308,6 +308,13 @@ public sealed class WindowCoordinator
                 break;
 
             default:
+                if (TrayIconController.ProfileOf(actionId) is { } profile)
+                {
+                    // The same path a disconnect from the window takes, so the history, the
+                    // notifications and the retry logic all hear of it as a person's request.
+                    _ = viewModel.DisconnectByIdAsync([profile]);
+                }
+
                 break;
         }
     }

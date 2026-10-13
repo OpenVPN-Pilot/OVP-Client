@@ -50,6 +50,8 @@ internal static partial class NativeMethods
     public const uint MfGrayed = 0x00000001;
     public const uint MfChecked = 0x00000008;
     public const uint MfSeparator = 0x00000800;
+    public const uint MiimBitmap = 0x00000080;
+    public const int SmCxSmIcon = 49;
 
     public const uint TpmLeftButton = 0x0000;
     public const uint TpmRightButton = 0x0002;
@@ -271,6 +273,34 @@ internal static partial class NativeMethods
     [LibraryImport("gdi32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool DeleteObject(nint handle);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MenuItemInfo
+    {
+        public uint cbSize;
+        public uint fMask;
+        public uint fType;
+        public uint fState;
+        public uint wID;
+        public nint hSubMenu;
+        public nint hbmpChecked;
+        public nint hbmpUnchecked;
+        public nint dwItemData;
+        public nint dwTypeData;
+        public uint cch;
+        public nint hbmpItem;
+    }
+
+    [LibraryImport("user32.dll", EntryPoint = "SetMenuItemInfoW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool SetMenuItemInfo(
+        nint menu,
+        uint item,
+        [MarshalAs(UnmanagedType.Bool)] bool byPosition,
+        ref MenuItemInfo info);
+
+    [LibraryImport("user32.dll")]
+    public static partial int GetSystemMetrics(int index);
 
     [LibraryImport("user32.dll")]
     public static partial nint GetDC(nint window);

@@ -66,12 +66,17 @@ public interface ISystemTrayIcon : IDisposable
 /// True draws the entry ticked, for one that stands for a setting that is on rather than for an
 /// action. Invoking it is still reported the same way; what it means is the caller's.
 /// </param>
+/// <param name="Badge">
+/// A dot of this colour beside the label, for an entry that stands for something with a state of
+/// its own. Null draws none.
+/// </param>
 public sealed record TrayMenuEntry(
     string Id,
     string Label,
     bool IsEnabled = true,
     bool IsSeparator = false,
-    bool IsChecked = false)
+    bool IsChecked = false,
+    TrayIconColour? Badge = null)
 {
     public static TrayMenuEntry Separator { get; } =
         new(string.Empty, string.Empty, IsEnabled: false, IsSeparator: true);

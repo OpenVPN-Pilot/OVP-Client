@@ -5,7 +5,7 @@ using OpenVpnPilot.Core.Abstractions;
 namespace OpenVpnPilot.Platform.Windows.Shell;
 
 /// <summary>
-/// Makes a copy of an icon in another colour.
+/// Makes a copy of an icon in another colour, and the coloured dots the menu shows beside entries.
 /// </summary>
 /// <remarks>
 /// The copy is made from the icon the shell already chose for the notification area, at the size it
@@ -111,5 +111,51 @@ internal static class IconTinting
                 NativeMethods.DeleteObject(info.hbmMask);
             }
         }
+    }
+
+    /// <summary>
+    /// Creates the dot a menu entry shows beside its label, which the caller deletes.
+    /// </summary>
+    /// <remarks>
+    /// A menu draws a 32 bit bitmap with its alpha channel when the colour is premultiplied, which is
+    /// how this one is made. Its size is the small icon size, the one a menu's images line up with.
+    /// </remarks>
+    /// <returns>Zero when the bitmap could not be made, in which case the entry has no dot.</returns>
+    public static nint CreateBadge(TrayIconColour colour)
+    {
+        int pixels = NativeMethods.GetSystemMetrics(NativeMethods.SmCxSmIcon);
+
+        if (pixels <= 0)
+        {
+            pixels = 16;
+        }
+
+        byte[] image = TrayBadge.Render(pixels, colour, premultiplied: true);
+
+        NativeMethods.BitmapInfo format = new()
+        {
+            biSize = 40,
+            biWidth = pixels,
+            biHeight = -pixels,
+            biPlanes = 1,
+            biBitCount = 32,
+            biCompression = NativeMethods.BiRgb,
+        };
+
+        nint bitmap = NativeMethods.CreateDIBSection(nint.Zero, ref format, NativeMethods.DibRgbColors, out nint bits, nint.Zero, 0);
+
+        if (bitmap != nint.Zero && bits == nint.Zero)
+        {
+            NativeMethods.DeleteObject(bitmap);
+            return nint.Zero;
+        }
+
+        if (bitmap == nint.Zero)
+        {
+            return nint.Zero;
+        }
+
+        Marshal.Copy(image, 0, bits, image.Length);
+        return bitmap;
     }
 }

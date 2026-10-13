@@ -10,6 +10,14 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-10-13
+
+### Added
+
+- **The tray menu lists the running tunnels**, on Windows in the notification area and on macOS in
+  the menu bar, by name with their state and a dot in the colour that state has. Clicking one
+  disconnects it.
+
 ## [2.2.0] - 2026-10-13
 
 ### Added

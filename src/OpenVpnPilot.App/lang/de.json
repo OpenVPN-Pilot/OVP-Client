@@ -147,6 +147,8 @@
       "tooltipIdle": "OpenVPN Pilot",
       "tooltipActive": "OpenVPN Pilot - {0} Verbindung(en) aktiv",
       "tooltipStatus": "{0} - {1}",
+      "connectionsHeader": "Verbindungen (Klick trennt)",
+      "connection": "{0} – {1}",
       "quickSwitcher": "Schnellauswahl",
       "settings": "Einstellungen",
       "about": "Über OpenVPN Pilot",

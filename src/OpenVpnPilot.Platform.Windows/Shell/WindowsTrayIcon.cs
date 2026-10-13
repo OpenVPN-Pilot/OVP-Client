@@ -334,6 +334,9 @@ public sealed class WindowsTrayIcon : ISystemTrayIcon, INotificationPresenter
             return;
         }
 
+        // A menu does not own the bitmaps it shows, so they live until the menu is gone.
+        List<nint> badges = [];
+
         try
         {
             for (int index = 0; index < entries.Count; index++)
@@ -352,6 +355,22 @@ public sealed class WindowsTrayIcon : ISystemTrayIcon, INotificationPresenter
 
                 // Command identifiers are one based, because zero means nothing was chosen.
                 NativeMethods.AppendMenu(handle, flags, index + 1, entry.Label);
+
+                nint bitmap = entry.Badge is { } badge ? IconTinting.CreateBadge(badge) : nint.Zero;
+
+                if (bitmap != nint.Zero)
+                {
+                    badges.Add(bitmap);
+
+                    NativeMethods.MenuItemInfo item = new()
+                    {
+                        cbSize = (uint)Marshal.SizeOf<NativeMethods.MenuItemInfo>(),
+                        fMask = NativeMethods.MiimBitmap,
+                        hbmpItem = bitmap,
+                    };
+
+                    NativeMethods.SetMenuItemInfo(handle, (uint)index, byPosition: true, ref item);
+                }
             }
 
             // Without this the menu stays on screen after the user clicks elsewhere, because the
@@ -376,6 +395,11 @@ public sealed class WindowsTrayIcon : ISystemTrayIcon, INotificationPresenter
         finally
         {
             NativeMethods.DestroyMenu(handle);
+
+            foreach (nint badge in badges)
+            {
+                NativeMethods.DeleteObject(badge);
+            }
         }
     }
 

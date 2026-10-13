@@ -149,6 +149,45 @@ public sealed class TrayStatusTests
         Assert.Null(TrayIconController.Colour(preferences, connected));
     }
 
+    [Theory]
+    [InlineData(VpnConnectionState.Connected, TrayStatus.Connected)]
+    [InlineData(VpnConnectionState.Reconnecting, TrayStatus.Reconnecting)]
+    [InlineData(VpnConnectionState.Launching, TrayStatus.Connecting)]
+    [InlineData(VpnConnectionState.Authenticating, TrayStatus.Connecting)]
+    [InlineData(VpnConnectionState.Connecting, TrayStatus.Connecting)]
+    [InlineData(VpnConnectionState.Disconnecting, TrayStatus.Connecting)]
+    [InlineData(VpnConnectionState.Failed, TrayStatus.Failed)]
+    public void AConnection_IsDottedInTheColourOfItsState(VpnConnectionState state, TrayStatus expected)
+    {
+        TrayIconSettings preferences = new();
+
+        Assert.Equal(expected, TrayIconController.StatusOf(state));
+        Assert.Equal(Parse(preferences.Get(expected)), TrayIconController.BadgeOf(preferences, state));
+    }
+
+    [Fact]
+    public void AConnection_HasNoDot_WhereTheIconWouldHaveNoColour()
+    {
+        TrayIconSettings preferences = new() { Reconnecting = TrayIconSettings.Off, Connecting = null };
+
+        Assert.Null(TrayIconController.BadgeOf(preferences, VpnConnectionState.Reconnecting));
+        Assert.Null(TrayIconController.BadgeOf(preferences, VpnConnectionState.Connecting));
+        Assert.Null(TrayIconController.BadgeOf(preferences, VpnConnectionState.Disconnected));
+
+        preferences.ShowStatus = false;
+        Assert.Null(TrayIconController.BadgeOf(preferences, VpnConnectionState.Connected));
+    }
+
+    [Fact]
+    public void AConnectionEntry_NamesItsProfile_AndNothingElseDoes()
+    {
+        Guid profile = Guid.NewGuid();
+
+        Assert.Equal(profile, TrayIconController.ProfileOf(TrayIconController.DisconnectProfilePrefix + profile.ToString("D")));
+        Assert.Null(TrayIconController.ProfileOf(TrayIconController.DisconnectAllAction));
+        Assert.Null(TrayIconController.ProfileOf(TrayIconController.DisconnectProfilePrefix + "not-a-profile"));
+    }
+
     private static TrayIconColour Parse(string? text) =>
         TrayIconColour.TryParse(text, out TrayIconColour colour) ? colour : throw new InvalidOperationException(text);
 

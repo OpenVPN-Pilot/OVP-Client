@@ -71,4 +71,29 @@ public sealed class TrayIconColourTests
     [Fact]
     public void Apply_RefusesAnImageThatIsNotFourBytesAPixel() =>
         Assert.Throws<ArgumentException>(() => TrayIconTint.Apply(new byte[6], default, premultiplied: false));
+
+    [Fact]
+    public void ABadge_IsADotInTheMiddle_WithClearCorners()
+    {
+        const int Pixels = 20;
+        byte[] image = TrayBadge.Render(Pixels, new TrayIconColour(0x22, 0xC5, 0x5E), premultiplied: false);
+
+        int centre = (((Pixels / 2) * Pixels) + (Pixels / 2)) * 4;
+
+        Assert.Equal(Pixels * Pixels * 4, image.Length);
+        Assert.Equal<byte>([0x5E, 0xC5, 0x22, 255], image[centre..(centre + 4)]);
+        Assert.Equal(0, image[3]);
+        Assert.Equal(0, image[^1]);
+    }
+
+    [Fact]
+    public void ABadge_IsPremultipliedWhenAsked()
+    {
+        byte[] image = TrayBadge.Render(16, new TrayIconColour(255, 255, 255), premultiplied: true);
+
+        for (int index = 0; index < image.Length; index += 4)
+        {
+            Assert.True(image[index] <= image[index + 3]);
+        }
+    }
 }

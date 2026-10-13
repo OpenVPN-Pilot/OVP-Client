@@ -3,6 +3,7 @@ using OpenVpnPilot.App.Services.Server;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Localization;
 using OpenVpnPilot.Core.Settings;
+using OpenVpnPilot.Core.Vpn;
 using OpenVpnPilot.OpenVpn.Runtime;
 
 namespace OpenVpnPilot.App.Services;
@@ -30,6 +31,17 @@ public sealed class TrayIconController : IDisposable
     public const string SyncNowAction = "sync-now";
 
     /// <summary>
+    /// The start of the identifier of an entry that stands for one connection, followed by the
+    /// profile. Invoking it disconnects that profile.
+    /// </summary>
+    public const string DisconnectProfilePrefix = "disconnect:";
+
+    /// <summary>
+    /// The line above the connections, which says what clicking one does. Never invoked.
+    /// </summary>
+    public const string ConnectionsHeaderEntry = "connections-header";
+
+    /// <summary>
     /// The line that says how the server stands. Never invoked: it is drawn greyed out.
     /// </summary>
     public const string ServerStateEntry = "server-state";
@@ -38,6 +50,7 @@ public sealed class TrayIconController : IDisposable
     private readonly ConnectionManager connections;
     private readonly ILocalizer localizer;
     private readonly ISettingsService settings;
+    private readonly IProfileNameLookup profileNames;
 
     /// <summary>
     /// The platform's list of running applications, on a platform that keeps one apart from windows.
@@ -84,6 +97,7 @@ public sealed class TrayIconController : IDisposable
         ILocalizer localizer,
         ISettingsService settings,
         TrayStatusMonitor status,
+        IProfileNameLookup profileNames,
         IApplicationMenu? applicationMenu = null,
         IDockPresence? dock = null,
         IServerStatusSource? serverStatus = null,
@@ -94,12 +108,14 @@ public sealed class TrayIconController : IDisposable
         ArgumentNullException.ThrowIfNull(localizer);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(status);
+        ArgumentNullException.ThrowIfNull(profileNames);
 
         this.tray = tray;
         this.connections = connections;
         this.localizer = localizer;
         this.settings = settings;
         this.status = status;
+        this.profileNames = profileNames;
         this.applicationMenu = applicationMenu;
         this.dock = dock;
         this.serverStatus = serverStatus;
@@ -171,6 +187,85 @@ public sealed class TrayIconController : IDisposable
             RebuildMenu();
             ApplyColour();
         });
+
+    /// <summary>
+    /// Which state of the icon a single connection's own state stands for, so its dot has the
+    /// colour the icon would have for it.
+    /// </summary>
+    public static TrayStatus? StatusOf(VpnConnectionState state) => state switch
+    {
+        VpnConnectionState.Connected => TrayStatus.Connected,
+        VpnConnectionState.Reconnecting => TrayStatus.Reconnecting,
+        VpnConnectionState.Launching
+            or VpnConnectionState.Authenticating
+            or VpnConnectionState.Connecting
+            or VpnConnectionState.Disconnecting => TrayStatus.Connecting,
+        VpnConnectionState.Failed => TrayStatus.Failed,
+        _ => null,
+    };
+
+    /// <summary>
+    /// The colour of the dot beside one connection: the one chosen for its state, and none where the
+    /// feature is off or the state is drawn in the original colour or switched off.
+    /// </summary>
+    public static TrayIconColour? BadgeOf(TrayIconSettings preferences, VpnConnectionState state)
+    {
+        ArgumentNullException.ThrowIfNull(preferences);
+
+        return preferences.ShowStatus
+            && StatusOf(state) is { } mapped
+            && TrayIconColour.TryParse(preferences.Get(mapped), out TrayIconColour colour)
+                ? colour
+                : null;
+    }
+
+    /// <summary>
+    /// One entry per connection that has a process, by name, with its state and its dot.
+    /// </summary>
+    private List<TrayMenuEntry> ConnectionEntries()
+    {
+        TrayIconSettings preferences = settings.Current.Appearance.TrayIcon;
+
+        List<(string Name, Guid Id, VpnConnectionState State)> running =
+        [
+            .. connections.ActiveProfiles
+                .Select(profile => (profileNames.GetDisplayName(profile), profile, connections.GetStatus(profile).State))
+                .OrderBy(entry => entry.Item1, StringComparer.CurrentCultureIgnoreCase),
+        ];
+
+        if (running.Count == 0)
+        {
+            return [];
+        }
+
+        List<TrayMenuEntry> entries =
+        [
+            new TrayMenuEntry(ConnectionsHeaderEntry, localizer["tray.connectionsHeader"], IsEnabled: false),
+        ];
+
+        foreach ((string name, Guid id, VpnConnectionState state) in running)
+        {
+            entries.Add(new TrayMenuEntry(
+                DisconnectProfilePrefix + id.ToString("D"),
+                localizer.Translate("tray.connection", name, localizer[StateKey(state)]),
+                Badge: BadgeOf(preferences, state)));
+        }
+
+        entries.Add(TrayMenuEntry.Separator);
+        return entries;
+    }
+
+    private static string StateKey(VpnConnectionState state) =>
+        "state." + char.ToLowerInvariant(state.ToString()[0]) + state.ToString()[1..];
+
+    /// <summary>
+    /// The profile an entry stands for, when it is one of the connections.
+    /// </summary>
+    public static Guid? ProfileOf(string actionId) =>
+        actionId.StartsWith(DisconnectProfilePrefix, StringComparison.Ordinal)
+        && Guid.TryParse(actionId.AsSpan(DisconnectProfilePrefix.Length), out Guid profile)
+            ? profile
+            : null;
 
     private void OnStatusChanged(object? sender, EventArgs e) =>
         Dispatcher.UIThread.Post(() =>
@@ -274,6 +369,7 @@ public sealed class TrayIconController : IDisposable
             new TrayMenuEntry(ShowWindowAction, localizer["tray.show"]),
             new TrayMenuEntry(QuickSwitcherAction, localizer["tray.quickSwitcher"]),
             TrayMenuEntry.Separator,
+            .. ConnectionEntries(),
             new TrayMenuEntry(DisconnectAllAction, localizer["tray.disconnectAll"], anyActive),
             TrayMenuEntry.Separator,
         ];
