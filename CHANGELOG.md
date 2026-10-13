@@ -20,7 +20,8 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
   offline, a server problem, idle with a server and idle on this computer. The most pressing one wins,
   and the tooltip names it. Under **Settings, General** each state can have a colour of its own, the
   icon's original colour, or be switched off so the next state that applies decides; the whole of it
-  can be turned off too. The colours travel with the other settings to a server.
+  can be turned off too. Nothing happening, with a server or without one, keeps the icon's original
+  colour to begin with. The colours travel with the other settings to a server.
 
 ### Fixed
 

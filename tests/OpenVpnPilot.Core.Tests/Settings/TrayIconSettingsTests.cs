@@ -22,12 +22,13 @@ public sealed class TrayIconSettingsTests
     }
 
     [Fact]
-    public void NewSettings_ShowTheStatus_AndLeaveTheIdleIconAsThePlatformDrawsIt()
+    public void NewSettings_ShowTheStatus_AndLeaveBothIdleIconsAsThePlatformDrawsThem()
     {
         TrayIconSettings settings = new();
 
         Assert.True(settings.ShowStatus);
         Assert.Null(settings.IdleLocal);
+        Assert.Null(settings.IdleRemote);
     }
 
     [Theory]

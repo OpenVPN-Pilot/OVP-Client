@@ -109,7 +109,7 @@ the most pressing of what is going on. The states, in the order they win:
 | `connected` | `#22C55E` | At least one tunnel is up |
 | `remoteOffline` | `#8A94A6` | The server does not answer |
 | `remoteProblem` | `#EC4899` | The server answers but cannot be used: degraded, a newer client required, a wrong clock, an untrusted certificate, unreadable settings or a refused keystore |
-| `idleRemote` | `#8B5CF6` | Nothing connected, signed in to a server that answers |
+| `idleRemote` | `null` | Nothing connected, signed in to a server that answers |
 | `idleLocal` | `null` | Nothing connected, on the library on this computer |
 
 A state set to `"off"` is passed over: the next state in the table that applies at that moment decides

@@ -369,13 +369,13 @@ public sealed class TrayIconSettings
     /// The colour a state starts with, or null for the platform's own drawing.
     /// </summary>
     /// <remarks>
-    /// Nothing happening is the platform's own drawing, so an application at rest looks like every
-    /// other entry beside it.
+    /// Nothing happening is the platform's own drawing, with a server as without one, so an
+    /// application at rest looks like every other entry beside it.
     /// </remarks>
     public static string? Default(TrayStatus status) => status switch
     {
         TrayStatus.IdleLocal => null,
-        TrayStatus.IdleRemote => "#8B5CF6",
+        TrayStatus.IdleRemote => null,
         TrayStatus.RemoteOffline => "#8A94A6",
         TrayStatus.RemoteSignInRequired => "#F59E0B",
         TrayStatus.RemoteProblem => "#EC4899",
