@@ -105,3 +105,62 @@ public static class TrayIconTint
 
     private static byte Multiply(byte channel, byte alpha) => (byte)(((channel * alpha) + 127) / 255);
 }
+
+/// <summary>
+/// Draws the dot a menu entry carries beside its label.
+/// </summary>
+/// <remarks>
+/// Drawn here rather than by either platform, because a filled circle is the same arithmetic on both
+/// and neither menu has a way to colour text. The edge is smoothed by sampling each pixel sixteen
+/// times, which is plenty at the sixteen to thirty-two pixels a menu asks for.
+/// </remarks>
+public static class TrayBadge
+{
+    private const int Samples = 4;
+
+    /// <summary>
+    /// A square image of the given size, four bytes a pixel laid out blue, green, red, alpha.
+    /// </summary>
+    /// <param name="premultiplied">
+    /// True to store the colour multiplied by alpha, which is what a Windows menu bitmap expects.
+    /// </param>
+    public static byte[] Render(int pixels, TrayIconColour colour, bool premultiplied)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(pixels, 1);
+
+        byte[] image = new byte[pixels * pixels * 4];
+
+        // A dot that fills the square reads as a block next to text; a margin of a fifth matches the
+        // size of the glyphs beside it.
+        double radius = pixels * 0.3;
+        double centre = pixels / 2.0;
+
+        for (int y = 0; y < pixels; y++)
+        {
+            for (int x = 0; x < pixels; x++)
+            {
+                int inside = 0;
+
+                for (int sy = 0; sy < Samples; sy++)
+                {
+                    for (int sx = 0; sx < Samples; sx++)
+                    {
+                        double dx = x + ((sx + 0.5) / Samples) - centre;
+                        double dy = y + ((sy + 0.5) / Samples) - centre;
+
+                        if ((dx * dx) + (dy * dy) <= radius * radius)
+                        {
+                            inside++;
+                        }
+                    }
+                }
+
+                int index = ((y * pixels) + x) * 4;
+                image[index + 3] = (byte)((inside * 255) / (Samples * Samples));
+            }
+        }
+
+        TrayIconTint.Apply(image, colour, premultiplied);
+        return image;
+    }
+}

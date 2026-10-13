@@ -32,6 +32,18 @@ public sealed class MacStatusItem : ISystemTrayIcon
     private readonly NativeMenu menu = [];
     private TrayIcon? icon;
     private TrayIconColour? colour;
+
+    /// <summary>
+    /// The dots beside menu entries, one per colour, because the menu is rebuilt with every change of
+    /// a connection's state and the same few colours come back each time.
+    /// </summary>
+    private readonly Dictionary<TrayIconColour, Bitmap> badges = [];
+
+    /// <summary>
+    /// The size a dot is drawn at: sixteen points, which is a menu's own image size, on a display
+    /// that doubles.
+    /// </summary>
+    private const int BadgePixels = 32;
     private bool disposed;
 
     public bool IsAvailable => !disposed;
@@ -164,10 +176,47 @@ public sealed class MacStatusItem : ISystemTrayIcon
                 ToggleType = entry.IsChecked ? MenuItemToggleType.CheckBox : MenuItemToggleType.None,
                 IsChecked = entry.IsChecked,
             };
+            if (entry.Badge is { } badge)
+            {
+                item.Icon = Badge(badge);
+            }
+
             string id = entry.Id;
             item.Click += (_, _) => MenuItemInvoked?.Invoke(this, id);
             menu.Items.Add(item);
         }
+    }
+
+    private Bitmap Badge(TrayIconColour badge)
+    {
+        if (badges.TryGetValue(badge, out Bitmap? existing))
+        {
+            return existing;
+        }
+
+        byte[] pixels = TrayBadge.Render(BadgePixels, badge, premultiplied: true);
+
+        // Twice the resolution a point has, so the dot is sixteen points across and sharp.
+        WriteableBitmap image = new(
+            new PixelSize(BadgePixels, BadgePixels),
+            new Vector(144, 144),
+            PixelFormat.Bgra8888,
+            AlphaFormat.Premul);
+
+        using (ILockedFramebuffer frame = image.Lock())
+        {
+            for (int row = 0; row < BadgePixels; row++)
+            {
+                System.Runtime.InteropServices.Marshal.Copy(
+                    pixels,
+                    row * BadgePixels * 4,
+                    frame.Address + (row * frame.RowBytes),
+                    BadgePixels * 4);
+            }
+        }
+
+        badges[badge] = image;
+        return image;
     }
 
     public void Dispose()
@@ -178,6 +227,13 @@ public sealed class MacStatusItem : ISystemTrayIcon
         }
 
         disposed = true;
+
+        foreach (Bitmap badge in badges.Values)
+        {
+            badge.Dispose();
+        }
+
+        badges.Clear();
 
         if (icon is not null)
         {
