@@ -46,17 +46,20 @@ internal static class LoginAgent
     /// <summary>
     /// The application bundle an executable sits in, when it sits in one.
     /// </summary>
+    /// <remarks>
+    /// The executable is an absolute macOS path. It is split as text rather than through the file
+    /// system types, which would resolve it against the drive and separator of whatever system the
+    /// decision is tested on.
+    /// </remarks>
     public static string? BundleOf(string executable)
     {
-        DirectoryInfo? macOs = new FileInfo(executable).Directory;
-        DirectoryInfo? contents = macOs?.Parent;
-        DirectoryInfo? bundle = contents?.Parent;
+        string[] parts = executable.Split('/');
 
-        return macOs?.Name == "MacOS"
-            && contents?.Name == "Contents"
-            && bundle is not null
-            && bundle.Name.EndsWith(".app", StringComparison.OrdinalIgnoreCase)
-                ? bundle.FullName
+        return parts.Length >= 4
+            && parts[^2] == "MacOS"
+            && parts[^3] == "Contents"
+            && parts[^4].EndsWith(".app", StringComparison.OrdinalIgnoreCase)
+                ? string.Join('/', parts[..^3])
                 : null;
     }
 }
