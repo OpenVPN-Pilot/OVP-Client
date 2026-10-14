@@ -40,7 +40,13 @@ fi
     echo "dev tun"
     echo "topology subnet"
     echo "server $LAB_TUNNEL 255.255.255.0"
-    echo "keepalive 10 60"
+
+    # LAB_KEEPALIVE set to an empty value leaves the keepalive out, which is the server whose tunnels
+    # OpenVPN never gives up on and the client has to check itself.
+    if [ -n "${LAB_KEEPALIVE-keepalive 10 60}" ]; then
+        echo "${LAB_KEEPALIVE-keepalive 10 60}"
+    fi
+
     echo "persist-key"
     echo "persist-tun"
     echo "verb 3"
