@@ -245,6 +245,11 @@ public partial class App : Application, IDisposable
         services.GetRequiredService<VaultShareRecorder>().Attach();
         services.GetRequiredService<PingMonitor>().Start();
 
+        // The health checks attach before the wake monitor starts, so the first wake it reports
+        // already has somebody to check the tunnels.
+        services.GetRequiredService<ConnectionHealthMonitor>().Attach();
+        services.GetRequiredService<SleepWakeMonitor>().Start();
+
         // What the synchronisation writes reaches the list and the shortcuts through this.
         services.GetRequiredService<LibraryRefresh>().Attach();
 
@@ -562,6 +567,11 @@ public partial class App : Application, IDisposable
         });
 
         RunStep(logger, started, "vault sharing", async () => await services.GetRequiredService<VaultShareRecorder>().DisposeAsync());
+
+        // Before the tunnels are stopped, so a wake or a silent gateway noticed on the way out does
+        // not restart a tunnel that is about to be stopped.
+        RunStep(logger, started, "tunnel health", async () => await services.GetRequiredService<ConnectionHealthMonitor>().DisposeAsync());
+        RunStep(logger, started, "wake monitor", async () => await services.GetRequiredService<SleepWakeMonitor>().DisposeAsync());
 
         RunStep(logger, started, "connections", () => services.GetRequiredService<ConnectionManager>().DisconnectAllAsync());
         RunStep(logger, "hotkeys", () => services.GetRequiredService<HotkeyCoordinator>().Dispose());

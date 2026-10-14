@@ -25,7 +25,7 @@ namespace OpenVpnPilot.App.Services;
 /// happens to land during a retransmission is otherwise shown as the connection's quality until the
 /// next cycle.
 /// </remarks>
-public sealed class PingMonitor : IAsyncDisposable
+public sealed class PingMonitor : ITunnelProbe, IAsyncDisposable
 {
     /// <summary>
     /// How long to wait for a reply. A tunnel that is slower than this is unusable anyway.
@@ -48,6 +48,7 @@ public sealed class PingMonitor : IAsyncDisposable
     private readonly CancellationTokenSource lifetime = new();
 
     private Task? loop;
+    private TaskCompletionSource nudge = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool disposed;
 
     public PingMonitor(
@@ -74,7 +75,21 @@ public sealed class PingMonitor : IAsyncDisposable
     /// </remarks>
     public TimeSpan Interval { get; init; } = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// Raised after each measurement of each tunnel, whether or not anything answered.
+    /// </summary>
+    /// <remarks>
+    /// The status only changes when the figure does, so two failures in a row are one status change.
+    /// Whoever judges whether a tunnel is alive has to see every measurement, which is what this is.
+    /// </remarks>
+    public event EventHandler<TunnelProbeResult>? Measured;
+
     public void Start() => loop ??= Task.Run(() => RunAsync(lifetime.Token), CancellationToken.None);
+
+    /// <summary>
+    /// Starts the next round of measurements now rather than when the interval ends.
+    /// </summary>
+    public void RequestMeasurement() => Volatile.Read(ref nudge).TrySetResult();
 
     private async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -82,7 +97,19 @@ public sealed class PingMonitor : IAsyncDisposable
         {
             try
             {
-                await Task.Delay(Interval, timeProvider, cancellationToken);
+                TaskCompletionSource current = Volatile.Read(ref nudge);
+
+                await Task.WhenAny(Task.Delay(Interval, timeProvider, cancellationToken), current.Task);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (current.Task.IsCompleted)
+                {
+                    Interlocked.CompareExchange(
+                        ref nudge,
+                        new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously),
+                        current);
+                }
+
                 await MeasureAllAsync(cancellationToken);
             }
             catch (OperationCanceledException)
@@ -111,6 +138,7 @@ public sealed class PingMonitor : IAsyncDisposable
 
             double? measured = await MeasureAsync(target, cancellationToken);
             connections.ReportPing(profileId, measured, target, kind);
+            Measured?.Invoke(this, new TunnelProbeResult(profileId, measured, target, kind));
         }
     }
 
@@ -266,6 +294,31 @@ public sealed class PingMonitor : IAsyncDisposable
 
         lifetime.Dispose();
     }
+}
+
+/// <summary>
+/// Something that measures the tunnels and says what each measurement found.
+/// </summary>
+public interface ITunnelProbe
+{
+    public event EventHandler<TunnelProbeResult>? Measured;
+
+    /// <summary>
+    /// Measures every tunnel as soon as it can, rather than at the next interval.
+    /// </summary>
+    public void RequestMeasurement();
+}
+
+/// <summary>
+/// One measurement of one tunnel.
+/// </summary>
+/// <param name="ProfileId">The tunnel measured.</param>
+/// <param name="Milliseconds">The round trip, or null when nothing answered.</param>
+/// <param name="Target">The address measured.</param>
+/// <param name="Kind">Whether that address is reached through the tunnel or outside it.</param>
+public sealed record TunnelProbeResult(Guid ProfileId, double? Milliseconds, string? Target, PingTargetKind Kind)
+{
+    public bool Answered => Milliseconds is not null;
 }
 
 /// <summary>

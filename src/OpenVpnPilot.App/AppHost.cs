@@ -23,6 +23,7 @@ using OpenVpnPilot.Platform.MacOS.Security;
 using OpenVpnPilot.Platform.MacOS.Shell;
 using OpenVpnPilot.Platform.Windows.Diagnostics;
 using OpenVpnPilot.Platform.Windows.InteractiveService;
+using OpenVpnPilot.Platform.Windows.Power;
 using OpenVpnPilot.Platform.Windows.Runtime;
 using OpenVpnPilot.Platform.Windows.Security;
 using OpenVpnPilot.Platform.Windows.Shell;
@@ -180,6 +181,11 @@ internal static class AppHost
         builder.Services.AddSingleton<NotificationService>();
         builder.Services.AddSingleton<ReconnectSupervisor>();
         builder.Services.AddSingleton<PingMonitor>();
+        builder.Services.AddSingleton<ITunnelProbe>(provider => provider.GetRequiredService<PingMonitor>());
+        builder.Services.AddSingleton<INetworkChangeEvents, SystemNetworkChangeEvents>();
+        builder.Services.AddSingleton<SleepWakeMonitor>();
+        builder.Services.AddSingleton<IWakeMonitor>(provider => provider.GetRequiredService<SleepWakeMonitor>());
+        builder.Services.AddSingleton<ConnectionHealthMonitor>();
         builder.Services.AddSingleton<RemoteCommandHandler>();
         builder.Services.AddSingleton<AppearanceController>();
         builder.Services.AddSingleton<HotkeyCoordinator>();
@@ -339,6 +345,7 @@ internal static class AppHost
         services.AddSingleton<IGlobalHotkeyService, WindowsGlobalHotkeyService>();
         services.AddSingleton<IWindowCloseOrigin, WindowsCloseOrigin>();
         services.AddSingleton<IApplicationRestart, WindowsApplicationRestart>();
+        services.AddSingleton<ISystemPowerEvents, WindowsPowerEvents>();
 
         // The icon and the notifications are one entry in the notification area, so they are one
         // object registered under both interfaces rather than two that would each add an icon.
@@ -373,6 +380,7 @@ internal static class AppHost
         services.AddSingleton<IDockPresence, MacDockPresence>();
         services.AddSingleton<IApplicationActivation, MacApplicationActivation>();
         services.AddSingleton<IApplicationRestart, MacApplicationRestart>();
+        services.AddSingleton<ISystemPowerEvents, MacPowerEvents>();
 
         // Without this the application menu was never filled and kept the framework's entry about
         // itself, although everything that fills it existed.
