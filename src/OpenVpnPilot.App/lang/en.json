@@ -83,7 +83,8 @@
       "signInAgainHint": "Forgets the credentials stored for this profile so the next connection asks for them. Use it when the password changed on the server.",
       "pingViaTunnel": "Measured against the tunnel gateway {0}, so this is the round trip through the tunnel.",
       "pingViaServer": "This server names no tunnel gateway, so the round trip is measured against the server itself at {0}, over the ordinary route rather than through the tunnel.",
-      "pingNoTarget": "Nothing has been measured yet."
+      "pingNoTarget": "Nothing has been measured yet.",
+      "noPeerCheck": "Neither this profile nor the server sets keepalive, ping-restart or ping-exit, so OpenVPN itself will not notice if the far end stops answering, as it does while the computer sleeps. The client checks the tunnel itself after sleep and while it runs, and restarts it when it has stopped carrying anything. Adding keepalive on the server makes OpenVPN notice on its own."
     },
     "state": {
       "connected": "Connected",
@@ -100,6 +101,11 @@
       "connectTimedOut": "The tunnel did not come up within {0} seconds.",
       "credentialsRejected": "The credentials for '{0}' were rejected by the server.",
       "credentialsMissing": "No credentials were supplied for '{0}'.",
+      "processEnded": "The OpenVPN process ended without saying why.",
+      "reconnectLoop": "OpenVPN restarted the tunnel {0} times without it coming back up.",
+      "reconnectTimedOut": "The tunnel dropped and did not come back within {0} seconds.",
+      "tunnelUnresponsive": "The tunnel stopped carrying anything, so it is being restarted.",
+      "tunnelRestartedAfterSleep": "The tunnel could not show that it survived the computer sleeping, so it is being restarted.",
       "unknown": "The connection ended for a reason this version cannot name."
     },
     "empty": {
@@ -294,7 +300,8 @@
       "diagnosticsPrivacy@macos": "A bundle is not anonymous. It contains profile names, remote host names and ports, file paths that include your macOS user name, and log lines that mention the same. It never contains configurations, private keys or credentials. Read it before sending it on.",
       "logRetention": "Keep log files for, in days",
       "logMaximum": "Keep log files up to, in megabytes",
-      "logRetentionHint": "One file is written per hour. Files older than the days above are removed, and so are the oldest files once all of them together reach the size above. Zero turns either limit off. A log names profiles, hosts and file paths that include your user name, so a short retention is the safer default.",
+      "logDaily": "Limit for one day's file, in megabytes",
+      "logRetentionHint": "One file is written per day. A line that keeps repeating is written a few times and then summarised as how often it repeated and for how long. Once a day's file reaches its limit, only warnings and errors are added to it, and a quarter beyond that nothing more; the log window still shows everything. Files older than the days above are removed, and so are the oldest files once all of them together reach the size above. Zero turns any of these limits off. A log names profiles, hosts and file paths that include your user name, so a short retention is the safer default.",
       "checkForUpdates": "Look for a newer release when the application starts",
       "checkForUpdatesHint": "Apart from a server you set up under Storage, this is the only thing here that contacts a network you did not ask it to. It reads the release list of the repository below from api.github.com, without credentials, and reports what it found. Nothing is downloaded and nothing is installed.",
       "updateRepository": "Repository to check, as owner/name",

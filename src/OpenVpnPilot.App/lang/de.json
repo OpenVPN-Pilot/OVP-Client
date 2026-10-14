@@ -83,7 +83,8 @@
       "signInAgainHint": "Vergisst die für dieses Profil gespeicherten Anmeldedaten, sodass die nächste Verbindung danach fragt. Nützlich, wenn sich das Passwort auf dem Server geändert hat.",
       "pingViaTunnel": "Gemessen gegen das Tunnel-Gateway {0}, das ist also die Laufzeit durch den Tunnel.",
       "pingViaServer": "Dieser Server nennt kein Tunnel-Gateway, deshalb wird gegen den Server selbst gemessen, {0}, über die gewöhnliche Route statt durch den Tunnel.",
-      "pingNoTarget": "Es wurde noch nichts gemessen."
+      "pingNoTarget": "Es wurde noch nichts gemessen.",
+      "noPeerCheck": "Weder dieses Profil noch der Server setzt keepalive, ping-restart oder ping-exit. OpenVPN bemerkt deshalb selbst nicht, wenn die Gegenstelle nicht mehr antwortet, etwa während der Computer schläft. Der Client prüft den Tunnel nach dem Ruhezustand und im laufenden Betrieb selbst und startet ihn neu, wenn er nichts mehr überträgt. Mit keepalive auf dem Server bemerkt OpenVPN es von allein."
     },
     "state": {
       "connected": "Verbunden",
@@ -100,6 +101,11 @@
       "connectTimedOut": "Der Tunnel kam nicht innerhalb von {0} Sekunden zustande.",
       "credentialsRejected": "Die Anmeldedaten für „{0}“ wurden vom Server abgelehnt.",
       "credentialsMissing": "Für „{0}“ wurden keine Anmeldedaten angegeben.",
+      "processEnded": "Der OpenVPN-Prozess wurde beendet, ohne einen Grund zu nennen.",
+      "reconnectLoop": "OpenVPN hat den Tunnel {0}-mal neu gestartet, ohne dass er wieder zustande kam.",
+      "reconnectTimedOut": "Der Tunnel ist abgebrochen und kam nicht innerhalb von {0} Sekunden zurück.",
+      "tunnelUnresponsive": "Der Tunnel überträgt nichts mehr und wird deshalb neu gestartet.",
+      "tunnelRestartedAfterSleep": "Der Tunnel konnte nicht zeigen, dass er den Ruhezustand des Computers überstanden hat, und wird deshalb neu gestartet.",
       "unknown": "Die Verbindung endete aus einem Grund, den diese Version nicht benennen kann."
     },
     "empty": {
@@ -294,7 +300,8 @@
       "diagnosticsPrivacy@macos": "Ein Paket ist nicht anonym. Es enthält Profilnamen, Hostnamen und Ports der Gegenstellen, Dateipfade mit Ihrem macOS-Benutzernamen sowie Protokollzeilen, die dasselbe nennen. Es enthält nie Konfigurationen, private Schlüssel oder Anmeldedaten. Sehen Sie es durch, bevor Sie es weitergeben.",
       "logRetention": "Protokolldateien aufbewahren, in Tagen",
       "logMaximum": "Protokolldateien höchstens, in Megabyte",
-      "logRetentionHint": "Pro Stunde wird eine Datei geschrieben. Dateien, die älter als die obigen Tage sind, werden entfernt, ebenso die ältesten, sobald alle zusammen die obige Größe erreichen. Null schaltet die jeweilige Grenze ab. Ein Protokoll nennt Profile, Hosts und Dateipfade mit Ihrem Benutzernamen, daher ist eine kurze Aufbewahrung die sicherere Voreinstellung.",
+      "logDaily": "Grenze für die Datei eines Tages, in Megabyte",
+      "logRetentionHint": "Pro Tag wird eine Datei geschrieben. Eine Zeile, die sich ständig wiederholt, wird einige Male geschrieben und dann zusammengefasst, mit der Zahl der Wiederholungen und ihrer Dauer. Erreicht die Datei eines Tages ihre Grenze, kommen nur noch Warnungen und Fehler hinzu, ein Viertel darüber gar nichts mehr; das Protokollfenster zeigt weiterhin alles. Dateien, die älter als die obigen Tage sind, werden entfernt, ebenso die ältesten, sobald alle zusammen die obige Größe erreichen. Null schaltet die jeweilige Grenze ab. Ein Protokoll nennt Profile, Hosts und Dateipfade mit Ihrem Benutzernamen, daher ist eine kurze Aufbewahrung die sicherere Voreinstellung.",
       "checkForUpdates": "Beim Start nach einer neueren Version sehen",
       "checkForUpdatesHint": "Abgesehen von einem Server, den Sie unter Speicherort eingerichtet haben, ist das das Einzige hier, das ein Netzwerk kontaktiert, ohne dass Sie es verlangt haben. Es liest die Release-Liste des unten genannten Repositorys von api.github.com, ohne Anmeldedaten, und meldet das Ergebnis. Es wird nichts heruntergeladen und nichts installiert.",
       "updateRepository": "Zu prüfendes Repository, als Eigentümer/Name",
