@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenVpnPilot.Core.Abstractions;
 using OpenVpnPilot.Core.Vpn;
+using OpenVpnPilot.OpenVpn.Configuration;
 using OpenVpnPilot.OpenVpn.Management;
 
 namespace OpenVpnPilot.OpenVpn.Runtime;
@@ -29,10 +30,16 @@ public sealed class ConnectionManager : IAsyncDisposable
     private readonly IPortAllocator portAllocator;
     private readonly IOpenVpnProcessTerminator? terminator;
     private readonly ILogger<ConnectionManager> logger;
+    private readonly ILoggerFactory? loggerFactory;
 
     private readonly ConcurrentDictionary<Guid, ActiveConnection> active = new();
     private bool disposed;
 
+    /// <param name="loggerFactory">
+    /// Where each supervisor gets its logger. Without it a supervisor logs nowhere, which is how
+    /// everything it had to say, a closed management connection, a stop signal nobody answered, a
+    /// server that never gives up on a silent far end, was missing from every log.
+    /// </param>
     public ConnectionManager(
         IOpenVpnLauncher launcher,
         IManagementChannelFactory channelFactory,
@@ -40,8 +47,10 @@ public sealed class ConnectionManager : IAsyncDisposable
         IProfileMaterializer materializer,
         IPortAllocator? portAllocator = null,
         ILogger<ConnectionManager>? logger = null,
-        IOpenVpnProcessTerminator? terminator = null)
+        IOpenVpnProcessTerminator? terminator = null,
+        ILoggerFactory? loggerFactory = null)
     {
+        this.loggerFactory = loggerFactory;
         ArgumentNullException.ThrowIfNull(launcher);
         ArgumentNullException.ThrowIfNull(channelFactory);
         ArgumentNullException.ThrowIfNull(credentialProvider);
@@ -168,6 +177,7 @@ public sealed class ConnectionManager : IAsyncDisposable
             launcher,
             channelFactory,
             credentialProvider,
+            logger: loggerFactory?.CreateLogger<ConnectionSupervisor>(),
             terminator: terminator);
 
         ActiveConnection connection = new(supervisor, materialised);
@@ -217,7 +227,8 @@ public sealed class ConnectionManager : IAsyncDisposable
                     portAllocator.Reserve(),
                     additionalOptions ?? [],
                     ConnectTimeout: connectTimeout,
-                    Verbosity: verbosity),
+                    Verbosity: verbosity,
+                    ConfigurationChecksPeer: ChecksPeer(configuration)),
                 cancellationToken);
 
             if (status.State == VpnConnectionState.Failed)
@@ -252,6 +263,30 @@ public sealed class ConnectionManager : IAsyncDisposable
             await RemoveAsync(profileId);
         }
     }
+
+    /// <summary>
+    /// Asks OpenVPN to make the connection to the server again, keeping the process.
+    /// </summary>
+    /// <returns>True when the tunnel was connected and OpenVPN accepted the request.</returns>
+    public async Task<bool> RestartAsync(
+        Guid profileId,
+        VpnStatusReason reason,
+        CancellationToken cancellationToken = default)
+    {
+        if (!active.TryGetValue(profileId, out ActiveConnection? connection))
+        {
+            return false;
+        }
+
+        return await connection.Supervisor.RestartAsync(reason, cancellationToken);
+    }
+
+    /// <summary>
+    /// True when a configuration makes OpenVPN give up on a far end that has stopped answering.
+    /// </summary>
+    internal static bool ChecksPeer(string configuration) =>
+        OvpnConfigParser.Parse(configuration).Directives.Any(directive =>
+            directive.Name is "ping-restart" or "ping-exit" or "keepalive");
 
     /// <summary>
     /// Stops every tunnel. Used when the application closes.

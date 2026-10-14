@@ -37,6 +37,11 @@ public static class VpnStatusText
         VpnStatusReasonCode.ConnectTimedOut => "reason.connectTimedOut",
         VpnStatusReasonCode.CredentialsRejected => "reason.credentialsRejected",
         VpnStatusReasonCode.CredentialsMissing => "reason.credentialsMissing",
+        VpnStatusReasonCode.ProcessEnded => "reason.processEnded",
+        VpnStatusReasonCode.ReconnectLoop => "reason.reconnectLoop",
+        VpnStatusReasonCode.ReconnectTimedOut => "reason.reconnectTimedOut",
+        VpnStatusReasonCode.TunnelUnresponsive => "reason.tunnelUnresponsive",
+        VpnStatusReasonCode.TunnelRestartedAfterSleep => "reason.tunnelRestartedAfterSleep",
 
         // A code added without a text of its own would otherwise resolve to nothing at all, and a
         // failure that says nothing is worse than one that names itself.

@@ -26,12 +26,17 @@ namespace OpenVpnPilot.OpenVpn.Runtime;
 /// reply. The tunnel reconnects forever with a reason nobody can act on, so the cause is recorded
 /// here and said plainly instead.
 /// </param>
+/// <param name="ChecksPeer">
+/// True when the server set a timeout after which OpenVPN gives up on a far end that stopped
+/// answering. A server's <c>keepalive</c> reaches the client as <c>ping</c> and <c>ping-restart</c>.
+/// </param>
 public sealed record PushedOptions(
     IReadOnlyList<string> Routes,
     IReadOnlyList<string> DnsServers,
     string? Gateway,
     bool RedirectsDefaultRoute,
-    bool RequestsCompression = false)
+    bool RequestsCompression = false,
+    bool ChecksPeer = false)
 {
     public static PushedOptions None { get; } = new([], [], null, false);
 
@@ -95,6 +100,7 @@ public static class PushReplyParser
         string? gateway = null;
         bool redirect = false;
         bool compression = false;
+        bool checksPeer = false;
 
         foreach (string option in payload[Prefix.Length..]
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -149,12 +155,20 @@ public static class PushReplyParser
                     compression = true;
                     break;
 
+                // A ping alone keeps the tunnel warm but gives up on nothing; these are the options
+                // that make OpenVPN restart or exit when the far end has been silent for too long.
+                case "ping-restart":
+                case "ping-exit":
+                case "keepalive":
+                    checksPeer = true;
+                    break;
+
                 default:
                     break;
             }
         }
 
-        return new PushedOptions(routes, dns, gateway, redirect, compression);
+        return new PushedOptions(routes, dns, gateway, redirect, compression, checksPeer);
     }
 
     /// <summary>

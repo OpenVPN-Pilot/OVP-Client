@@ -124,6 +124,18 @@ public sealed record VpnConnectionStatus
     public bool ServerRequestedCompression { get; init; }
 
     /// <summary>
+    /// Whether OpenVPN itself notices a far end that stopped answering: true when the configuration
+    /// or the server set <c>ping-restart</c>, <c>ping-exit</c> or <c>keepalive</c>, false when
+    /// neither did, and null until that is known.
+    /// </summary>
+    /// <remarks>
+    /// Without one of those, a tunnel whose far end went away, as it does while a laptop sleeps,
+    /// stays connected as far as OpenVPN is concerned, for as long as the process lives. The client
+    /// checks such a tunnel itself, and the interface says that OpenVPN will not.
+    /// </remarks>
+    public bool? DetectsDeadPeer { get; init; }
+
+    /// <summary>
     /// The most recent round trip time, or null when it has not been measured.
     /// </summary>
     /// <remarks>

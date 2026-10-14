@@ -118,6 +118,31 @@ public sealed class PushReplyParserTests
         Assert.False(options.RequestsCompression);
     }
 
+    /// <summary>
+    /// A server's keepalive arrives as ping and ping-restart; the ping alone gives up on nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("PUSH_REPLY,ping 10,ping-restart 60", true)]
+    [InlineData("PUSH_REPLY,ping 10,ping-exit 120", true)]
+    [InlineData("PUSH_REPLY,keepalive 10 60", true)]
+    [InlineData("PUSH_REPLY,ping 10", false)]
+    [InlineData("PUSH_REPLY,route-gateway 10.8.0.1", false)]
+    public void Parse_RecognisesWhetherTheServerGivesUpOnASilentPeer(string reply, bool expected)
+    {
+        PushedOptions options = Assert.IsType<PushedOptions>(
+            PushReplyParser.Parse($"PUSH: Received control message: '{reply}'"));
+
+        Assert.Equal(expected, options.ChecksPeer);
+    }
+
+    [Theory]
+    [InlineData("client\nremote vpn.example.com 1194\nkeepalive 10 60\n", true)]
+    [InlineData("client\nremote vpn.example.com 1194\nping-restart 60\n", true)]
+    [InlineData("client\nremote vpn.example.com 1194\nping 10\n", false)]
+    [InlineData("client\nremote vpn.example.com 1194\n# keepalive 10 60\n", false)]
+    public void ChecksPeer_ReadsTheConfiguration(string configuration, bool expected) =>
+        Assert.Equal(expected, ConnectionManager.ChecksPeer(configuration));
+
     [Fact]
     public void IsPushReply_RecognisesTheLineWithoutParsingIt()
     {

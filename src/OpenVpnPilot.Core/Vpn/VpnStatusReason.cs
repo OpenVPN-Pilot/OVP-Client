@@ -48,4 +48,32 @@ public enum VpnStatusReasonCode
     /// and an empty store alike. The argument is the realm.
     /// </summary>
     CredentialsMissing,
+
+    /// <summary>
+    /// The management connection closed without OpenVPN announcing that it was exiting, which is
+    /// what a process that was killed or crashed looks like from here.
+    /// </summary>
+    ProcessEnded,
+
+    /// <summary>
+    /// OpenVPN restarted the tunnel again and again without it coming back up. The argument is how
+    /// many restarts there were.
+    /// </summary>
+    ReconnectLoop,
+
+    /// <summary>
+    /// A tunnel that dropped did not come back up within the time allowed. The argument is that time
+    /// in seconds.
+    /// </summary>
+    ReconnectTimedOut,
+
+    /// <summary>
+    /// The tunnel stopped carrying anything while it was reported as connected, so it was restarted.
+    /// </summary>
+    TunnelUnresponsive,
+
+    /// <summary>
+    /// The tunnel could not show that it survived the computer sleeping, so it was restarted.
+    /// </summary>
+    TunnelRestartedAfterSleep,
 }

@@ -51,4 +51,28 @@ internal static partial class ConnectionSupervisorLog
         Level = LogLevel.Warning,
         Message = "OpenVPN process {ProcessId} could not be inspected or terminated. It may outlive this disconnect.")]
     public static partial void ProcessCheckDenied(ILogger logger, int processId, Exception exception);
+
+    [LoggerMessage(
+        EventId = 2008,
+        Level = LogLevel.Warning,
+        Message = "The management connection closed while the tunnel was {State}, without OpenVPN reporting that it was exiting.")]
+    public static partial void ChannelEnded(ILogger logger, Core.Vpn.VpnConnectionState state);
+
+    [LoggerMessage(
+        EventId = 2009,
+        Level = LogLevel.Information,
+        Message = "The restart request could not be delivered; the management connection was already gone.")]
+    public static partial void RestartNotDelivered(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 2010,
+        Level = LogLevel.Warning,
+        Message = "The restart request was not answered in time.")]
+    public static partial void RestartNotAnswered(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 2011,
+        Level = LogLevel.Warning,
+        Message = "Neither the configuration nor the server sets ping-restart, ping-exit or keepalive, so OpenVPN will not notice if the far end stops answering. The client checks the tunnel itself.")]
+    public static partial void NoPeerCheck(ILogger logger);
 }

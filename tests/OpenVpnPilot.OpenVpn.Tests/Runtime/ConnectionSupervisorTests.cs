@@ -511,6 +511,212 @@ public sealed class ConnectionSupervisorTests
         Assert.Equal(VpnConnectionState.Disconnected, supervisor.Status.State);
     }
 
+    /// <summary>
+    /// A process that is killed says nothing; its socket simply closes.
+    /// </summary>
+    /// <remarks>
+    /// That used to end the message pump quietly, and the profile went on showing as connected for
+    /// as long as the application ran, which is exactly what a laptop woken after hours displayed.
+    /// </remarks>
+    [Fact]
+    public async Task AChannelThatClosesWithoutExiting_IsReportedAsALostConnection()
+    {
+        Harness harness = new();
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor);
+
+        harness.Transport.SendLine(">STATE:1787941299,CONNECTED,SUCCESS,10.8.0.6,203.0.113.10,1194,,");
+        await harness.WaitForAsync(supervisor, s => s.State == VpnConnectionState.Connected);
+
+        harness.Transport.CloseFromServer();
+
+        VpnConnectionStatus status = await harness.WaitForAsync(
+            supervisor,
+            s => s.State == VpnConnectionState.Failed);
+
+        Assert.Equal(VpnFailureKind.ConnectionLost, status.Failure);
+        Assert.Equal(VpnStatusReasonCode.ProcessEnded, status.Reason?.Code);
+        Assert.Null(status.ConnectedSince);
+    }
+
+    /// <summary>
+    /// An exit OpenVPN announced keeps its own report, rather than being overwritten by the socket
+    /// closing afterwards.
+    /// </summary>
+    [Fact]
+    public async Task AnAnnouncedExit_IsNotReplacedWhenTheChannelThenCloses()
+    {
+        Harness harness = new();
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor);
+
+        harness.Transport.SendLine(">STATE:1787941299,CONNECTED,SUCCESS,10.8.0.6,203.0.113.10,1194,,");
+        harness.Transport.SendLine(">STATE:1787941400,EXITING,,,,,,");
+        await harness.WaitForAsync(supervisor, s => s.State == VpnConnectionState.Disconnected);
+
+        harness.Transport.CloseFromServer();
+        await Task.Delay(200);
+
+        Assert.Equal(VpnConnectionState.Disconnected, supervisor.Status.State);
+        Assert.Null(supervisor.Status.Reason);
+    }
+
+    /// <summary>
+    /// A tunnel that OpenVPN restarts again and again is handed back rather than left to loop.
+    /// </summary>
+    [Fact]
+    public async Task RepeatedRestartsWithoutConnecting_EndTheAttempt()
+    {
+        Harness harness = new();
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor);
+
+        harness.Transport.SendLine(">STATE:1787941299,CONNECTED,SUCCESS,10.8.0.6,203.0.113.10,1194,,");
+
+        for (int restart = 0; restart < ConnectionSupervisor.MaximumRestartsWithoutConnecting; restart++)
+        {
+            harness.Transport.SendLine(">STATE:1787941300,RECONNECTING,connection-reset,,,,,");
+            harness.Transport.SendLine(">STATE:1787941300,WAIT,,,,,,");
+        }
+
+        VpnConnectionStatus status = await harness.WaitForAsync(
+            supervisor,
+            s => s.State == VpnConnectionState.Failed);
+
+        Assert.Equal(VpnFailureKind.ConnectionLost, status.Failure);
+        Assert.Equal(VpnStatusReasonCode.ReconnectLoop, status.Reason?.Code);
+        Assert.Equal("signal SIGTERM", await harness.Transport.ReceiveLineAsync());
+    }
+
+    /// <summary>
+    /// The count starts again each time the tunnel comes back, so occasional drops are never added up.
+    /// </summary>
+    [Fact]
+    public async Task RestartsSeparatedByConnections_AreNotAddedUp()
+    {
+        Harness harness = new();
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor);
+
+        for (int drop = 0; drop < ConnectionSupervisor.MaximumRestartsWithoutConnecting + 2; drop++)
+        {
+            harness.Transport.SendLine(">STATE:1787941299,CONNECTED,SUCCESS,10.8.0.6,203.0.113.10,1194,,");
+            harness.Transport.SendLine(">STATE:1787941300,RECONNECTING,connection-reset,,,,,");
+        }
+
+        // A different port marks the last line, so the wait cannot be satisfied by an earlier one.
+        harness.Transport.SendLine(">STATE:1787941399,CONNECTED,SUCCESS,10.8.0.6,203.0.113.10,1195,,");
+
+        VpnConnectionStatus status = await harness.WaitForAsync(
+            supervisor,
+            s => s.State == VpnConnectionState.Connected && s.ServerPort == 1195);
+
+        Assert.Equal(VpnFailureKind.None, status.Failure);
+        Assert.False(harness.Transport.HasPendingClientLine);
+    }
+
+    /// <summary>
+    /// A drop that does not recover within the connect timeout ends the attempt.
+    /// </summary>
+    [Fact]
+    public async Task ADropThatDoesNotRecover_IsGivenUpAfterTheConnectTimeout()
+    {
+        Harness harness = new();
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor, Request() with { ConnectTimeout = TimeSpan.FromMilliseconds(300) });
+
+        harness.Transport.SendLine(">STATE:1787941299,CONNECTED,SUCCESS,10.8.0.6,203.0.113.10,1194,,");
+        harness.Transport.SendLine(">STATE:1787941300,RECONNECTING,ping-restart,,,,,");
+
+        VpnConnectionStatus status = await harness.WaitForAsync(
+            supervisor,
+            s => s.State == VpnConnectionState.Failed);
+
+        Assert.Equal(VpnStatusReasonCode.ReconnectTimedOut, status.Reason?.Code);
+        Assert.Equal(VpnFailureKind.ConnectionLost, status.Failure);
+    }
+
+    /// <summary>
+    /// A drop that recovers in time is left alone by the timer it started.
+    /// </summary>
+    [Fact]
+    public async Task ADropThatRecovers_IsNotGivenUpLater()
+    {
+        Harness harness = new();
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor, Request() with { ConnectTimeout = TimeSpan.FromMilliseconds(300) });
+
+        harness.Transport.SendLine(">STATE:1787941299,CONNECTED,SUCCESS,10.8.0.6,203.0.113.10,1194,,");
+        harness.Transport.SendLine(">STATE:1787941300,RECONNECTING,ping-restart,,,,,");
+        harness.Transport.SendLine(">STATE:1787941301,CONNECTED,SUCCESS,10.8.0.6,203.0.113.10,1194,,");
+
+        await Task.Delay(600);
+
+        Assert.Equal(VpnConnectionState.Connected, supervisor.Status.State);
+    }
+
+    /// <summary>
+    /// A restart the client asks for is OpenVPN's soft restart, and the reconnect says why.
+    /// </summary>
+    [Fact]
+    public async Task RestartAsync_SendsTheSoftRestartAndLabelsTheReconnect()
+    {
+        Harness harness = new();
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor);
+
+        harness.Transport.SendLine(">STATE:1787941299,CONNECTED,SUCCESS,10.8.0.6,203.0.113.10,1194,,");
+        await harness.WaitForAsync(supervisor, s => s.State == VpnConnectionState.Connected);
+
+        Task<bool> restart = supervisor.RestartAsync(
+            new VpnStatusReason { Code = VpnStatusReasonCode.TunnelRestartedAfterSleep });
+
+        Assert.Equal("signal SIGUSR1", await harness.Transport.ReceiveLineAsync());
+        harness.Transport.SendLine("SUCCESS: signal SIGUSR1 thrown");
+        Assert.True(await restart);
+
+        harness.Transport.SendLine(">STATE:1787941300,RECONNECTING,SIGUSR1,,,,,");
+
+        VpnConnectionStatus status = await harness.WaitForAsync(
+            supervisor,
+            s => s.State == VpnConnectionState.Reconnecting);
+
+        Assert.Equal(VpnStatusReasonCode.TunnelRestartedAfterSleep, status.Reason?.Code);
+    }
+
+    [Fact]
+    public async Task RestartAsync_WhenNotConnected_DoesNothing()
+    {
+        Harness harness = new();
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor);
+
+        bool restarted = await supervisor.RestartAsync(
+            new VpnStatusReason { Code = VpnStatusReasonCode.TunnelUnresponsive });
+
+        Assert.False(restarted);
+        Assert.False(harness.Transport.HasPendingClientLine);
+    }
+
+    [Theory]
+    [InlineData("PUSH_REPLY,route-gateway 10.8.0.1,ping 10,ping-restart 60", false, true)]
+    [InlineData("PUSH_REPLY,route-gateway 10.8.0.1", false, false)]
+    [InlineData("PUSH_REPLY,route-gateway 10.8.0.1", true, true)]
+    public async Task PushReply_DecidesWhetherOpenVpnChecksTheFarEnd(string reply, bool inConfiguration, bool expected)
+    {
+        Harness harness = new();
+        await using ConnectionSupervisor supervisor = harness.CreateSupervisor();
+        await harness.ConnectAsync(supervisor, Request() with { ConfigurationChecksPeer = inConfiguration });
+
+        harness.Transport.SendLine($">LOG:1787941299,,PUSH: Received control message: '{reply}'");
+
+        VpnConnectionStatus status = await harness.WaitForAsync(
+            supervisor,
+            s => s.Gateway is not null);
+
+        Assert.Equal(expected, status.DetectsDeadPeer);
+    }
+
     private static ConnectionRequest Request() =>
         new(ProfileId, @"C:\profiles\example.ovpn", @"C:\profiles", 25340, []);
 
@@ -532,9 +738,9 @@ public sealed class ConnectionSupervisorTests
         /// <summary>
         /// Drives the password handshake and the session opening commands the supervisor issues.
         /// </summary>
-        public async Task ConnectAsync(ConnectionSupervisor supervisor)
+        public async Task ConnectAsync(ConnectionSupervisor supervisor, ConnectionRequest? request = null)
         {
-            Task connect = supervisor.ConnectAsync(Request());
+            Task connect = supervisor.ConnectAsync(request ?? Request());
 
             Transport.SendRaw("ENTER PASSWORD:");
             AuthenticatedWith = await Transport.ReceiveLineAsync();

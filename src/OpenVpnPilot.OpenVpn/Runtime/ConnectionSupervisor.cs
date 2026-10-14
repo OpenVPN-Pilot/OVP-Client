@@ -44,6 +44,18 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
     /// </remarks>
     private static readonly TimeSpan SignalGrace = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// How many times OpenVPN may restart a tunnel without it reaching connected before the attempt
+    /// is given up.
+    /// </summary>
+    /// <remarks>
+    /// OpenVPN restarts by itself for as long as it is left running, and some failures make it do so
+    /// as fast as it can: every restart is another handshake and another screenful of log, many
+    /// times a second, for hours. A tunnel coming back after a drop needs one restart, rarely two.
+    /// Giving up here hands the tunnel to the retry logic, whose attempts are spaced and counted.
+    /// </remarks>
+    internal const int MaximumRestartsWithoutConnecting = 5;
+
     private ManagementClient? client;
     private CancellationTokenSource? session;
     private Task? pump;
@@ -54,6 +66,24 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
     /// Set when the attempt cannot succeed however many times OpenVPN tries it again.
     /// </summary>
     private bool abandoned;
+
+    /// <summary>
+    /// How often OpenVPN has restarted the tunnel since it was last connected.
+    /// </summary>
+    private int restartsSinceConnected;
+
+    /// <summary>
+    /// Counts the times the tunnel reached connected, so a timer started for one drop can tell
+    /// whether the tunnel came back and dropped again while it waited.
+    /// </summary>
+    private int timesConnected;
+
+    /// <summary>
+    /// The reason for a restart this client asked for, shown with the reconnect it causes.
+    /// </summary>
+    private VpnStatusReason? requestedRestartReason;
+
+    private bool reportedMissingPeerCheck;
 
     // A dynamic challenge arrives with the refusal of one attempt and is answered in the next, so
     // it has to outlive the attempt that raised it.
@@ -123,11 +153,17 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
             rejectedRealms.Clear();
             pendingChallenges.Clear();
             abandoned = false;
+            restartsSinceConnected = 0;
+            timesConnected = 0;
+            requestedRestartReason = null;
+            reportedMissingPeerCheck = false;
             Publish(status with
             {
                 State = VpnConnectionState.Launching,
                 Message = string.Empty,
+                Reason = null,
                 Failure = VpnFailureKind.None,
+                DetectsDeadPeer = request.ConfigurationChecksPeer ? true : null,
                 PushedRoutes = [],
                 PushedDnsServers = [],
                 Gateway = null,
@@ -250,6 +286,61 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Asks OpenVPN to restart a connected tunnel inside the running process.
+    /// </summary>
+    /// <param name="reason">Why, which the reconnect that follows carries.</param>
+    /// <returns>True when OpenVPN accepted the request.</returns>
+    /// <remarks>
+    /// This is OpenVPN's own soft restart, SIGUSR1: the process, the management session and the
+    /// credentials it holds stay, and only the connection to the server is made again. It is what a
+    /// tunnel whose far end stopped answering needs, and what OpenVPN would have done by itself had
+    /// anything told it to give up on the far end.
+    /// </remarks>
+    public async Task<bool> RestartAsync(VpnStatusReason reason, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reason);
+
+        await transition.WaitAsync(cancellationToken);
+        try
+        {
+            if (client is null || status.State != VpnConnectionState.Connected)
+            {
+                return false;
+            }
+
+            requestedRestartReason = reason;
+
+            try
+            {
+                using CancellationTokenSource signal =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                signal.CancelAfter(SignalGrace);
+
+                CommandResult result = await client.SignalAsync("SIGUSR1", signal.Token);
+                return result.Succeeded;
+            }
+            catch (Exception exception)
+                when (exception is InvalidOperationException or IOException or ObjectDisposedException)
+            {
+                // The process is gone, which the pump reports by itself as the connection ending.
+                requestedRestartReason = null;
+                ConnectionSupervisorLog.RestartNotDelivered(logger, exception);
+                return false;
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                requestedRestartReason = null;
+                ConnectionSupervisorLog.RestartNotAnswered(logger);
+                return false;
+            }
+        }
+        finally
+        {
+            transition.Release();
+        }
+    }
+
     private async Task PumpAsync(ConnectionRequest request, CancellationToken cancellationToken)
     {
         try
@@ -257,6 +348,11 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
             await foreach (ManagementMessage message in client!.Notifications.ReadAllAsync(cancellationToken))
             {
                 await HandleAsync(request, message, cancellationToken);
+            }
+
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                ReportChannelEnded();
             }
         }
         catch (OperationCanceledException)
@@ -282,6 +378,37 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Reports a management connection that closed without OpenVPN announcing that it was exiting.
+    /// </summary>
+    /// <remarks>
+    /// OpenVPN says <c>EXITING</c> before it ends on its own or on a signal, and that is handled as
+    /// a state. A process that was killed, crashed or was ended by whatever started it says nothing:
+    /// the socket simply closes. Treating that as nothing to report is what left a tunnel showing as
+    /// connected, for good, after its process had gone. A disconnect in progress and an ending that
+    /// was already reported are left as they are.
+    /// </remarks>
+    private void ReportChannelEnded()
+    {
+        if (status.State is VpnConnectionState.Disconnected
+            or VpnConnectionState.Failed
+            or VpnConnectionState.Disconnecting)
+        {
+            return;
+        }
+
+        ConnectionSupervisorLog.ChannelEnded(logger, status.State);
+
+        Publish(status with
+        {
+            State = VpnConnectionState.Failed,
+            ConnectedSince = null,
+            Message = "The OpenVPN process ended without saying why.",
+            Reason = new VpnStatusReason { Code = VpnStatusReasonCode.ProcessEnded },
+            Failure = VpnFailureKind.ConnectionLost,
+        });
+    }
+
     private async Task HandleAsync(
         ConnectionRequest request,
         ManagementMessage message,
@@ -295,7 +422,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                 break;
 
             case StateMessage state:
-                ApplyState(state);
+                ApplyState(request, state);
 
                 // OpenVPN restarts on its own and would go round this loop for as long as it is
                 // left running. Reporting a failure without ending the attempt only renames what
@@ -352,7 +479,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                 break;
 
             case LogMessage log:
-                ApplyPushedOptions(log);
+                ApplyPushedOptions(request, log);
                 LogReceived?.Invoke(this, log);
                 break;
 
@@ -362,11 +489,14 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
     }
 
     // OpenVPN reports many intermediate states. Only the ones the user acts on are surfaced.
-    private void ApplyState(StateMessage state)
+    private void ApplyState(ConnectionRequest request, StateMessage state)
     {
         switch (state.Name)
         {
             case "CONNECTED":
+                restartsSinceConnected = 0;
+                Interlocked.Increment(ref timesConnected);
+
                 Publish(status with
                 {
                     State = VpnConnectionState.Connected,
@@ -375,6 +505,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                     ServerAddress = state.RemoteAddress,
                     ServerPort = state.RemotePort,
                     Message = string.Empty,
+                    Reason = null,
                     Failure = VpnFailureKind.None,
                 });
                 break;
@@ -401,12 +532,57 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
                     break;
                 }
 
+                restartsSinceConnected++;
+
+                if (restartsSinceConnected >= MaximumRestartsWithoutConnecting)
+                {
+                    abandoned = true;
+                    requestedRestartReason = null;
+
+                    Publish(status with
+                    {
+                        State = VpnConnectionState.Failed,
+                        ConnectedSince = null,
+                        Message = $"OpenVPN restarted the tunnel {restartsSinceConnected} times without it coming back up.",
+                        Reason = new VpnStatusReason
+                        {
+                            Code = VpnStatusReasonCode.ReconnectLoop,
+                            Arguments = [restartsSinceConnected.ToString(System.Globalization.CultureInfo.InvariantCulture)],
+                        },
+                        Failure = VpnFailureKind.ConnectionLost,
+                    });
+
+                    break;
+                }
+
+                VpnStatusReason? requested = requestedRestartReason;
+                requestedRestartReason = null;
+
                 Publish(status with
                 {
                     State = VpnConnectionState.Reconnecting,
                     ConnectedSince = null,
-                    Message = state.Description ?? string.Empty,
+                    Message = requested is null
+                        ? state.Description ?? string.Empty
+                        : DescribeRequestedRestart(requested),
+                    Reason = requested,
                 });
+
+                // Before the tunnel first came up, the connect timeout already bounds the attempt.
+                // After it, a drop needs a bound of its own, or a tunnel that cannot get back
+                // reports that it is reconnecting for as long as the application lives.
+                int connectedSoFar = Volatile.Read(ref timesConnected);
+
+                if (restartsSinceConnected == 1
+                    && connectedSoFar > 0
+                    && request.ConnectTimeout is { } limit
+                    && limit > TimeSpan.Zero
+                    && session is { } current)
+                {
+                    CancellationToken token = current.Token;
+                    _ = Task.Run(() => AbandonIfNotBackAsync(limit, connectedSoFar, token), CancellationToken.None);
+                }
+
                 break;
 
             case "EXITING":
@@ -472,8 +648,11 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
             return;
         }
 
-        if (status.State is VpnConnectionState.Connected or VpnConnectionState.Disconnected
-            or VpnConnectionState.Failed)
+        // A tunnel that came up and has dropped since is bounded by the timer that drop started,
+        // and calling it one that never came up would be untrue.
+        if (Volatile.Read(ref timesConnected) > 0
+            || status.State is VpnConnectionState.Connected or VpnConnectionState.Disconnected
+                or VpnConnectionState.Failed or VpnConnectionState.Disconnecting)
         {
             return;
         }
@@ -495,6 +674,63 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
 
         await StopAbandonedAttemptAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// Gives up on a tunnel that dropped and has not come back in time.
+    /// </summary>
+    /// <param name="limit">How long it is given, which is the connect timeout.</param>
+    /// <param name="connectedBefore">
+    /// How many times the tunnel had come up when the drop began. A different count when the timer
+    /// runs out means it came back and this drop is over.
+    /// </param>
+    private async Task AbandonIfNotBackAsync(TimeSpan limit, int connectedBefore, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(limit, timeProvider, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (abandoned
+            || Volatile.Read(ref timesConnected) != connectedBefore
+            || status.State is VpnConnectionState.Connected or VpnConnectionState.Disconnected
+                or VpnConnectionState.Failed or VpnConnectionState.Disconnecting)
+        {
+            return;
+        }
+
+        abandoned = true;
+
+        Publish(status with
+        {
+            State = VpnConnectionState.Failed,
+            ConnectedSince = null,
+            Message = $"The tunnel dropped and did not come back within {limit.TotalSeconds:0} seconds.",
+            Reason = new VpnStatusReason
+            {
+                Code = VpnStatusReasonCode.ReconnectTimedOut,
+                Arguments = [$"{limit.TotalSeconds:0}"],
+            },
+            Failure = VpnFailureKind.ConnectionLost,
+        });
+
+        await StopAbandonedAttemptAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// The English wording of a restart this client asked for, for the log and the history.
+    /// </summary>
+    private static string DescribeRequestedRestart(VpnStatusReason reason) => reason.Code switch
+    {
+        VpnStatusReasonCode.TunnelRestartedAfterSleep =>
+            "The tunnel could not show that it survived the computer sleeping, so it is being restarted.",
+        VpnStatusReasonCode.TunnelUnresponsive =>
+            "The tunnel stopped carrying anything, so it is being restarted.",
+        _ => "The tunnel is being restarted.",
+    };
 
     /// <summary>
     /// Ends an attempt that cannot succeed.
@@ -579,11 +815,20 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
     /// The management interface has no command that reports pushed options, so the log stream is the
     /// only place they appear.
     /// </remarks>
-    private void ApplyPushedOptions(LogMessage log)
+    private void ApplyPushedOptions(ConnectionRequest request, LogMessage log)
     {
         if (PushReplyParser.Parse(log.Text) is not { } pushed)
         {
             return;
+        }
+
+        bool detectsDeadPeer = request.ConfigurationChecksPeer || pushed.ChecksPeer;
+
+        // Once per connection rather than once per push reply, which every restart brings again.
+        if (!detectsDeadPeer && !reportedMissingPeerCheck)
+        {
+            reportedMissingPeerCheck = true;
+            ConnectionSupervisorLog.NoPeerCheck(logger);
         }
 
         Publish(status with
@@ -593,6 +838,7 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
             Gateway = pushed.Gateway,
             ServerRequestedDefaultRoute = pushed.RedirectsDefaultRoute,
             ServerRequestedCompression = pushed.RequestsCompression,
+            DetectsDeadPeer = detectsDeadPeer,
         });
     }
 
@@ -760,6 +1006,10 @@ public sealed class ConnectionSupervisor : IAsyncDisposable
 /// process and reports that it is connecting for as long as the application lives.
 /// </param>
 /// <param name="Verbosity">What OpenVPN is asked to report, passed as --verb.</param>
+/// <param name="ConfigurationChecksPeer">
+/// True when the configuration itself sets <c>ping-restart</c>, <c>ping-exit</c> or
+/// <c>keepalive</c>, so OpenVPN notices a far end that stopped answering whatever the server pushes.
+/// </param>
 public sealed record ConnectionRequest(
     Guid ProfileId,
     string ConfigurationPath,
@@ -768,4 +1018,5 @@ public sealed record ConnectionRequest(
     IReadOnlyList<string> AdditionalOptions,
     string? LogPath = null,
     TimeSpan? ConnectTimeout = null,
-    int Verbosity = 3);
+    int Verbosity = 3,
+    bool ConfigurationChecksPeer = false);
