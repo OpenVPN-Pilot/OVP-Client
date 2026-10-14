@@ -93,6 +93,59 @@ public sealed class DiagnosticsBundleTests : IDisposable
         Assert.DoesNotContain("Server", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The extract of problems is the part someone reads first, so it keeps what went wrong, what
+    /// the client did about it and nothing else.
+    /// </summary>
+    [Fact]
+    public async Task ExtractProblems_KeepsWarningsErrorsSummariesAndWhatTheClientDid()
+    {
+        TemporaryPaths paths = new(root);
+        Directory.CreateDirectory(paths.LogDirectory);
+        ActiveStorage storage = ActiveStorage.Resolve(paths, StorageSelection.Local);
+        await using DatabaseAt database = await DatabaseAt.CreateAsync(storage.DatabasePath);
+
+        await File.WriteAllLinesAsync(Path.Combine(paths.LogDirectory, "2026-09-15.log"),
+        [
+            "2026-09-15 10:00:00.000 [INF] [Pilot] App: Started",
+            "2026-09-15 10:00:01.000 [INF] [OpenVpn] example-site: Initialization Sequence Completed",
+            "2026-09-15 10:05:00.000 [WRN] [Pilot] ConnectionSupervisor: The management connection closed while the tunnel was Connected.",
+            "2026-09-15 10:05:01.000 [ERR] [Pilot] SessionRecorder: The history could not be written.",
+            "System.IO.IOException: disk full",
+            "   at Somewhere()",
+            "2026-09-15 10:05:02.000 [INF] [OpenVpn] example-site: Repeated 4312 more times in 2 min, last at 10:07:02: TLS handshake failed",
+            "2026-09-15 10:06:00.000 [INF] [Pilot] ConnectionHealthMonitor: Checking 1 tunnel(s) because the computer woke.",
+            "2026-09-15 10:06:01.000 [INF] [Pilot] PingMonitor: An ordinary line",
+        ]);
+
+        DiagnosticsBundle bundle = new(paths, new ReadyEnvironmentProbe(), new FakeSettingsService(), database.Factory, TimeProvider.System, storage);
+
+        string text = await bundle.ExtractProblemsAsync(CancellationToken.None);
+
+        Assert.Contains("management connection closed", text, StringComparison.Ordinal);
+        Assert.Contains("disk full", text, StringComparison.Ordinal);
+        Assert.Contains("at Somewhere()", text, StringComparison.Ordinal);
+        Assert.Contains("Repeated 4312 more times", text, StringComparison.Ordinal);
+        Assert.Contains("Checking 1 tunnel(s)", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Started", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Initialization Sequence Completed", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("An ordinary line", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DescribeConnections_WithoutHistory_SaysSo()
+    {
+        TemporaryPaths paths = new(root);
+        ActiveStorage storage = ActiveStorage.Resolve(paths, StorageSelection.Local);
+        await using DatabaseAt database = await DatabaseAt.CreateAsync(storage.DatabasePath);
+        DiagnosticsBundle bundle = new(paths, new ReadyEnvironmentProbe(), new FakeSettingsService(), database.Factory, TimeProvider.System, storage);
+
+        string text = await bundle.DescribeConnectionsAsync(CancellationToken.None);
+
+        Assert.Contains("Last wake: none", text, StringComparison.Ordinal);
+        Assert.Contains("  none", text, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         try

@@ -43,8 +43,31 @@ public sealed class DiagnosticsBundle
     private readonly TimeProvider timeProvider;
     private readonly IActiveStorage storage;
     private readonly IServerApi? serverApi;
+    private readonly IWakeMonitor? wake;
+
+    /// <summary>
+    /// How many lines the extract of problems keeps, the most recent ones.
+    /// </summary>
+    internal const int MaximumProblemLines = 3000;
+
+    /// <summary>
+    /// How many sessions the history extract lists, the most recent ones.
+    /// </summary>
+    private const int HistoryRows = 100;
+
+    /// <summary>
+    /// The components whose ordinary lines belong with the problems, because they say what the
+    /// client did about one: a check after waking, a restart, a retry.
+    /// </summary>
+    private static readonly string[] ProblemScopes =
+    [
+        nameof(ConnectionHealthMonitor),
+        nameof(SleepWakeMonitor),
+        nameof(ReconnectSupervisor),
+    ];
 
     /// <param name="serverApi">The connection to the server in Server mode, or null on the local library.</param>
+    /// <param name="wake">What is known about the last sleep, or null where nothing watches for one.</param>
     public DiagnosticsBundle(
         IApplicationPaths paths,
         IOpenVpnEnvironmentProbe probe,
@@ -52,7 +75,8 @@ public sealed class DiagnosticsBundle
         IDbContextFactory<PilotDbContext> contextFactory,
         TimeProvider timeProvider,
         IActiveStorage storage,
-        IServerApi? serverApi = null)
+        IServerApi? serverApi = null,
+        IWakeMonitor? wake = null)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(probe);
@@ -68,6 +92,7 @@ public sealed class DiagnosticsBundle
         this.timeProvider = timeProvider;
         this.storage = storage;
         this.serverApi = serverApi;
+        this.wake = wake;
     }
 
     /// <summary>
@@ -100,6 +125,12 @@ public sealed class DiagnosticsBundle
         entries++;
 
         await WriteEntryAsync(archive, "storage.txt", await DescribeStorageAsync(cancellationToken), cancellationToken);
+        entries++;
+
+        await WriteEntryAsync(archive, "connections.txt", await DescribeConnectionsAsync(cancellationToken), cancellationToken);
+        entries++;
+
+        await WriteEntryAsync(archive, "problems.log", await ExtractProblemsAsync(cancellationToken), cancellationToken);
         entries++;
 
         entries += await CopyLogsAsync(archive, cancellationToken);
@@ -293,6 +324,159 @@ public sealed class DiagnosticsBundle
         builder.Append(CultureInfo.InvariantCulture, $"{name}: {value}");
         builder.AppendLine();
     }
+
+    /// <summary>
+    /// The recent connection history and the last sleep, as a table a person reads top to bottom.
+    /// </summary>
+    /// <remarks>
+    /// The history says when each tunnel came up, when it ended and why, which is the outline the
+    /// log is the detail of. It is read from the database rather than from the logs, so it survives
+    /// a log that was full that day.
+    /// </remarks>
+    internal async Task<string> DescribeConnectionsAsync(CancellationToken cancellationToken)
+    {
+        StringBuilder builder = new();
+
+        if (wake?.LastWake is { } lastWake)
+        {
+            Line(
+                builder,
+                "Last wake",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{lastWake.ResumedAt:O}, asleep since {lastWake.SuspendedAt?.ToString("O", CultureInfo.InvariantCulture) ?? "unknown"}, noticed by {lastWake.Source}"));
+        }
+        else
+        {
+            Line(builder, "Last wake", "none since the application started");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("Most recent sessions, newest first");
+
+        await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var sessions = await context.Sessions
+            .AsNoTracking()
+            .OrderByDescending(session => session.StartedAt)
+            .Take(HistoryRows)
+            .Select(session => new
+            {
+                session.StartedAt,
+                session.EndedAt,
+                Profile = session.Profile!.Name,
+                session.ServerAddress,
+                session.ServerPort,
+                session.EndReason,
+                session.EndDetail,
+                session.BytesReceived,
+                session.BytesSent,
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var session in sessions)
+        {
+            string duration = session.EndedAt is { } ended
+                ? LogRepetitionFilter.Describe(ended - session.StartedAt)
+                : "running";
+
+            builder.Append(CultureInfo.InvariantCulture,
+                $"  {session.StartedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}  {duration,-14} {session.EndReason,-20} {session.Profile} ({session.ServerAddress}:{session.ServerPort}), {session.BytesReceived} in, {session.BytesSent} out");
+
+            if (!string.IsNullOrWhiteSpace(session.EndDetail))
+            {
+                builder.Append(CultureInfo.InvariantCulture, $": {session.EndDetail}");
+            }
+
+            builder.AppendLine();
+        }
+
+        if (sessions.Count == 0)
+        {
+            builder.AppendLine("  none");
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// Every warning and error in the logs, the repetition summaries, and what the client did about
+    /// a dropped tunnel, in order and without the rest.
+    /// </summary>
+    /// <remarks>
+    /// The whole log is in the bundle too, but it is the long version. This is the one that can be
+    /// read in a minute or pasted into a message: everything that went wrong, and nothing that went
+    /// right, bounded to the most recent lines. A line without a timestamp of its own continues the
+    /// entry above it, such as a stack trace, and goes wherever that entry goes.
+    /// </remarks>
+    internal async Task<string> ExtractProblemsAsync(CancellationToken cancellationToken)
+    {
+        Queue<string> kept = new();
+
+        if (!Directory.Exists(paths.LogDirectory))
+        {
+            return string.Empty;
+        }
+
+        foreach (string path in Directory.EnumerateFiles(paths.LogDirectory, "*.log")
+            .Where(path => !string.Equals(Path.GetFileName(path), "failure.log", StringComparison.OrdinalIgnoreCase))
+            .Order(StringComparer.Ordinal))
+        {
+            try
+            {
+                await using FileStream source = new(
+                    path,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
+                using StreamReader reader = new(source, Encoding.UTF8);
+
+                bool keeping = false;
+
+                while (await reader.ReadLineAsync(cancellationToken) is { } line)
+                {
+                    keeping = StartsEntry(line) ? IsProblem(line) : keeping;
+
+                    if (!keeping)
+                    {
+                        continue;
+                    }
+
+                    kept.Enqueue(line);
+
+                    if (kept.Count > MaximumProblemLines)
+                    {
+                        kept.Dequeue();
+                    }
+                }
+            }
+            catch (IOException)
+            {
+                // One unreadable log must not cost the user the rest of the extract.
+            }
+        }
+
+        return kept.Count == 0
+            ? "No warnings or errors were logged." + Environment.NewLine
+            : string.Join(Environment.NewLine, kept) + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// True when a line begins an entry, which is a line that starts with its timestamp.
+    /// </summary>
+    private static bool StartsEntry(string line) =>
+        line.Length > 23
+        && char.IsAsciiDigit(line[0])
+        && line[4] == '-'
+        && line[10] == ' '
+        && line[13] == ':';
+
+    private static bool IsProblem(string line) =>
+        line.Contains(" [WRN] ", StringComparison.Ordinal)
+        || line.Contains(" [ERR] ", StringComparison.Ordinal)
+        || line.Contains(" [FTL] ", StringComparison.Ordinal)
+        || line.Contains(": Repeated ", StringComparison.Ordinal)
+        || ProblemScopes.Any(scope => line.Contains("] " + scope + ": ", StringComparison.Ordinal));
 
     private async Task<int> CopyLogsAsync(ZipArchive archive, CancellationToken cancellationToken)
     {
