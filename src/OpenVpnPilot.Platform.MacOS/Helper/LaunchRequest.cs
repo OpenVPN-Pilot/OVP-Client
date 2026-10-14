@@ -18,7 +18,9 @@ internal static class LaunchRequest
     /// </summary>
     internal static string? InstalledName(string fullPath)
     {
-        string directory = HelperInstallation.ConfigurationsDirectory + Path.DirectorySeparatorChar;
+        // The macOS separator rather than the host's, because the directory is a macOS path whatever
+        // system this decision is tested on.
+        string directory = HelperInstallation.ConfigurationsDirectory + '/';
 
         if (!fullPath.StartsWith(directory, StringComparison.Ordinal))
         {
@@ -27,7 +29,7 @@ internal static class LaunchRequest
 
         string name = fullPath[directory.Length..];
 
-        return name.Length > 0 && !name.Contains(Path.DirectorySeparatorChar, StringComparison.Ordinal)
+        return name.Length > 0 && !name.Contains('/', StringComparison.Ordinal)
             ? name
             : null;
     }
