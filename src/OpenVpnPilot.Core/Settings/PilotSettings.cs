@@ -614,6 +614,17 @@ public sealed class AdvancedSettings
     public int LogMaximumMegabytes { get; set; } = 1024;
 
     /// <summary>
+    /// How large one day's log file may grow before only warnings and errors are written to it, in
+    /// megabytes. Zero sets no limit.
+    /// </summary>
+    /// <remarks>
+    /// Repetitions are already collapsed into a count, so an ordinary day writes a fraction of this.
+    /// It is the bound for the day that is not ordinary: past it the file keeps what someone opening
+    /// it is looking for, and past a quarter more it stops, so no day outgrows what opens it.
+    /// </remarks>
+    public int LogDailyMegabytes { get; set; } = 10;
+
+    /// <summary>
     /// Keep the database, logs and settings beside the executable instead of under the user profile.
     /// </summary>
     public bool PortableMode { get; set; }

@@ -47,6 +47,7 @@ public sealed class LogSettingsApplier : IDisposable
         levelSwitch.MinimumLevel = AppHost.ParseLevel(current.Advanced.LogLevel);
         hub.RetentionDays = Math.Clamp(current.Advanced.LogRetentionDays, 0, 365);
         hub.MaximumTotalBytes = Math.Clamp(current.Advanced.LogMaximumMegabytes, 0, 100_000) * 1024L * 1024L;
+        hub.DailyLimitBytes = Math.Clamp(current.Advanced.LogDailyMegabytes, 0, 10_000) * 1024L * 1024L;
     }
 
     public void Dispose()

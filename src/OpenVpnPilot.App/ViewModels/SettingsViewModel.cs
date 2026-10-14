@@ -292,6 +292,12 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
     public partial int LogMaximumMegabytes { get; set; }
 
     /// <summary>
+    /// How large one day's log file may grow before only warnings and errors are written to it.
+    /// </summary>
+    [ObservableProperty]
+    public partial int LogDailyMegabytes { get; set; }
+
+    /// <summary>
     /// Ask GitHub for a newer release when the application starts.
     /// </summary>
     [ObservableProperty]
@@ -444,6 +450,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         LogLevel = draft.Advanced.LogLevel;
         LogRetentionDays = draft.Advanced.LogRetentionDays;
         LogMaximumMegabytes = draft.Advanced.LogMaximumMegabytes;
+        LogDailyMegabytes = draft.Advanced.LogDailyMegabytes;
         CheckForUpdates = draft.Advanced.CheckForUpdates;
         UpdateRepository = draft.Advanced.UpdateRepository ?? string.Empty;
     }
@@ -493,6 +500,7 @@ public sealed partial class SettingsViewModel : ViewModelBase, IDisposable
         draft.Advanced.LogLevel = LogLevel;
         draft.Advanced.LogRetentionDays = Math.Clamp(LogRetentionDays, 0, 365);
         draft.Advanced.LogMaximumMegabytes = Math.Clamp(LogMaximumMegabytes, 0, 100_000);
+        draft.Advanced.LogDailyMegabytes = Math.Clamp(LogDailyMegabytes, 0, 10_000);
         draft.Advanced.CheckForUpdates = CheckForUpdates;
         draft.Advanced.UpdateRepository =
             string.IsNullOrWhiteSpace(UpdateRepository) ? null : UpdateRepository.Trim();

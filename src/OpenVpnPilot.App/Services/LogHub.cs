@@ -16,15 +16,16 @@ namespace OpenVpnPilot.App.Services;
 /// that failed left nothing behind to look at.
 ///
 /// Both are kept here in a bounded ring, so the window can show them live, and both are written to
-/// one file per hour, so they can be looked at afterwards and in the order they actually happened.
+/// one file per day, so they can be looked at afterwards and in the order they actually happened.
 /// Two files would put the answer in one and the question in the other.
 ///
-/// One file per hour rather than per day, and a limit on the whole directory as well as on its age.
-/// A tunnel that repeats the same complaint for every packet, or a verbosity turned up and forgotten,
-/// wrote daily files of more than a gigabyte, and a week of those is a disk. An hour of it is a file
-/// that still opens, and the limit removes the oldest files before the directory outgrows it. An hour
-/// that writes more than a share of the limit continues in a second file, so the limit holds even
-/// while the file being written is the large one.
+/// What made the files unreadable was never their period but their content: a tunnel restarting as
+/// fast as it could wrote the same few lines thousands of times, and daily files passed a gigabyte.
+/// Hourly files only cut that into smaller pieces of the same repetition. Two things hold it now.
+/// A line that keeps coming back is collapsed into a count by <see cref="LogRepetitionFilter"/>, so
+/// a loop leaves a screenful and a summary instead of itself. And a day has a limit of its own:
+/// past it only warnings and errors are written, and past a quarter more nothing at all, each
+/// announced by a line in the file, so a day can never again outgrow anything that opens it.
 ///
 /// Writing happens on a single background reader rather than on whichever thread logged. A log
 /// statement must never be the thing that blocks a connection, and the OpenVPN lines arrive on the
@@ -41,7 +42,14 @@ public sealed class LogHub : IAsyncDisposable
     /// </remarks>
     private const int Capacity = 5000;
 
+    /// <summary>
+    /// How often repetitions that have stopped are written as their summary.
+    /// </summary>
+    private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(10);
+
     private readonly string directory;
+    private readonly TimeProvider timeProvider;
+    private readonly LogRepetitionFilter repetitions = new();
     private readonly ConcurrentQueue<LogEntry> recent = new();
 
     private readonly Channel<LogEntry> pending =
@@ -49,31 +57,25 @@ public sealed class LogHub : IAsyncDisposable
 
     private readonly CancellationTokenSource lifetime = new();
     private readonly Task writer;
+    private readonly ITimer flushTimer;
 
-    /// <summary>
-    /// The smallest a file is allowed to grow to before the hour continues in another one.
-    /// </summary>
-    private const long MinimumPartBytes = 1024 * 1024;
-
-    /// <summary>
-    /// How large a file may grow when the directory has no limit.
-    /// </summary>
-    private const long UnlimitedPartBytes = 256 * 1024 * 1024;
-
-    private LogFileName openFor;
+    private DateOnly openDay;
     private string? openPath;
     private long openBytes;
+    private DayRestriction restriction;
     private StreamWriter? file;
     private bool disposed;
 
-    public LogHub(string directory)
+    public LogHub(string directory, TimeProvider? timeProvider = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
 
         this.directory = directory;
+        this.timeProvider = timeProvider ?? TimeProvider.System;
         Directory.CreateDirectory(directory);
 
         writer = Task.Run(() => WriteAsync(lifetime.Token), CancellationToken.None);
+        flushTimer = this.timeProvider.CreateTimer(_ => FlushRepetitions(), null, FlushInterval, FlushInterval);
     }
 
     /// <summary>
@@ -101,6 +103,12 @@ public sealed class LogHub : IAsyncDisposable
     public long MaximumTotalBytes { get; set; } = 1024L * 1024 * 1024;
 
     /// <summary>
+    /// How large one day's file may grow before only warnings and errors are written to it. Zero
+    /// sets no limit.
+    /// </summary>
+    public long DailyLimitBytes { get; set; } = 10L * 1024 * 1024;
+
+    /// <summary>
     /// The entries still in the ring, oldest first.
     /// </summary>
     public IReadOnlyList<LogEntry> Snapshot() => [.. recent];
@@ -114,15 +122,10 @@ public sealed class LogHub : IAsyncDisposable
             return;
         }
 
-        recent.Enqueue(entry);
-
-        while (recent.Count > Capacity && recent.TryDequeue(out _))
+        foreach (LogEntry kept in repetitions.Admit(entry))
         {
-            // Bounded on purpose: a client left running for a week must not grow until it is closed.
+            Keep(kept);
         }
-
-        pending.Writer.TryWrite(entry);
-        Appended?.Invoke(this, entry);
     }
 
     /// <summary>
@@ -139,6 +142,32 @@ public sealed class LogHub : IAsyncDisposable
         catch (DirectoryNotFoundException)
         {
             return [];
+        }
+    }
+
+    private void Keep(LogEntry entry)
+    {
+        recent.Enqueue(entry);
+
+        while (recent.Count > Capacity && recent.TryDequeue(out _))
+        {
+            // Bounded on purpose: a client left running for a week must not grow until it is closed.
+        }
+
+        pending.Writer.TryWrite(entry);
+        Appended?.Invoke(this, entry);
+    }
+
+    private void FlushRepetitions()
+    {
+        if (disposed)
+        {
+            return;
+        }
+
+        foreach (LogEntry summary in repetitions.Flush(timeProvider.GetUtcNow()))
+        {
+            Keep(summary);
         }
     }
 
@@ -167,21 +196,21 @@ public sealed class LogHub : IAsyncDisposable
     {
         try
         {
-            DateTime local = entry.Timestamp.LocalDateTime;
-            DateTime hour = new(local.Year, local.Month, local.Day, local.Hour, 0, 0, DateTimeKind.Unspecified);
+            DateOnly day = DateOnly.FromDateTime(entry.Timestamp.LocalDateTime);
 
-            if (file is null || hour != openFor.Hour)
+            if (file is null || day != openDay)
             {
-                Roll(new LogFileName(hour, 1));
-            }
-            else if (openBytes >= PartBytes)
-            {
-                Roll(openFor with { Part = openFor.Part + 1 });
+                Open(day);
             }
 
-            string line = entry.ToFileLine();
-            file?.WriteLine(line);
-            openBytes += Encoding.UTF8.GetByteCount(line) + Environment.NewLine.Length;
+            if (restriction == DayRestriction.Stopped
+                || (restriction == DayRestriction.WarningsOnly && entry.Level < LogEntryLevel.Warning))
+            {
+                return;
+            }
+
+            WriteLine(entry.ToFileLine());
+            ApplyDailyLimit(entry.Timestamp);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -192,27 +221,61 @@ public sealed class LogHub : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// How large one file may grow before the hour continues in the next.
-    /// </summary>
-    /// <remarks>
-    /// A twentieth of the limit, so the directory can be brought back under it by removing whole
-    /// files while the one being written is left alone.
-    /// </remarks>
-    private long PartBytes => MaximumTotalBytes > 0
-        ? Math.Max(MinimumPartBytes, MaximumTotalBytes / 20)
-        : UnlimitedPartBytes;
+    private void WriteLine(string line)
+    {
+        file?.WriteLine(line);
+        openBytes += Encoding.UTF8.GetByteCount(line) + Environment.NewLine.Length;
+    }
 
     /// <summary>
-    /// Opens the file for one hour, or the next part of it, closing the previous one and clearing
-    /// out what has expired.
+    /// Narrows what the day's file accepts once it has grown past its limit, and says so in it.
     /// </summary>
     /// <remarks>
-    /// A client left running across the hour rolls here rather than continuing to write the previous
-    /// hour's file. A part that already exists, from a copy that ran earlier in the same hour, is
-    /// appended to until it is full rather than started again.
+    /// Warnings and errors are kept past the first limit because they are what someone opening the
+    /// file is looking for, and they are rare unless something is wrong. Something wrong enough to
+    /// fill another quarter of the limit with them is said once more and then the day is closed.
+    /// The window is not affected; it shows everything either way.
     /// </remarks>
-    private void Roll(LogFileName name)
+    private void ApplyDailyLimit(DateTimeOffset when)
+    {
+        if (DailyLimitBytes <= 0)
+        {
+            return;
+        }
+
+        if (restriction == DayRestriction.None && openBytes >= DailyLimitBytes)
+        {
+            restriction = DayRestriction.WarningsOnly;
+            WriteLine(Notice(when, string.Create(
+                CultureInfo.InvariantCulture,
+                $"Today's log reached its limit of {Megabytes(DailyLimitBytes)} MB. From here on only warnings and errors are written to this file; the log window still shows everything.")));
+        }
+        else if (restriction == DayRestriction.WarningsOnly && openBytes >= HardLimitBytes)
+        {
+            restriction = DayRestriction.Stopped;
+            WriteLine(Notice(when, string.Create(
+                CultureInfo.InvariantCulture,
+                $"Today's log reached {Megabytes(HardLimitBytes)} MB with warnings and errors alone. Nothing more is written to this file today; the log window still shows everything.")));
+        }
+    }
+
+    private long HardLimitBytes => DailyLimitBytes + (DailyLimitBytes / 4);
+
+    private static string Megabytes(long bytes) =>
+        (bytes / (1024d * 1024d)).ToString("0.#", CultureInfo.InvariantCulture);
+
+    private static string Notice(DateTimeOffset when, string text) =>
+        new LogEntry(when, LogSource.Pilot, LogEntryLevel.Warning, nameof(LogHub), text).ToFileLine();
+
+    /// <summary>
+    /// Opens the file for one day, closing the previous one and clearing out what has expired.
+    /// </summary>
+    /// <remarks>
+    /// A client left running across midnight rolls here rather than continuing to write the
+    /// previous day's file. A file that already exists, from a copy that ran earlier the same day,
+    /// is appended to, and how full it already is decides what it still accepts.
+    /// </remarks>
+    private void Open(DateOnly day)
     {
         file?.Flush();
         file?.Dispose();
@@ -220,22 +283,22 @@ public sealed class LogHub : IAsyncDisposable
 
         System.IO.Directory.CreateDirectory(directory);
 
+        LogFileName name = LogFileName.ForDay(day);
         string path = Path.Combine(directory, name.ToFileName());
-
-        while (File.Exists(path) && new FileInfo(path).Length >= PartBytes)
-        {
-            name = name with { Part = name.Part + 1 };
-            path = Path.Combine(directory, name.ToFileName());
-        }
 
         // Cleared out before the new file is opened rather than after, so the directory is never
         // briefly holding both the new file and the ones that should already be gone.
-        RemoveExpired(DateOnly.FromDateTime(name.Hour), path);
+        RemoveExpired(day, path);
 
         file = new StreamWriter(path, append: true, new UTF8Encoding(false)) { AutoFlush = true };
-        openFor = name;
+        openDay = day;
         openPath = path;
         openBytes = new FileInfo(path).Length;
+
+        restriction = DailyLimitBytes <= 0 ? DayRestriction.None
+            : openBytes >= HardLimitBytes ? DayRestriction.Stopped
+            : openBytes >= DailyLimitBytes ? DayRestriction.WarningsOnly
+            : DayRestriction.None;
     }
 
     /// <summary>
@@ -267,7 +330,7 @@ public sealed class LogHub : IAsyncDisposable
 
             foreach ((string path, LogFileName name, _) in ours.ToList())
             {
-                if (DateOnly.FromDateTime(name.Hour) < oldest && TryDelete(path))
+                if (DateOnly.FromDateTime(name.Start) < oldest && TryDelete(path))
                 {
                     ours.RemoveAll(item => item.Path == path);
                 }
@@ -335,6 +398,15 @@ public sealed class LogHub : IAsyncDisposable
             return;
         }
 
+        await flushTimer.DisposeAsync();
+
+        // A repetition still being counted is written as its summary, or the last thing a loop did
+        // before the application closed would be missing from the record.
+        foreach (LogEntry summary in repetitions.Flush(timeProvider.GetUtcNow(), everything: true))
+        {
+            Keep(summary);
+        }
+
         disposed = true;
         pending.Writer.TryComplete();
 
@@ -350,27 +422,41 @@ public sealed class LogHub : IAsyncDisposable
         await lifetime.CancelAsync();
         lifetime.Dispose();
     }
+
+    /// <summary>
+    /// How much of what arrives the day's file still accepts.
+    /// </summary>
+    private enum DayRestriction
+    {
+        None,
+        WarningsOnly,
+        Stopped,
+    }
 }
 
 /// <summary>
-/// The name of one log file: the hour it covers, and which part of that hour it is.
+/// The name of one log file: when it starts, whether it covers a day or an hour, and which part.
 /// </summary>
 /// <remarks>
-/// Written as <c>2026-09-15_14.log</c>, with <c>_2</c> and onwards before the extension for the
-/// parts after the first, so the name says when without opening the file. A name of the form
-/// <c>2026-09-15.log</c> is a whole day written by an earlier version, and is read as its first hour
-/// so that retention and the limit apply to it in the same order.
+/// Written as <c>2026-09-15.log</c>, one file per day, so the name says when without opening the
+/// file. Earlier versions wrote one file per hour, <c>2026-09-15_14.log</c>, with <c>_2</c> and
+/// onwards before the extension for the parts after the first. Those are still read, so retention
+/// and the limit apply to them in the same order until they have expired.
 /// </remarks>
-internal readonly record struct LogFileName(DateTime Hour, int Part) : IComparable<LogFileName>
+internal readonly record struct LogFileName(DateTime Start, int Part, bool Daily) : IComparable<LogFileName>
 {
-    public string ToFileName() => Part <= 1
-        ? Hour.ToString("yyyy-MM-dd_HH", CultureInfo.InvariantCulture) + ".log"
-        : string.Create(CultureInfo.InvariantCulture, $"{Hour:yyyy-MM-dd_HH}_{Part}.log");
+    public static LogFileName ForDay(DateOnly day) => new(day.ToDateTime(TimeOnly.MinValue), 1, true);
+
+    public string ToFileName() => Daily
+        ? Start.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".log"
+        : Part <= 1
+            ? Start.ToString("yyyy-MM-dd_HH", CultureInfo.InvariantCulture) + ".log"
+            : string.Create(CultureInfo.InvariantCulture, $"{Start:yyyy-MM-dd_HH}_{Part}.log");
 
     public int CompareTo(LogFileName other)
     {
-        int byHour = Hour.CompareTo(other.Hour);
-        return byHour != 0 ? byHour : Part.CompareTo(other.Part);
+        int byStart = Start.CompareTo(other.Start);
+        return byStart != 0 ? byStart : Part.CompareTo(other.Part);
     }
 
     public static bool TryParse(string fileName, out LogFileName name)
@@ -392,7 +478,7 @@ internal readonly record struct LogFileName(DateTime Hour, int Part) : IComparab
 
         if (pieces.Length == 1)
         {
-            name = new LogFileName(day, 1);
+            name = new LogFileName(day, 1, true);
             return true;
         }
 
@@ -414,7 +500,7 @@ internal readonly record struct LogFileName(DateTime Hour, int Part) : IComparab
             return false;
         }
 
-        name = new LogFileName(day.AddHours(hour), part);
+        name = new LogFileName(day.AddHours(hour), part, false);
         return true;
     }
 }
