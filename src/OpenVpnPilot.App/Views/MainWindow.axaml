@@ -618,6 +618,14 @@
 
             <Border CornerRadius="7" Padding="12,10"
                     Background="{DynamicResource StatePendingSoft}"
+                    IsVisible="{Binding SelectedProfile.LacksPeerCheck}">
+              <TextBlock TextWrapping="Wrap" FontSize="12"
+                         Foreground="{DynamicResource StatePending}"
+                         Text="{loc:Translate profile.noPeerCheck}" />
+            </Border>
+
+            <Border CornerRadius="7" Padding="12,10"
+                    Background="{DynamicResource StatePendingSoft}"
                     IsVisible="{Binding SelectedProfile.HasUnsupportedOptions}">
               <TextBlock TextWrapping="Wrap" FontSize="12"
                          Foreground="{DynamicResource StatePending}"

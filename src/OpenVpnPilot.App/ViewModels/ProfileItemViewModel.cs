@@ -144,6 +144,7 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(HasPushedOptions))]
     [NotifyPropertyChangedFor(nameof(HasRefusedDefaultRoute))]
     [NotifyPropertyChangedFor(nameof(HasRefusedCompression))]
+    [NotifyPropertyChangedFor(nameof(LacksPeerCheck))]
     public partial VpnConnectionStatus Status { get; set; } = VpnConnectionStatus.Disconnected;
 
     public bool IsConnected => Status.State == VpnConnectionState.Connected;
@@ -249,6 +250,16 @@ public sealed partial class ProfileItemViewModel : ViewModelBase
     /// and nothing else in the interface would reveal which option it was.
     /// </remarks>
     public bool HasRefusedCompression => Status.ServerRequestedCompression;
+
+    /// <summary>
+    /// True while connected through a tunnel whose far end OpenVPN itself never gives up on.
+    /// </summary>
+    /// <remarks>
+    /// Such a tunnel looks exactly like a working one after the far end has gone, which is what a
+    /// laptop woken after hours showed. The client checks it itself, and says so here, because the
+    /// remedy, a keepalive, is on the server and only someone who knows can ask for it.
+    /// </remarks>
+    public bool LacksPeerCheck => IsConnected && Status.DetectsDeadPeer == false;
 
     public string AuthenticationDisplay => RequiresCredentials
         ? localizer["profile.authPassword"]
