@@ -10,6 +10,50 @@ version heading when one is tagged. A release tag is `v<version>`, for example `
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-14
+
+### Added
+
+- **Tunnels are checked when the computer wakes.** A wake is noticed from the operating system, on
+  Windows through the power manager and on macOS through the workspace notifications, and from the
+  clock jumping where the system says nothing. Every connected tunnel then has fifteen seconds to show
+  a sign of life, something arriving through it or its tunnel gateway answering a round trip. One that
+  slept for more than a minute and cannot is restarted with OpenVPN's own soft restart, which keeps the
+  process and its credentials.
+- **Tunnels are checked while they run and when the network changes.** A tunnel whose gateway answered
+  round trips before, answers no longer, and through which nothing has arrived for half a minute is
+  restarted, at most once every two minutes.
+- **A profile says when OpenVPN will not notice a silent far end**, because neither the profile nor the
+  server sets `keepalive`, `ping-restart` or `ping-exit`. Such a tunnel is the one that used to stay
+  connected after a sleep.
+- **Repeated log lines are collapsed.** A line that keeps coming back is written five times and then
+  counted, and one line says how often it repeated and for how long, for example `Repeated 4312 more
+  times in 2 min 14 s`. Lines that differ only in their numbers count as the same line.
+- **The diagnostics bundle carries `problems.log`**, every warning and error with the repetition
+  summaries and what the client did about a dropped tunnel, and **`connections.txt`**, the last sleep
+  and the most recent sessions with how each ended.
+- A lab server can run without keepalive, through `LAB_KEEPALIVE`, to try the case above.
+
+### Changed
+
+- **The log is one file per day, with a limit per day**, ten megabytes by default and set under
+  **Settings, Advanced**. Past it only warnings and errors are added to the day's file, and a quarter
+  beyond it nothing; the log window still shows everything.
+- **OpenVPN restarting by itself is bounded.** Five restarts without the tunnel coming back, or a
+  dropped tunnel not back within the connection timeout, end the attempt and hand it to the automatic
+  reconnect, whose attempts are spaced and counted. A tunnel no longer restarts as fast as it can for
+  hours, which is what filled a day's log with fifty megabytes of the same lines.
+- **A session in the history ends when OpenVPN starts reconnecting**, and the tunnel coming back is a
+  session of its own that records only what it carried. A session found dead just after a sleep ends
+  when the computer went to sleep rather than when somebody noticed.
+
+### Fixed
+
+- A tunnel whose OpenVPN process ended without a word, killed, crashed or ended by whatever started
+  it, went on showing as connected for as long as the application ran. It is now reported as lost at
+  once and the automatic reconnect takes over.
+- Nothing a connection's supervisor logged reached the log, because it was created without a logger.
+
 ## [2.2.1] - 2026-10-13
 
 ### Added
