@@ -261,6 +261,15 @@ the model.
 - The status that reports the end of a connection carries no byte counters, because nothing is
   flowing any more. Anything that records what a session transferred has to keep the last values it
   saw while the tunnel was up.
+- **The byte counters run on across a soft restart.** Measured against lab server one with OpenVPN
+  2.7.7: `signal SIGUSR1` took the tunnel through `RECONNECTING` and back to `CONNECTED` in the same
+  process, and `>BYTECOUNT` went on from 3187 to 5871 rather than starting again from zero. A session
+  that begins at such a reconnect therefore records the difference from where the previous one ended,
+  which `SessionRecorder` does; only a new process counts from zero.
+- **A process that is killed says nothing on the management interface.** OpenVPN announces `EXITING`
+  before it ends on a signal or on its own; ended with `taskkill /F`, the socket simply closes.
+  Measured against lab server one: `ConnectionSupervisor` reports the tunnel lost 625 ms after the
+  kill. Before it treated the closed channel as such, the profile showed as connected for good.
 - **The far end of the tunnel is not always in the push reply, and the second value of `ifconfig`
   is only sometimes the peer.** Under `topology net30` the reply carries `ifconfig <local> <peer>`
   and the peer is the address a round trip should measure. Under `topology subnet` the same option

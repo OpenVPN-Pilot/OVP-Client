@@ -135,6 +135,47 @@ command is, which is why a short run from a terminal is the way to look at it.
 
 ![The connection settings: route protection, reconnect attempts and timeouts](../assets/screenshots/settings.png)
 
+## When a tunnel drops, and when the computer sleeps
+
+A tunnel is shown as connected only while OpenVPN says so, and OpenVPN can only say what it notices.
+With `keepalive`, `ping-restart` or `ping-exit` set by the profile or pushed by the server, it gives up
+on a far end that went silent after a minute or two and reconnects by itself. Without them it never
+does: a tunnel whose server stopped hearing from it, as every tunnel's does while a laptop sleeps,
+stays connected as far as OpenVPN is concerned for as long as the process runs. The profile then says
+so in a note beside its details, and the client checks that tunnel itself.
+
+- **After the computer wakes**, every connected tunnel is checked. The client measures a round trip
+  and watches whether anything arrives through the tunnel. A tunnel that slept for more than a minute
+  and shows no sign of life within fifteen seconds is restarted with OpenVPN's own soft restart, which
+  keeps the process and its credentials and only makes the connection to the server again. A shorter
+  pause restarts a tunnel only when it shows it is dead. A wake is noticed from the operating system
+  and, as well, from the clock jumping, so it is noticed even where the system does not say.
+- **After the network changes**, and **while a tunnel runs**, a tunnel is restarted only when it shows
+  it is dead: its tunnel gateway answered round trips before, answers no longer, and nothing has
+  arrived for half a minute. A tunnel whose server does not answer round trips cannot show that, and
+  is left to OpenVPN rather than restarted on a guess.
+- **A process that ends without a word**, killed, crashed or ended by whatever started it, is reported
+  as a lost connection at once, and the automatic reconnect takes over.
+- **OpenVPN restarting by itself** is allowed five restarts without the tunnel coming back, and as long
+  as the connection timeout, before the attempt is ended and handed to the automatic reconnect, whose
+  attempts are spaced and counted. A tunnel never loops as fast as it can for hours.
+
+The history records a session as the time a tunnel carried traffic. A reconnect ends one session and
+the tunnel coming back begins the next, and a session found dead just after a sleep is recorded as
+ending when the computer went to sleep, not hours later when somebody noticed.
+
+## Reading the log
+
+The log is one file per day in the log directory, with the application's own lines and OpenVPN's
+together in the order they happened, and the log window shows the same live. A line that keeps
+coming back is written five times and then counted: once it stops, or every ten minutes while it goes
+on, a single line says how often it repeated and for how long, such as `Repeated 4312 more times in
+2 min 14 s, last at 14:03:22: TLS Error: TLS handshake failed`. Lines that differ only in their
+numbers count as the same line. A day's file has a limit, ten megabytes by default: past it only
+warnings and errors are added, a quarter beyond it nothing, and the file says where each began. See
+[settings](settings.md#the-keys) for the limits and the [diagnostics bundle](settings.md#the-settings-screen)
+for the short version to send on.
+
 ## Looking for a newer release
 
 The application can ask GitHub whether a newer release exists. Apart from a server you chose to keep

@@ -15,7 +15,7 @@ Everything a person can configure is one JSON file, and the settings screen is a
 | Credentials | Using stored credentials, ticking remember by default, how many are stored, and forgetting them |
 | Storage | Where the profiles live, and with a server its status, **Sync now**, **Sign out**, **Sign in** and how often it is asked for changes, see [server](server.md) |
 | Profiles | Import and export, and reloading the list after the store was changed from somewhere else, such as `ovp` |
-| Advanced | The OpenVPN verbosity, the log level, how long and how large the logs may grow, the check for a newer release, clearing the connection history, and writing a diagnostics bundle |
+| Advanced | The OpenVPN verbosity, the log level, how long and how large the logs may grow, how large one day's log may grow, the check for a newer release, clearing the connection history, and writing a diagnostics bundle |
 
 **Forget all stored credentials** removes everything the keystore holds, which on the library on this
 computer includes the session of a server. With a server the button reads **Forget this server's stored
@@ -23,7 +23,10 @@ credentials**, signs out first, and removes this server's stored sign ins only, 
 [synchronisation](server-sync.md#signing-out-and-changing-accounts).
 
 The **diagnostics bundle** is one archive for a support request: the environment report, the settings, a
-profile listing without configurations, `storage.txt`, and the logs. It contains no configurations,
+profile listing without configurations, `storage.txt`, `connections.txt` with the last sleep and the most
+recent sessions with how each one ended, `problems.log` with every warning and error, every repetition
+summary and what the client did about a dropped tunnel, and the logs. `problems.log` is the part to read
+first, and usually the only part worth pasting into a message. It contains no configurations,
 private keys or credentials, and it is not anonymous: it names profiles, hosts and file paths that
 include the user name. Its `settings.json` is the settings file as it stands, which with a server names
 the server's address and carries the installation identity. Read a bundle before sending it on.
@@ -69,7 +72,7 @@ Defaults are given as they stand in a new file.
 | `appearance.trayIcon.showStatus` | `true` | Colour the tray icon by the state of the application; off draws it as without this setting |
 | `appearance.trayIcon.<state>` | see below | `#RRGGBB`, `null` for the icon's original colour, or `"off"` to pass the state over; a value that cannot be read counts as `null` |
 | `connections.protectRoutes` | `true` | Ignore pushed routes and DNS; a profile can override it |
-| `connections.connectTimeoutSeconds` | `60` | `0` waits forever |
+| `connections.connectTimeoutSeconds` | `60` | How long a tunnel may take to come up, and to come back after it dropped; `0` waits forever |
 | `connections.autoReconnect` | `true` | |
 | `connections.maxReconnectAttempts` | `5` | `0` never gives up |
 | `connections.reconnectDelaySeconds` | `5` | Before the first retry; later ones back off |
@@ -83,6 +86,7 @@ Defaults are given as they stand in a new file.
 | `advanced.logLevel` | `"Information"` | `"Verbose"`, `"Debug"`, `"Information"`, `"Warning"` or `"Error"` |
 | `advanced.logRetentionDays` | `7` | `0` keeps log files until somebody removes them |
 | `advanced.logMaximumMegabytes` | `1024` | `0` sets no limit; the oldest files go first |
+| `advanced.logDailyMegabytes` | `10` | Past this a day's file takes only warnings and errors, and a quarter beyond it nothing; `0` sets no limit |
 | `advanced.checkForUpdates` | `true` | Contacts GitHub, see [using it](usage.md#looking-for-a-newer-release) |
 | `advanced.updateRepository` | `"OpenVPN-Pilot/OVP-Client"` | `owner/name`; empty checks nothing |
 | `advanced.openVpnPath` | `null` | Shown in the settings screen and saved, but nothing reads it: OpenVPN is found through the registry on Windows, and the macOS helper runs the OpenVPN it carries |

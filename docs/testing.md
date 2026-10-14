@@ -70,6 +70,27 @@ docker compose -f lab/docker-compose.yml down -v
 
 That stops it and removes the certificate authority with it.
 
+### A tunnel that dies while it is shown as connected
+
+Sleeping a laptop is the slow way to test this, and the last one. The lab gets there in seconds:
+
+- **A process that is killed.** Connect a lab profile and end its OpenVPN process the hard way, with
+  `taskkill /F /PID <pid>` on Windows or `sudo kill -9 <pid>` on macOS. The profile has to report a
+  lost connection at once, and the automatic reconnect has to bring it back.
+- **A far end that goes silent.** `docker pause ovplab-vpn-01` freezes the server without closing
+  anything, which is what a sleeping client looks like from the server and a sleeping server looks
+  like from the client. Every lab server pushes `keepalive 10 60`, so OpenVPN reconnects by itself
+  after a minute; `docker unpause ovplab-vpn-01` lets it come back.
+- **A server without keepalive.** Add `LAB_KEEPALIVE: ""` to the environment of one server in
+  `lab/docker-compose.yml` and recreate it. Its profile then carries the note that OpenVPN will not
+  notice a silent far end, and pausing that server leaves the tunnel connected as far as OpenVPN is
+  concerned. That is the case the client's own checks are for: a wake after more than a minute
+  restarts it, and the log says which check decided.
+
+Then sleep the machine for longer than a minute with a tunnel up. After waking, the log has a line
+saying the computer woke and what each tunnel showed, and `problems.log` in a diagnostics bundle has
+the same without the rest.
+
 ## Against a real server
 
 `tests/OpenVpnPilot.Server.IntegrationTests` runs the client's own synchronisation against an
