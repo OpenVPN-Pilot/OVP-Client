@@ -75,6 +75,9 @@ internal static unsafe partial class ObjectiveC
     public static nint Send(nint receiver, nint selector, nint first, nint second, nint third) =>
         ((delegate* unmanaged<nint, nint, nint, nint, nint, nint>)MessageSend)(receiver, selector, first, second, third);
 
+    public static nint Send(nint receiver, nint selector, nint first, nint second, nint third, nint fourth) =>
+        ((delegate* unmanaged<nint, nint, nint, nint, nint, nint, nint>)MessageSend)(receiver, selector, first, second, third, fourth);
+
     public static nint Send(nint receiver, nint selector, nuint first, nint second) =>
         ((delegate* unmanaged<nint, nint, nuint, nint, nint>)MessageSend)(receiver, selector, first, second);
 
