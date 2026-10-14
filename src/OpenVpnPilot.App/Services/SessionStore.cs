@@ -28,12 +28,17 @@ public interface ISessionStore
     /// <summary>
     /// Records the final counters and the reason a session ended.
     /// </summary>
+    /// <param name="endedAt">
+    /// When it ended, when that is earlier than now: a tunnel found dead after a sleep ended when the
+    /// computer went to sleep, not when anybody noticed. Null for now. Never before the start.
+    /// </param>
     public Task EndAsync(
         Guid sessionId,
         SessionEndReason reason,
         long bytesReceived,
         long bytesSent,
         string? detail,
+        DateTimeOffset? endedAt = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -162,6 +167,7 @@ public sealed class SessionStore : ISessionStore
         long bytesReceived,
         long bytesSent,
         string? detail,
+        DateTimeOffset? endedAt = null,
         CancellationToken cancellationToken = default)
     {
         await using PilotDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -173,7 +179,11 @@ public sealed class SessionStore : ISessionStore
             return;
         }
 
-        session.EndedAt = timeProvider.GetUtcNow();
+        DateTimeOffset now = timeProvider.GetUtcNow();
+
+        session.EndedAt = endedAt is { } earlier && earlier < now
+            ? (earlier < session.StartedAt ? session.StartedAt : earlier)
+            : now;
         session.EndReason = reason;
         session.BytesReceived = bytesReceived;
         session.BytesSent = bytesSent;

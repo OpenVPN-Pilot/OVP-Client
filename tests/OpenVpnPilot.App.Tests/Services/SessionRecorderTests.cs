@@ -117,6 +117,107 @@ public sealed class SessionRecorderTests
         Assert.Equal(64, session.BytesReceived);
     }
 
+    /// <summary>
+    /// OpenVPN's counters run on across a restart, measured against the lab, so the session after a
+    /// reconnect records what was counted since the one before ended rather than the running total.
+    /// </summary>
+    [Fact]
+    public async Task TheSessionAfterAReconnect_RecordsOnlyWhatCameAfterTheOneBefore()
+    {
+        Harness harness = new();
+
+        await harness.ConnectAsync();
+        harness.Transport.SendLine(">STATE:1787941299,CONNECTED,SUCCESS,10.8.0.6,203.0.113.10,1194,,");
+        await harness.WaitForSessionsAsync(1);
+
+        harness.Transport.SendLine(">BYTECOUNT:900,400");
+        await harness.WaitForCountersAsync(900);
+
+        harness.Transport.SendLine(">STATE:1787941300,RECONNECTING,ping-restart,,,,,");
+        harness.Transport.SendLine(">STATE:1787941310,CONNECTED,SUCCESS,10.8.0.6,203.0.113.10,1194,,");
+        await harness.WaitForSessionsAsync(2);
+
+        harness.Transport.SendLine(">BYTECOUNT:1500,700");
+        await harness.WaitForCountersAsync(1500);
+
+        await harness.DisconnectAsync();
+        await Harness.WaitUntilAsync(() => harness.Sessions[1].EndReason != SessionEndReason.Running);
+
+        Assert.Equal(900, harness.Sessions[0].BytesReceived);
+        Assert.Equal(600, harness.Sessions[1].BytesReceived);
+        Assert.Equal(300, harness.Sessions[1].BytesSent);
+    }
+
+    /// <summary>
+    /// A restart is where one session ends and the next begins.
+    /// </summary>
+    [Fact]
+    public async Task AReconnect_EndsTheSessionAndTheReturnBeginsAnother()
+    {
+        Harness harness = new();
+
+        await harness.ConnectAsync();
+        harness.Transport.SendLine(">STATE:1787941299,CONNECTED,SUCCESS,10.8.0.6,203.0.113.10,1194,,");
+        await harness.WaitForSessionsAsync(1);
+
+        harness.Transport.SendLine(">BYTECOUNT:900,400");
+        await harness.WaitForCountersAsync(900);
+
+        harness.Transport.SendLine(">STATE:1787941300,RECONNECTING,ping-restart,,,,,");
+        await Harness.WaitUntilAsync(() => harness.Sessions[0].EndReason != SessionEndReason.Running);
+
+        harness.Transport.SendLine(">STATE:1787941310,CONNECTED,SUCCESS,10.8.0.6,203.0.113.10,1194,,");
+        await harness.WaitForSessionsAsync(2);
+
+        RecordedSession first = harness.Sessions[0];
+
+        Assert.Equal(SessionEndReason.ConnectionLost, first.EndReason);
+        Assert.Equal(900, first.BytesReceived);
+        Assert.Equal(SessionEndReason.Running, harness.Sessions[1].EndReason);
+    }
+
+    /// <summary>
+    /// A tunnel found dead after a sleep ended when the computer went to sleep.
+    /// </summary>
+    [Fact]
+    public async Task ASessionLostJustAfterALongSleep_EndsWhenTheComputerWentToSleep()
+    {
+        Harness harness = new();
+
+        await harness.ConnectAsync();
+        harness.Transport.SendLine(">STATE:1787941299,CONNECTED,SUCCESS,10.8.0.6,203.0.113.10,1194,,");
+        await harness.WaitForSessionsAsync(1);
+
+        DateTimeOffset suspended = DateTimeOffset.UtcNow.AddMilliseconds(10);
+        harness.Wake.LastWake = new WakeEvent(suspended, suspended.AddHours(2), WakeSource.Platform);
+
+        harness.Transport.SendLine(">STATE:1787941400,RECONNECTING,ping-restart,,,,,");
+        await Harness.WaitUntilAsync(() => harness.Sessions.Single().EndReason != SessionEndReason.Running);
+
+        Assert.Equal(suspended, harness.Sessions.Single().EndedAt);
+    }
+
+    /// <summary>
+    /// A disconnect the user asked for ends when they asked, sleep or no sleep.
+    /// </summary>
+    [Fact]
+    public async Task ADisconnectAfterASleep_EndsWhenItWasAskedFor()
+    {
+        Harness harness = new();
+
+        await harness.ConnectAsync();
+        harness.Transport.SendLine(">STATE:1787941299,CONNECTED,SUCCESS,10.8.0.6,203.0.113.10,1194,,");
+        await harness.WaitForSessionsAsync(1);
+
+        DateTimeOffset suspended = DateTimeOffset.UtcNow.AddMilliseconds(10);
+        harness.Wake.LastWake = new WakeEvent(suspended, suspended.AddHours(2), WakeSource.Platform);
+
+        await harness.DisconnectAsync();
+        await Harness.WaitUntilAsync(() => harness.Sessions.Single().EndReason != SessionEndReason.Running);
+
+        Assert.Null(harness.Sessions.Single().EndedAt);
+    }
+
     private sealed class Harness
     {
         public Harness()
@@ -128,9 +229,11 @@ public sealed class SessionRecorderTests
                 new FakeMaterializer(),
                 new FixedPortAllocator());
 
-            Recorder = new SessionRecorder(Manager, Store, NullLogger<SessionRecorder>.Instance);
+            Recorder = new SessionRecorder(Manager, Store, Wake, TimeProvider.System, NullLogger<SessionRecorder>.Instance);
             Recorder.Attach();
         }
+
+        public FakeWakeMonitor Wake { get; } = new();
 
         public FakeLauncher Launcher { get; } = new();
 
@@ -252,6 +355,7 @@ public sealed class SessionRecorderTests
             long bytesReceived,
             long bytesSent,
             string? detail,
+            DateTimeOffset? endedAt = null,
             CancellationToken cancellationToken = default)
         {
             lock (sessions)
@@ -264,6 +368,7 @@ public sealed class SessionRecorderTests
                     session.BytesReceived = bytesReceived;
                     session.BytesSent = bytesSent;
                     session.EndDetail = detail;
+                    session.EndedAt = endedAt;
                 }
             }
 
@@ -329,6 +434,28 @@ public sealed class SessionRecorderTests
         public SessionEndReason EndReason { get; set; } = SessionEndReason.Running;
 
         public string? EndDetail { get; set; }
+
+        /// <summary>
+        /// The end time the recorder asked for, which is null when it asked for now.
+        /// </summary>
+        public DateTimeOffset? EndedAt { get; set; }
+    }
+
+    private sealed class FakeWakeMonitor : IWakeMonitor
+    {
+        public event EventHandler<WakeEvent>? Woke
+        {
+            add { }
+            remove { }
+        }
+
+        public event EventHandler? NetworkChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public WakeEvent? LastWake { get; set; }
     }
 
     /// <remarks>

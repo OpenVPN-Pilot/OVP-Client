@@ -22,14 +22,42 @@ namespace OpenVpnPilot.App.Services;
 /// Statuses are handled strictly in the order they arrived. Handling them concurrently would let the
 /// status that closes a session overtake the last counter update, and the session would be recorded
 /// as having carried less than it did.
+///
+/// A session is the time a tunnel carried traffic, so it also ends when OpenVPN starts reconnecting,
+/// and the reconnected tunnel is a session of its own. OpenVPN's counters run on across such a
+/// restart rather than starting from zero, measured against the lab, so the session that follows
+/// records what was counted since the one before it ended, not the running total.
+///
+/// A tunnel found dead after a sleep did not end when that was noticed. It ended when the computer
+/// went to sleep, so a session that ends shortly after a wake, for any reason but the user's, is
+/// recorded as ending then. Otherwise the history reports hours of connection that never carried a
+/// byte, which is what showed it as connected in the first place.
 /// </remarks>
 public sealed class SessionRecorder : IAsyncDisposable
 {
+    /// <summary>
+    /// How long after a wake an ending is still taken to be the sleep's doing.
+    /// </summary>
+    /// <remarks>
+    /// Long enough for the check after waking and the restart it leads to, and for an OpenVPN
+    /// keepalive to time out on its own; short enough that a drop with another cause later on keeps
+    /// its own time.
+    /// </remarks>
+    private static readonly TimeSpan AfterWake = TimeSpan.FromMinutes(3);
+
     private readonly ConnectionManager connections;
     private readonly ISessionStore sessions;
+    private readonly IWakeMonitor wake;
+    private readonly TimeProvider timeProvider;
     private readonly ILogger<SessionRecorder> logger;
 
     private readonly ConcurrentDictionary<Guid, OpenSession> open = new();
+
+    /// <summary>
+    /// The counters a session ended at when OpenVPN went on to reconnect in the same process, which
+    /// is where the next session of that profile starts counting from.
+    /// </summary>
+    private readonly ConcurrentDictionary<Guid, (long Received, long Sent)> carried = new();
 
     private readonly Channel<QueueItem> pending =
         Channel.CreateUnbounded<QueueItem>(new UnboundedChannelOptions { SingleReader = true });
@@ -41,14 +69,20 @@ public sealed class SessionRecorder : IAsyncDisposable
     public SessionRecorder(
         ConnectionManager connections,
         ISessionStore sessions,
+        IWakeMonitor wake,
+        TimeProvider timeProvider,
         ILogger<SessionRecorder> logger)
     {
         ArgumentNullException.ThrowIfNull(connections);
         ArgumentNullException.ThrowIfNull(sessions);
+        ArgumentNullException.ThrowIfNull(wake);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.connections = connections;
         this.sessions = sessions;
+        this.wake = wake;
+        this.timeProvider = timeProvider;
         this.logger = logger;
     }
 
@@ -73,7 +107,7 @@ public sealed class SessionRecorder : IAsyncDisposable
         {
             if (open.TryRemove(profileId, out OpenSession? session))
             {
-                await CloseAsync(session, reason, detail: null, cancellationToken);
+                await CloseAsync(session, reason, detail: null, endedAt: null, cancellationToken);
             }
         }
     }
@@ -132,7 +166,7 @@ public sealed class SessionRecorder : IAsyncDisposable
             // The status that reports the end of a connection carries no counters, because nothing
             // is flowing any more. Copying it would record every session as having moved nothing,
             // so the last values seen while the tunnel was up are the ones kept.
-            if (existing is not null && !IsTerminal(status.State))
+            if (existing is not null && !EndsSession(status.State))
             {
                 existing.BytesReceived = status.BytesReceived;
                 existing.BytesSent = status.BytesSent;
@@ -144,9 +178,23 @@ public sealed class SessionRecorder : IAsyncDisposable
                     await BeginAsync(change.ProfileId, status);
                     break;
 
-                case VpnConnectionState state when IsTerminal(state)
+                case VpnConnectionState state when EndsSession(state)
                     && open.TryRemove(change.ProfileId, out OpenSession? finished):
-                    await CloseAsync(finished, MapReason(status), status.Message, CancellationToken.None);
+                    if (state == VpnConnectionState.Reconnecting)
+                    {
+                        carried[change.ProfileId] = (finished.BytesReceived, finished.BytesSent);
+                    }
+                    else
+                    {
+                        carried.TryRemove(change.ProfileId, out _);
+                    }
+
+                    await CloseAsync(
+                        finished,
+                        MapReason(status),
+                        status.Message,
+                        EndedBySleep(finished, status),
+                        CancellationToken.None);
                     break;
 
                 default:
@@ -168,7 +216,16 @@ public sealed class SessionRecorder : IAsyncDisposable
             status.ServerAddress,
             status.ServerPort);
 
-        open[profileId] = new OpenSession(sessionId)
+        // Counters below where the last session ended belong to a new process, which counts from
+        // zero, so nothing is carried into it.
+        (long Received, long Sent) baseline =
+            carried.TryRemove(profileId, out (long Received, long Sent) previous)
+            && status.BytesReceived >= previous.Received
+            && status.BytesSent >= previous.Sent
+                ? previous
+                : (0, 0);
+
+        open[profileId] = new OpenSession(sessionId, status.ConnectedSince ?? timeProvider.GetUtcNow(), baseline)
         {
             BytesReceived = status.BytesReceived,
             BytesSent = status.BytesSent,
@@ -179,22 +236,43 @@ public sealed class SessionRecorder : IAsyncDisposable
         OpenSession session,
         SessionEndReason reason,
         string? detail,
+        DateTimeOffset? endedAt,
         CancellationToken cancellationToken)
     {
         await sessions.EndAsync(
             session.Id,
             reason,
-            session.BytesReceived,
-            session.BytesSent,
+            Math.Max(0, session.BytesReceived - session.Baseline.Received),
+            Math.Max(0, session.BytesSent - session.Baseline.Sent),
             detail,
+            endedAt,
             cancellationToken);
     }
 
-    private static bool IsTerminal(VpnConnectionState state) =>
-        state is VpnConnectionState.Disconnected or VpnConnectionState.Failed;
+    /// <summary>
+    /// When the computer went to sleep, if that is when this session really ended.
+    /// </summary>
+    private DateTimeOffset? EndedBySleep(OpenSession session, VpnConnectionStatus status)
+    {
+        if (status.Failure == VpnFailureKind.UserRequested
+            || wake.LastWake is not { SuspendedAt: { } suspended, IsLongSleep: true } lastWake)
+        {
+            return null;
+        }
+
+        bool sleptDuringSession = suspended > session.StartedAt;
+        bool endedJustAfterWaking = timeProvider.GetUtcNow() - lastWake.ResumedAt <= AfterWake;
+
+        return sleptDuringSession && endedJustAfterWaking ? suspended : null;
+    }
+
+    private static bool EndsSession(VpnConnectionState state) =>
+        state is VpnConnectionState.Disconnected or VpnConnectionState.Failed or VpnConnectionState.Reconnecting;
 
     private static SessionEndReason MapReason(VpnConnectionStatus status) => status.Failure switch
     {
+        // OpenVPN restarting the tunnel is the connection being lost, whoever asked for the restart.
+        _ when status.State == VpnConnectionState.Reconnecting => SessionEndReason.ConnectionLost,
         VpnFailureKind.UserRequested => SessionEndReason.UserRequested,
         VpnFailureKind.Authentication => SessionEndReason.AuthenticationFailed,
         VpnFailureKind.ConnectionLost => SessionEndReason.ConnectionLost,
@@ -248,9 +326,21 @@ public sealed class SessionRecorder : IAsyncDisposable
     /// </summary>
     private sealed class OpenSession
     {
-        public OpenSession(Guid id) => Id = id;
+        public OpenSession(Guid id, DateTimeOffset startedAt, (long Received, long Sent) baseline)
+        {
+            Id = id;
+            StartedAt = startedAt;
+            Baseline = baseline;
+        }
 
         public Guid Id { get; }
+
+        public DateTimeOffset StartedAt { get; }
+
+        /// <summary>
+        /// The counters this session started from, which the totals it records leave out.
+        /// </summary>
+        public (long Received, long Sent) Baseline { get; }
 
         public long BytesReceived { get; set; }
 
